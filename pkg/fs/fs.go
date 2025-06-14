@@ -18,6 +18,17 @@ func FileExists(path string) bool {
 	return info != nil && err == nil && !info.IsDir()
 }
 
+// DirExists checks to see if a path exists and is a dir
+func DirExists(path string) bool {
+	info, err := os.Stat(path)
+
+	if err != nil && !os.IsNotExist(err) {
+		return false
+	}
+
+	return info != nil && err == nil && info.IsDir()
+}
+
 // PathExists checks to see if a path exists
 func PathExists(path string) bool {
 	info, err := os.Stat(path)
@@ -36,6 +47,7 @@ func CleanJoin(prefix string, elem string) (string, error) {
 	if !strings.HasPrefix(destPath, filepath.Clean(prefix)) {
 		return "", fmt.Errorf("illegal file path: %s", elem)
 	}
+
 	return destPath, nil
 }
 
@@ -80,6 +92,7 @@ func matchParts(patternParts, pathParts []string) bool {
 					return true
 				}
 			}
+
 			return false
 		default:
 			// Exact match required for this segment

@@ -29,29 +29,24 @@ completions: build
 		./leaktk completion $$shell >| $$outfile; \
 	done
 
-.PHONY: gosec
-gosec:
-	which gosec &> /dev/null || go install github.com/securego/gosec/v2/cmd/gosec@latest
-	gosec ./...
+vet:
+	go vet ./...
 
-.PHONY: golint
-golint:
-	which golint &> /dev/null || go install golang.org/x/lint/golint@latest
-	golint ./...
+.PHONY: lint
+lint: vet
+	golangci-lint run
 
 build: import
-	go mod tidy
 	go build $(LDFLAGS)
 
 import:
-	which goimports &> /dev/null || go install golang.org/x/tools/cmd/goimports@latest
 	goimports -local $(MODULE) -l -w .
+	go mod tidy
 
 format: import
 	go fmt ./...
 
-test: format gosec golint
-	go vet ./...
+test: format vet lint
 	go test -race $(MODULE) ./...
 
 install:

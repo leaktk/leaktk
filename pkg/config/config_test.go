@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPartialLoadConfigFromFile(t *testing.T) {
-	os.Setenv("LEAKTK_PATTERN_SERVER_AUTH_TOKEN", "x")
-	os.Unsetenv("LEAKTK_PATTERN_SERVER_URL")
+	require.NoError(t, os.Setenv("LEAKTK_PATTERN_SERVER_AUTH_TOKEN", "x"))
+	require.NoError(t, os.Unsetenv("LEAKTK_PATTERN_SERVER_URL"))
 	cfg, err := LoadConfigFromFile("../../testdata/partial-config.toml")
 
 	if err != nil {
@@ -31,7 +32,7 @@ func TestPartialLoadConfigFromFile(t *testing.T) {
 			actual:   cfg.Scanner.Workdir,
 		},
 		{
-			expected: uint32(43200),
+			expected: 43200,
 			actual:   cfg.Scanner.Patterns.RefreshAfter,
 		},
 		{
@@ -47,7 +48,7 @@ func TestPartialLoadConfigFromFile(t *testing.T) {
 			actual:   cfg.Logger.Level,
 		},
 		{
-			expected: uint16(0),
+			expected: 0,
 			actual:   cfg.Scanner.MaxScanDepth,
 		},
 	}
@@ -60,22 +61,26 @@ func TestPartialLoadConfigFromFile(t *testing.T) {
 func TestLocateAndLoadConfig(t *testing.T) {
 	// Set the env var here to prove the provided path overrides it
 	localConfigDir = "../../testdata/locator-test/leaktk"
-	os.Setenv("LEAKTK_CONFIG_PATH", "../../testdata/locator-test/leaktk/config.2.toml")
 
-	// Confirm load from file works
-	cfg, err := LocateAndLoadConfig("../../testdata/locator-test/leaktk/config.1.toml")
-	assert.Nil(t, err)
-	assert.Equal(t, "test-1", cfg.Scanner.Patterns.Gitleaks.Version)
+	t.Run("LoadFromFile", func(t *testing.T) {
+		require.NoError(t, os.Setenv("LEAKTK_CONFIG_PATH", "../../testdata/locator-test/leaktk/config.2.toml"))
+		cfg, err := LocateAndLoadConfig("../../testdata/locator-test/leaktk/config.1.toml")
+		require.NoError(t, err)
+		assert.Equal(t, "test-1", cfg.Scanner.Patterns.Gitleaks.Version)
+	})
 
-	// Confirm load from the LEAKTK_CONFIG_PATH env var works
-	cfg, err = LocateAndLoadConfig("")
-	assert.Nil(t, err)
-	assert.Equal(t, "test-2", cfg.Scanner.Patterns.Gitleaks.Version)
+	t.Run("LoadFromEnvVar", func(t *testing.T) {
+		require.NoError(t, os.Setenv("LEAKTK_CONFIG_PATH", "../../testdata/locator-test/leaktk/config.2.toml"))
+		cfg, err := LocateAndLoadConfig("")
+		require.NoError(t, err)
+		assert.Equal(t, "test-2", cfg.Scanner.Patterns.Gitleaks.Version)
+	})
 
-	// Confirm load from the LEAKTK_CONFIG_PATH env var works
-	os.Unsetenv("LEAKTK_CONFIG_PATH")
-	cfg, err = LocateAndLoadConfig("")
-	assert.Nil(t, err)
-	assert.Equal(t, "test-3", cfg.Scanner.Patterns.Gitleaks.Version)
+	t.Run("FallBackOnDefault", func(t *testing.T) {
+		require.NoError(t, os.Unsetenv("LEAKTK_CONFIG_PATH"))
+		cfg, err := LocateAndLoadConfig("")
+		require.NoError(t, err)
+		assert.Equal(t, "test-3", cfg.Scanner.Patterns.Gitleaks.Version)
+	})
 
 }
