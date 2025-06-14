@@ -1,13 +1,14 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/leaktk/leaktk/pkg/fs"
+	"github.com/leaktk/leaktk/pkg/proto"
 )
 
 func TestScanCommandToRequest(t *testing.T) {
@@ -17,51 +18,39 @@ func TestScanCommandToRequest(t *testing.T) {
 	// Resource must be set
 	request, err := scanCommandToRequest(cmd, args)
 	assert.Nil(t, request)
-	assert.Error(t, err)
-	assert.Equal(t, err.Error(), "missing required field: field=\"resource\"")
+	require.Error(t, err)
+	assert.Equal(t, "missing required field: field=\"resource\"", err.Error())
 
 	// Can provide resource as a positional argument
-	request, err = scanCommandToRequest(cmd, []string{"https://github.com/leaktk/fake-leaks.git"})
-	assert.NoError(t, err)
-	assert.NotNil(t, request)
-
-	// Setting resource for the rest of the tests
-	_ = cmd.Flags().Set("resource", "https://github.com/leaktk/fake-leaks.git")
-
-	// Resource has to be provided only one way, not both
-	request, err = scanCommandToRequest(cmd, []string{"https://github.com/leaktk/fake-leaks.git"})
-	assert.Error(t, err)
-	assert.Nil(t, request)
-
-	// Create a successful request
+	args = []string{"https://github.com/leaktk/fake-leaks.git"}
 	request, err = scanCommandToRequest(cmd, args)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, request)
 
 	// ID should default to a random id
-	assert.Equal(t, 11, len(request.ID))
+	assert.Len(t, request.ID, 11)
 	// Kind should default to GitRepo
-	assert.Equal(t, request.Resource.Kind(), "GitRepo")
-	assert.Equal(t, request.Resource.String(), "https://github.com/leaktk/fake-leaks.git")
+	assert.Equal(t, proto.GitRepoRequestKind, request.Kind)
+	assert.Equal(t, "https://github.com/leaktk/fake-leaks.git", request.Resource)
 
 	// If resource starts with @ and the thing is a valid path, resource will be loaded from there
 	tmpDir := t.TempDir()
 	dataPath, err := fs.CleanJoin(tmpDir, "data.json")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = os.WriteFile(dataPath, []byte("{\"some\": \"data\"}"), 0600)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	_ = cmd.Flags().Set("resource", "@"+dataPath)
+	args[0] = "@" + dataPath
 	_ = cmd.Flags().Set("kind", "JSONData")
 	request, err = scanCommandToRequest(cmd, args)
-	assert.NoError(t, err)
-	assert.Equal(t, request.Resource.Kind(), "JSONData")
-	assert.Equal(t, request.Resource.String(), "{\"some\": \"data\"}")
+	require.NoError(t, err)
+	assert.Equal(t, proto.JSONDataRequestKind, request.Kind)
+	assert.JSONEq(t, "{\"some\": \"data\"}", request.Resource)
 
 	// If resource starts with @ and the thing is an invalid path, raise an error
-	_ = cmd.Flags().Set("resource", "@"+dataPath+".invalid")
+	args[0] = "@" + dataPath + ".invalid"
 	request, err = scanCommandToRequest(cmd, args)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, request)
-	assert.Equal(t, err.Error(), fmt.Sprintf("resource path does not exist: path=%q", dataPath+".invalid"))
+	assert.Equal(t, "resource path does not exist: path=\""+dataPath+".invalid\"", err.Error())
 }

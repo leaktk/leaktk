@@ -32,6 +32,7 @@ func (m zerologMapper) Write(data []byte) (int, error) {
 
 	if err := json.Unmarshal(data, &event); err != nil {
 		Error("could not decode zerolog event: error=%q", err)
+
 		return 0, nil
 	}
 
@@ -80,34 +81,6 @@ const (
 	// HUMAN displays the logs in a way that's nice for humans to read
 	HUMAN LogFormat = 1
 )
-
-// LogCode defines the set of  codes that can be set on an Entry
-type LogCode int
-
-const (
-	// NoCode means the entry code hasn't been set
-	NoCode = iota
-	// CloneError means we were unable to successfully clone the resource
-	CloneError
-	// ScanError means there was some issue scanning the cloned resource
-	ScanError
-	// ResourceCleanupError means we couldn't remove the resources that were cloned after a scan
-	ResourceCleanupError
-	// LocalScanDisabled are for when a local scan is attempted but disabled in config
-	LocalScanDisabled
-	// CommandError means there was an error with an external command
-	CommandError
-	// CloneDetail are log entries that are informational
-	CloneDetail
-	// ScanDetail are log entries that are informational
-	ScanDetail
-)
-
-var logCodeNames = [...]string{"NoCode", "CloneError", "ScanError", "ResourceCleanupError", "CommandError", "CloneDetail", "ScanDetail"}
-
-func (code LogCode) String() string {
-	return logCodeNames[code]
-}
 
 // String renders a LogLevel as its string value
 func (l LogLevel) String() string {
@@ -227,6 +200,7 @@ func Debug(msg string, a ...any) *Entry {
 		Message:  fmt.Sprintf(msg, a...),
 	}
 	log.Println(entry)
+
 	return &entry
 }
 
@@ -241,6 +215,7 @@ func Info(msg string, a ...any) *Entry {
 		Message:  fmt.Sprintf(msg, a...),
 	}
 	log.Println(entry)
+
 	return &entry
 }
 
@@ -255,6 +230,7 @@ func Warning(msg string, a ...any) *Entry {
 		Message:  fmt.Sprintf(msg, a...),
 	}
 	log.Println(entry)
+
 	return &entry
 }
 
@@ -269,6 +245,7 @@ func Error(msg string, a ...any) *Entry {
 		Message:  fmt.Errorf(msg, a...).Error(),
 	}
 	log.Println(entry)
+
 	return &entry
 }
 
@@ -283,6 +260,7 @@ func Critical(msg string, a ...any) *Entry {
 		Message:  fmt.Errorf(msg, a...).Error(),
 	}
 	log.Println(entry)
+
 	return &entry
 }
 

@@ -9,13 +9,15 @@ import (
 
 func TestID(t *testing.T) {
 	t.Run("NoParamsCreatesRandomID", func(t *testing.T) {
-		assert.NotEqual(t, ID(), ID())
+		a := ID()
+		b := ID()
+		assert.NotEqual(t, a, b)
 	})
 
 	t.Run("IDsAreSameLength", func(t *testing.T) {
-		assert.Equal(t, 11, len(ID()))
-		assert.Equal(t, 11, len(ID("foo")))
-		assert.Equal(t, 11, len(ID("foo", "bar")))
+		assert.Len(t, ID(), 11)
+		assert.Len(t, ID("foo"), 11)
+		assert.Len(t, ID("foo", "bar"), 11)
 	})
 
 	t.Run("IDsAreHexadecimal", func(t *testing.T) {

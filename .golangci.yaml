@@ -1,34 +1,82 @@
-version: "2"
+version: '2'
 linters:
   default: none
+  # It might be worth going through some of the disabled linters and enabling
+  # them and fixing the items they call out e.g.: cyclop, paralleltest,
+  # prealloc, dupl, gocritic, exptostd, intrange, (maybe others?)
+  disable:
+    - cyclop
+    - depguard
+    - dupl
+    - err113
+    - exhaustive
+    - exhaustruct
+    - exptostd
+    - forbidigo
+    - funcorder
+    - funlen
+    - gochecknoglobals
+    - gochecknoinits
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - godox
+    - gosmopolitan
+    - intrange
+    - lll
+    - maintidx
+    - mnd
+    - musttag
+    - nestif
+    - nilerr
+    - nlreturn
+    - nonamedreturns
+    - paralleltest
+    - prealloc
+    - predeclared
+    - tagliatelle
+    - testpackage
+    - tparallel
+    - varnamelen
+    - wastedassign
+    - whitespace
+    - wrapcheck
+    - wsl
+    - zerologlint  # doesn't seem to catch gitleaks/v8/logging mistakes
   enable:
     - errcheck
+    - exhaustruct
     - gosec
-    - govet
-    - ineffassign
+    - inamedparam
+    - misspell
+    - nonamedreturns
+    - perfsprint
+    - revive
     - staticcheck
+    - testifylint
+    - unconvert
+    - unparam
     - unused
-  exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
+  settings:
+    staticcheck:
+      checks:
+        - all
+        - '-QF1001'
+        - '-ST1000'
+        - '-ST1003'
+        - '-ST1018'
+        - '-ST1020'
+        - '-ST1021'
+    revive:
+      severity: error
+
 formatters:
   enable:
+    - gofmt
     - goimports
   settings:
     goimports:
       local-prefixes:
         - github.com/leaktk/scanner
-  exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$

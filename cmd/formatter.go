@@ -1,4 +1,4 @@
-package response
+package cmd
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/pkg/proto"
 )
 
 // OutputFormat is the code(int) for each format
@@ -37,15 +38,15 @@ type Formatter struct {
 
 // NewFormatter creates new formatter
 func NewFormatter(cfg config.Formatter) (*Formatter, error) {
-	format, err := GetOutputFormat(cfg.Format)
+	format, err := getOutputFormat(cfg.Format)
 	if err != nil {
 		return nil, err
 	}
+
 	return &Formatter{format: format}, nil
 }
 
-// GetOutputFormat takes the string and returns OutputFormat or an error
-func GetOutputFormat(format string) (OutputFormat, error) {
+func getOutputFormat(format string) (OutputFormat, error) {
 	format = strings.ToUpper(format)
 	switch format {
 	case "JSON":
@@ -64,7 +65,7 @@ func GetOutputFormat(format string) (OutputFormat, error) {
 }
 
 // Format renders a response structure to the set format as a string
-func (f *Formatter) Format(r *Response) string {
+func (f *Formatter) Format(r *proto.Response) string {
 	switch f.format {
 	case JSON:
 		return formatJSON(r)
@@ -77,19 +78,20 @@ func (f *Formatter) Format(r *Response) string {
 	case CSV:
 		return formatCsv(r)
 	default:
-		return r.String()
+		return formatJSON(r)
 	}
 }
 
-func formatJSON(r *Response) string {
+func formatJSON(r *proto.Response) string {
 	out, err := json.Marshal(r)
 	if err != nil {
 		logger.Error("could not marshal response: error=%q", err)
 	}
+
 	return string(out)
 }
 
-func formatHuman(r *Response) string {
+func formatHuman(r *proto.Response) string {
 	headers, responses := flattenedResponse(r)
 
 	for i, header := range headers {
@@ -105,27 +107,30 @@ func formatHuman(r *Response) string {
 		}
 		out = append(out, "\n")
 	}
+
 	return strings.Join(out, "\n")
 }
 
-func formatToml(r *Response) string {
+func formatToml(r *proto.Response) string {
 	var buf bytes.Buffer
 
 	if err := toml.NewEncoder(&buf).Encode(r); err != nil {
 		logger.Error("could not marshal response: error=%q", err)
 	}
+
 	return buf.String()
 }
 
-func formatYaml(r *Response) string {
+func formatYaml(r *proto.Response) string {
 	out, err := yaml.Marshal(r)
 	if err != nil {
 		logger.Error("could not marshal response: error=%q", err)
 	}
+
 	return string(out)
 }
 
-func formatCsv(r *Response) string {
+func formatCsv(r *proto.Response) string {
 	headers, responses := flattenedResponse(r)
 
 	var buf bytes.Buffer
@@ -145,7 +150,7 @@ func formatCsv(r *Response) string {
 }
 
 // flattenedResponse takes the response and returns the responsefields and a 2d list of responses
-func flattenedResponse(response *Response) ([]string, [][]string) {
+func flattenedResponse(response *proto.Response) ([]string, [][]string) {
 	var flattened [][]string
 
 	for _, result := range response.Results {
@@ -175,6 +180,6 @@ func flattenedResponse(response *Response) ([]string, [][]string) {
 }
 
 // flattenContact creates a single string with Contact information as "Name <Email>"
-func flattenContact(contact Contact) string {
+func flattenContact(contact proto.Contact) string {
 	return fmt.Sprintf("%s <%s>", contact.Name, contact.Email)
 }

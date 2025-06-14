@@ -10,23 +10,23 @@ import (
 func TestPriorityQueue(t *testing.T) {
 	t.Run("Send/Recv", func(t *testing.T) {
 		messages := []*Message[string]{
-			&Message[string]{
+			{
 				Priority: 0,
 				Value:    "E",
 			},
-			&Message[string]{
+			{
 				Priority: 5,
 				Value:    "D",
 			},
-			&Message[string]{
+			{
 				Priority: 7,
 				Value:    "B",
 			},
-			&Message[string]{
+			{
 				Priority: 5,
 				Value:    "C",
 			},
-			&Message[string]{
+			{
 				Priority: 9,
 				Value:    "A",
 			},

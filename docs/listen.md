@@ -70,7 +70,7 @@ Sets `--branch` and `--single-branch` during git clone.
 Sets `--depth` during a git clone and can limit the commits during a local
 scan if `single_branch` is set to true.
 
-* Type: `uint16`
+* Type: `int`
 * Default: excluded
 
 **local**
@@ -483,7 +483,7 @@ Provide a preferred architecture
 
 Sets the number of layers to download and scan, starting from the top
 
-* Type: `uint16`
+* Type: `int`
 * Default: 0 (All layers scanned)
 
 **exclusions**

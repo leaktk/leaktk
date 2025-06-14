@@ -17,9 +17,9 @@ import (
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
-	"github.com/leaktk/leaktk/pkg/response"
+	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/scanner"
-	"github.com/leaktk/leaktk/version"
+	"github.com/leaktk/leaktk/pkg/version"
 )
 
 var cfg *config.Config
@@ -39,15 +39,15 @@ func runHelp(cmd *cobra.Command, args []string) {
 func runLogin(cmd *cobra.Command, args []string) {
 	logger.Info("logging in: pattern_server=%q", cfg.Scanner.Patterns.Server.URL)
 
-	fmt.Print("Enter auth token: ")
+	fmt.Printf("Enter %s auth token: ", cfg.Scanner.Patterns.Server.URL)
 
 	var authToken string
 	if _, err := fmt.Scanln(&authToken); err != nil {
-		logger.Fatal("could not login: error=%q", err)
+		logger.Fatal("could not login: %v", err)
 	}
 
 	if err := config.SavePatternServerAuthToken(authToken); err != nil {
-		logger.Fatal("could not login: error=%q", err)
+		logger.Fatal("could not login: %v", err)
 	}
 
 	logger.Info("token saved")
@@ -57,7 +57,7 @@ func runLogout(cmd *cobra.Command, args []string) {
 	logger.Info("logging out: pattern_server=%q", cfg.Scanner.Patterns.Server.URL)
 
 	if err := config.RemovePatternServerAuthToken(); err != nil {
-		logger.Fatal("could not logout: error=%q", err)
+		logger.Fatal("could not logout: %v", err)
 	}
 
 	logger.Info("token removed")
@@ -86,22 +86,21 @@ func runScan(cmd *cobra.Command, args []string) {
 	}
 
 	request, err := scanCommandToRequest(cmd, args)
-
 	if err != nil {
 		logger.Fatal("could not generate scan request: error=%q", err.Error())
 	}
 
-	formatter, err := response.NewFormatter(cfg.Formatter)
+	formatter, err := NewFormatter(cfg.Formatter)
 	if err != nil {
 		logger.Fatal("%v", err.Error())
 	}
 
 	var wg sync.WaitGroup
-	leakScanner := scanner.NewScanner(cfg)
+	leaktkScanner := scanner.NewScanner(cfg)
 	leaksFound := false
 
 	// Prints the output of the scanner as they come
-	go leakScanner.Recv(func(response *response.Response) {
+	go leaktkScanner.Recv(func(response *proto.Response) {
 		if !leaksFound && len(response.Results) > 0 {
 			leaksFound = true
 		}
@@ -110,7 +109,7 @@ func runScan(cmd *cobra.Command, args []string) {
 	})
 
 	wg.Add(1)
-	leakScanner.Send(request)
+	leaktkScanner.Send(request)
 	wg.Wait()
 
 	if leaksFound {
@@ -118,7 +117,7 @@ func runScan(cmd *cobra.Command, args []string) {
 	}
 }
 
-func scanCommandToRequest(cmd *cobra.Command, args []string) (*scanner.Request, error) {
+func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, error) {
 	flags := cmd.Flags()
 
 	id, err := flags.GetString("id")
@@ -131,18 +130,11 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*scanner.Request, 
 		return nil, errors.New("missing required field: field=\"kind\"")
 	}
 
-	requestResource, err := flags.GetString("resource")
-	if err != nil || len(requestResource) == 0 {
-
-		if len(args) > 0 {
-			requestResource = args[0]
-		} else {
-			return nil, errors.New("missing required field: field=\"resource\"")
-		}
-	} else if len(args) > 0 {
-		return nil, errors.New("only provide resource as a positional argument or a flag but not both")
+	if len(args) == 0 {
+		return nil, errors.New("missing required field: field=\"resource\"")
 	}
 
+	requestResource := args[0]
 	if requestResource[0] == '@' {
 		if fs.FileExists(requestResource[1:]) {
 			data, err := os.ReadFile(requestResource[1:])
@@ -156,13 +148,13 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*scanner.Request, 
 		}
 	}
 
-	rawOptions, err := flags.GetString("options")
+	rawOpts, err := flags.GetString("options")
 	if err != nil {
 		return nil, fmt.Errorf("there was an issue with the options flag: error=%q", err)
 	}
 
 	options := make(map[string]any)
-	if err := json.Unmarshal([]byte(rawOptions), &options); err != nil {
+	if err := json.Unmarshal([]byte(rawOpts), &options); err != nil {
 		return nil, fmt.Errorf("could not parse options: error=%q", err)
 	}
 
@@ -186,7 +178,7 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*scanner.Request, 
 		return nil, fmt.Errorf("could not marshal requestData: error=%q", err)
 	}
 
-	var request scanner.Request
+	var request proto.Request
 
 	err = json.Unmarshal(requestData, &request)
 	if err != nil {
@@ -198,7 +190,7 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*scanner.Request, 
 
 func scanCommand() *cobra.Command {
 	scanCommand := &cobra.Command{
-		Use:                   "scan [flags] {-r resource|resource}",
+		Use:                   "scan [flags] <resource>",
 		DisableFlagsInUseLine: true,
 		Short:                 "Perform ad-hoc scans",
 		Args:                  cobra.MaximumNArgs(1),
@@ -208,7 +200,6 @@ func scanCommand() *cobra.Command {
 	flags := scanCommand.Flags()
 	flags.StringP("id", "", id.ID(), "an ID for associating responses to requests")
 	flags.StringP("kind", "k", "GitRepo", "the kind of resource to scan")
-	flags.StringP("resource", "r", "", "the resource to scan (required)")
 	flags.StringP("options", "o", "{}", "additional request options formatted as JSON")
 	flags.Int("leak-exit-code", 0, "the exit code when leaks are found (default 0)")
 
@@ -232,10 +223,10 @@ func runListen(cmd *cobra.Command, args []string) {
 	var wg sync.WaitGroup
 
 	stdinReader := bufio.NewReader(os.Stdin)
-	leakScanner := scanner.NewScanner(cfg)
+	leaktkScanner := scanner.NewScanner(cfg)
 
 	// Prints the output of the scanner as they come
-	go leakScanner.Recv(func(response *response.Response) {
+	go leaktkScanner.Recv(func(response *proto.Response) {
 		fmt.Println(response)
 		wg.Done()
 	})
@@ -250,24 +241,27 @@ func runListen(cmd *cobra.Command, args []string) {
 			}
 
 			logger.Error("error reading from stdin: error=%q", err)
+
 			continue
 		}
 
-		var request scanner.Request
+		var request proto.Request
 		err = json.Unmarshal(line, &request)
 
 		if err != nil {
 			logger.Error("could not unmarshal request: error=%q", err)
+
 			continue
 		}
 
-		if len(request.Resource.String()) == 0 {
+		if len(request.Resource) == 0 {
 			logger.Error("no resource provided: request_id=%q", request.ID)
+
 			continue
 		}
 
 		wg.Add(1)
-		leakScanner.Send(&request)
+		leaktkScanner.Send(&request)
 	}
 
 	// Wait for all of the scans to complete and responses to be sent
@@ -289,7 +283,7 @@ func runVersion(cmd *cobra.Command, args []string) {
 func versionCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
-		Short: "Display the scanner version",
+		Short: "Display the version",
 		Run:   runVersion,
 	}
 }
@@ -326,7 +320,7 @@ func configure(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if the OutputFormat is valid
-	_, err = response.GetOutputFormat(cfg.Formatter.Format)
+	_, err = getOutputFormat(cfg.Formatter.Format)
 	if err != nil {
 		logger.Fatal("%v", err.Error())
 	}
@@ -346,7 +340,7 @@ func rootCommand() *cobra.Command {
 
 	flags := rootCommand.PersistentFlags()
 	flags.StringP("config", "c", "", "config file path")
-	flags.StringP("format", "f", "", "output format [json(default), human, csv, toml, yaml]")
+	flags.StringP("format", "f", "", "output format [json, human, csv, toml, yaml] (default \"json\")")
 
 	rootCommand.AddCommand(loginCommand())
 	rootCommand.AddCommand(logoutCommand())
