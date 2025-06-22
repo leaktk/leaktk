@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/leaktk/leaktk/pkg/proto"
 )
 
 const validGitRepoRequest = `
@@ -31,14 +34,18 @@ const invalidGitRepoRequest = `
 `
 
 func TestGitRepoRequest(t *testing.T) {
-	var validRequest Request
-	err := json.Unmarshal([]byte(validGitRepoRequest), &validRequest)
-	assert.Nil(t, err)
+	t.Run("ValidGitRepoRequest", func(t *testing.T) {
+		var validRequest proto.Request
+		err := json.Unmarshal([]byte(validGitRepoRequest), &validRequest)
+		require.NoError(t, err)
 
-	assert.Equal(t, validRequest.ID, "foobar")
-	assert.Equal(t, validRequest.Resource.Kind(), "GitRepo")
+		assert.Equal(t, "foobar", validRequest.ID)
+		assert.Equal(t, proto.GitRepoRequestKind, validRequest.Kind)
+	})
 
-	var invalidRequest Request
-	err = json.Unmarshal([]byte(invalidGitRepoRequest), &invalidRequest)
-	assert.NotNil(t, err)
+	t.Run("InvalidRequest", func(t *testing.T) {
+		var invalidRequest proto.Request
+		err := json.Unmarshal([]byte(invalidGitRepoRequest), &invalidRequest)
+		assert.Error(t, err)
+	})
 }

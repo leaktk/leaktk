@@ -19,6 +19,7 @@ func NewClient() *http.Client {
 			},
 		}
 	})
+
 	return client
 }
 
@@ -29,5 +30,6 @@ type customRoundTripper struct {
 func (rt *customRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	req = req.Clone(req.Context())
 	req.Header.Set("User-Agent", version.GlobalUserAgent)
+
 	return rt.rt.RoundTrip(req)
 }
