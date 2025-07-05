@@ -44,6 +44,7 @@ func NewPriorityQueue[T any](queueSize int) *PriorityQueue[T] {
 			// need to check the length again just to be sure to avoid any panics.
 			if pq.heap.Len() == 0 {
 				pq.heapMutex.Unlock()
+
 				continue
 			}
 			msg := heap.Pop(pq.heap).(*Message[T])

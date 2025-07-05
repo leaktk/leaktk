@@ -2,8 +2,8 @@ VERSION := $(shell ./hack/version)
 COMMIT := $(shell git rev-parse HEAD)
 MODULE := $(shell grep '^module' go.mod | awk '{print $$2}')
 BUILD_META :=
-BUILD_META += -X=$(MODULE)/version.Version=$(VERSION)
-BUILD_META += -X=$(MODULE)/version.Commit=$(COMMIT)
+BUILD_META += -X=$(MODULE)/pkg/version.Version=$(VERSION)
+BUILD_META += -X=$(MODULE)/pkg/version.Commit=$(COMMIT)
 PREFIX ?= /usr
 
 SHELL := $(shell command -v bash;)
@@ -29,28 +29,28 @@ completions: build
 		./leaktk completion $$shell >| $$outfile; \
 	done
 
-.PHONY: gosec
-gosec:
-	which gosec &> /dev/null || go install github.com/securego/gosec/v2/cmd/gosec@latest
-	gosec ./...
+vet:
+	go vet ./...
 
-.PHONY: golint
-golint:
-	which golint &> /dev/null || go install golang.org/x/lint/golint@latest
-	golint ./...
+.PHONY: lint
+lint: vet
+	golangci-lint run
 
-build: format test
-	go mod tidy
+build: import
 	go build $(LDFLAGS)
 
-format:
-	go fmt ./...
-	which goimports &> /dev/null || go install golang.org/x/tools/cmd/goimports@latest
+import:
 	goimports -local $(MODULE) -l -w .
+	go mod tidy
 
-test: format gosec golint
-	go vet ./...
+format: import
+	go fmt ./...
+
+test: format vet lint
 	go test -race $(MODULE) ./...
+
+failfast:
+	go test -failfast github.com/leaktk/leaktk ./...
 
 install:
 	install ./leaktk $(DESTDIR)$(PREFIX)/bin/leaktk

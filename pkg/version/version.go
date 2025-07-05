@@ -32,7 +32,9 @@ func shortVersion() string {
 		if len(Commit) > 0 {
 			return Version + "@" + Commit
 		}
+
 		return Version
 	}
+
 	return "unknown"
 }

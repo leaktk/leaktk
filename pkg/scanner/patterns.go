@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -11,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	gitleaksconfig "github.com/zricethezav/gitleaks/v8/config"
 
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/pkg/scanner/gitleaks"
 )
 
 // Patterns acts as an abstraction for fetching different scanner patterns
@@ -36,7 +37,7 @@ func NewPatterns(cfg *config.Patterns, client *http.Client) *Patterns {
 	}
 }
 
-func (p *Patterns) fetchGitleaksConfig() (string, error) {
+func (p *Patterns) fetchGitleaksConfig(ctx context.Context) (string, error) {
 	logger.Info("fetching gitleaks patterns")
 	patternURL, err := url.JoinPath(
 		p.config.Server.URL, "patterns", "gitleaks", p.config.Gitleaks.Version,
@@ -47,7 +48,7 @@ func (p *Patterns) fetchGitleaksConfig() (string, error) {
 		return "", err
 	}
 
-	request, err := http.NewRequest("GET", patternURL, nil)
+	request, err := http.NewRequestWithContext(ctx, "GET", patternURL, nil)
 	if err != nil {
 		return "", err
 	}
@@ -56,7 +57,7 @@ func (p *Patterns) fetchGitleaksConfig() (string, error) {
 		logger.Debug("setting authorization header")
 		request.Header.Add(
 			"Authorization",
-			fmt.Sprintf("Bearer %s", p.config.Server.AuthToken),
+			"Bearer "+p.config.Server.AuthToken,
 		)
 	}
 
@@ -64,7 +65,12 @@ func (p *Patterns) fetchGitleaksConfig() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer response.Body.Close()
+
+	defer (func() {
+		if err := response.Body.Close(); err != nil {
+			logger.Debug("error closing pattern response body: %v", err)
+		}
+	})()
 
 	if response.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("unexpected status code: status_code=%d", response.StatusCode)
@@ -80,30 +86,31 @@ func (p *Patterns) fetchGitleaksConfig() (string, error) {
 
 // gitleaksConfigModTimeExceeds returns true if the file is older than
 // `modTimeLimit` seconds
-func (p *Patterns) gitleaksConfigModTimeExceeds(modTimeLimit uint32) bool {
+func (p *Patterns) gitleaksConfigModTimeExceeds(modTimeLimit int) bool {
 	if fileInfo, err := os.Stat(p.config.Gitleaks.ConfigPath); err == nil {
-		return uint32(time.Since(fileInfo.ModTime()).Seconds()) > modTimeLimit
+		return int(time.Since(fileInfo.ModTime()).Seconds()) > modTimeLimit
 	}
 
 	return true
 }
 
 // Gitleaks returns a Gitleaks config object if it's able to
-func (p *Patterns) Gitleaks() (*gitleaksconfig.Config, error) {
+func (p *Patterns) Gitleaks(ctx context.Context) (*gitleaksconfig.Config, error) {
 	// Lock since this updates the value of p.gitleaksConfig on the fly
 	// and updates files on the filesystem
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
 	if p.config.Autofetch && p.gitleaksConfigModTimeExceeds(p.config.RefreshAfter) {
-		rawConfig, err := p.fetchGitleaksConfig()
+		rawConfig, err := p.fetchGitleaksConfig(ctx)
 		if err != nil {
 			return p.gitleaksConfig, err
 		}
 
-		p.gitleaksConfig, err = ParseGitleaksConfig(rawConfig)
+		p.gitleaksConfig, err = gitleaks.ParseConfig(rawConfig)
 		if err != nil {
 			logger.Debug("fetched config:\n%s", rawConfig)
+
 			return p.gitleaksConfig, fmt.Errorf("could not parse config: error=%q", err)
 		}
 
@@ -116,7 +123,11 @@ func (p *Patterns) Gitleaks() (*gitleaksconfig.Config, error) {
 		if err := os.WriteFile(p.config.Gitleaks.ConfigPath, []byte(rawConfig), 0600); err != nil {
 			return p.gitleaksConfig, fmt.Errorf("could not write config: path=%q error=%q", p.config.Gitleaks.ConfigPath, err)
 		}
-		p.updateGitleaksConfigHash(sha256.Sum256([]byte(rawConfig)))
+
+		if hash := sha256.Sum256([]byte(rawConfig)); p.gitleaksConfigHash != hash {
+			p.gitleaksConfigHash = hash
+			logger.Info("updated gitleaks patterns: hash=%s", p.GitleaksConfigHash())
+		}
 	} else if p.gitleaksConfig == nil {
 		if p.gitleaksConfigModTimeExceeds(p.config.ExpiredAfter) {
 			return nil, fmt.Errorf(
@@ -130,12 +141,16 @@ func (p *Patterns) Gitleaks() (*gitleaksconfig.Config, error) {
 			return p.gitleaksConfig, err
 		}
 
-		p.gitleaksConfig, err = ParseGitleaksConfig(string(rawConfig))
+		p.gitleaksConfig, err = gitleaks.ParseConfig(string(rawConfig))
 		if err != nil {
 			logger.Debug("loaded config:\n%s\n", rawConfig)
+
 			return p.gitleaksConfig, fmt.Errorf("could not parse config: error=%q", err)
 		}
-		p.updateGitleaksConfigHash(sha256.Sum256(rawConfig))
+
+		if hash := sha256.Sum256(rawConfig); p.gitleaksConfigHash != hash {
+			p.gitleaksConfigHash = hash
+		}
 	}
 
 	return p.gitleaksConfig, nil
@@ -144,57 +159,4 @@ func (p *Patterns) Gitleaks() (*gitleaksconfig.Config, error) {
 // GitleaksConfigHash returns the sha256 hash for the current gitleaks config
 func (p *Patterns) GitleaksConfigHash() string {
 	return fmt.Sprintf("%x", p.gitleaksConfigHash)
-}
-
-// updateGitleaksConfigHash updated value and logs only on a change
-func (p *Patterns) updateGitleaksConfigHash(hash [32]byte) {
-	if hash != p.gitleaksConfigHash {
-		p.gitleaksConfigHash = hash
-		logger.Info("updated gitleaks patterns: hash=%s", p.GitleaksConfigHash())
-	}
-}
-
-func invalidConfig(cfg *gitleaksconfig.Config) bool {
-	// If there are Rules the config is valid
-	if len(cfg.Rules) > 0 {
-		return false
-	}
-
-	// If there are no Allowlists entries the config is invalid
-	if len(cfg.Allowlists) < 1 {
-		return true
-	}
-
-	// The allowlist should at least ignore something
-	for _, al := range cfg.Allowlists {
-		if len(al.Paths) == 0 && len(al.Regexes) == 0 && len(al.StopWords) == 0 && len(al.Commits) == 0 {
-			return true
-		}
-	}
-
-	return false
-}
-
-// ParseGitleaksConfig takes a gitleaks config string and returns a config object
-func ParseGitleaksConfig(rawConfig string) (glc *gitleaksconfig.Config, err error) {
-	var vc gitleaksconfig.ViperConfig
-
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("gitleaks config is invalid: error=%q", r)
-		}
-	}()
-
-	_, err = toml.Decode(rawConfig, &vc)
-	if err != nil {
-		return nil, err
-	}
-
-	cfg, err := vc.Translate()
-
-	if invalidConfig(&cfg) {
-		return nil, fmt.Errorf("invalid config")
-	}
-
-	return &cfg, err
 }

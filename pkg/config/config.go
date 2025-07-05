@@ -11,6 +11,7 @@ import (
 
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/pkg/version"
 )
 
 const nixGlobalConfigDir = "/etc/leaktk"
@@ -19,6 +20,21 @@ var localConfigDir string
 
 func init() {
 	localConfigDir = filepath.Join(xdg.ConfigHome, "leaktk")
+
+	// The environment variables for the scan environment
+	env := map[string]string{
+		"GIT_CONFIG_GLOBAL":      "/dev/null",
+		"GIT_TERMINAL_PROMPT":    "0",
+		"GIT_NO_REPLACE_OBJECTS": "1",
+		"GIT_CONFIG_NOSYSTEM":    "1",
+		"GIT_HTTP_USER_AGENT":    version.GlobalUserAgent,
+	}
+
+	for key, value := range env {
+		if err := os.Setenv(key, value); err != nil {
+			logger.Error("could not set %s=%s: %v", key, value, err)
+		}
+	}
 }
 
 type (
@@ -43,23 +59,22 @@ type (
 
 	// Scanner provides scanner specific config
 	Scanner struct {
-		AllowLocal          bool     `toml:"allow_local"`
-		CloneTimeout        uint16   `toml:"clone_timeout"`
-		CloneWorkers        uint16   `toml:"clone_workers"`
-		IncludeResponseLogs bool     `toml:"include_response_logs"`
-		MaxDecodeDepth      uint16   `toml:"max_decode_depth"`
-		MaxScanDepth        uint16   `toml:"max_scan_depth"`
-		Patterns            Patterns `toml:"patterns"`
-		ScanWorkers         uint16   `toml:"scan_workers"`
-		Workdir             string   `toml:"workdir"`
+		AllowLocal      bool     `toml:"allow_local"`
+		ScanTimeout     int      `toml:"scan_timeout"`
+		MaxArchiveDepth int      `toml:"max_archive_depth"`
+		MaxDecodeDepth  int      `toml:"max_decode_depth"`
+		MaxScanDepth    int      `toml:"max_scan_depth"`
+		Patterns        Patterns `toml:"patterns"`
+		ScanWorkers     int      `toml:"scan_workers"`
+		Workdir         string   `toml:"workdir"`
 	}
 
 	// Patterns provides configuration for managing pattern updates
 	Patterns struct {
 		Autofetch    bool          `toml:"autofetch"`
-		ExpiredAfter uint32        `toml:"expired_after"`
+		ExpiredAfter int           `toml:"expired_after"`
 		Gitleaks     Gitleaks      `toml:"gitleaks"`
-		RefreshAfter uint32        `toml:"refresh_after"`
+		RefreshAfter int           `toml:"refresh_after"`
 		Server       PatternServer `toml:"server"`
 	}
 
@@ -132,6 +147,7 @@ func loadPatternServerAuthToken() string {
 
 	if len(authTokenFromEnvVar) > 0 {
 		logger.Debug("loading pattern-server-auth-token from env var")
+
 		return authTokenFromEnvVar
 	}
 
@@ -171,14 +187,13 @@ func DefaultConfig() *Config {
 			Level: "INFO",
 		},
 		Scanner: Scanner{
-			AllowLocal:          true,
-			CloneTimeout:        0,
-			CloneWorkers:        1,
-			IncludeResponseLogs: false,
-			MaxScanDepth:        0,
-			ScanWorkers:         1,
-			Workdir:             filepath.Join(xdg.CacheHome, "leaktk", "scanner"),
-			MaxDecodeDepth:      8,
+			AllowLocal:      true,
+			ScanTimeout:     0,
+			MaxScanDepth:    0,
+			ScanWorkers:     1,
+			Workdir:         filepath.Join(xdg.CacheHome, "leaktk", "scanner"),
+			MaxArchiveDepth: 8,
+			MaxDecodeDepth:  8,
 			Patterns: Patterns{
 				Autofetch:    true,
 				ExpiredAfter: 60 * 60 * 12 * 14, // 7 days
@@ -248,7 +263,6 @@ func SavePatternServerAuthToken(authToken string) error {
 	}
 
 	path := patternServerAuthTokenPath(localConfigDir)
-
 	if err := os.WriteFile(path, []byte(strings.TrimSpace(authToken)), 0600); err != nil {
 		return err
 	}

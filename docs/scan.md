@@ -17,8 +17,8 @@ leaktk listen < ./examples/requests.jsonl
 
 # Run a single scan
 leaktk scan 'https://github.com/leaktk/fake-leaks.git'
-leaktk scan --kind JSONData --resource '{"key": "-----BEGIN PRIVATE KEY-----c5602d28d0f21422dfc7b572b17e6b138c1b49fd7f477d4c5c961e0756f1ff70-----END PRIVATE KEY-----"}'
-leaktk scan --kind JSONData --resource '@/path/to/some-file.json'
+leaktk scan --kind JSONData '{"key": "-----BEGIN PRIVATE KEY-----c5602d28d0f21422dfc7b572b17e6b138c1b49fd7f477d4c5c961e0756f1ff70-----END PRIVATE KEY-----"}'
+leaktk scan --kind JSONData '@/path/to/some-file.json'
 
 # See more options
 leaktk help
