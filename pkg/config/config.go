@@ -11,6 +11,7 @@ import (
 
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/pkg/version"
 )
 
 const nixGlobalConfigDir = "/etc/leaktk"
@@ -20,14 +21,19 @@ var localConfigDir string
 func init() {
 	localConfigDir = filepath.Join(xdg.ConfigHome, "leaktk")
 
-	// Make sure git never prompts for a password
-	if err := os.Setenv("GIT_TERMINAL_PROMPT", "0"); err != nil {
-		logger.Error("could not set GIT_TERMINAL_PROMPT=0: %v", err)
+	// The environment variables for the scan environment
+	env := map[string]string{
+		"GIT_CONFIG_GLOBAL":      "/dev/null",
+		"GIT_TERMINAL_PROMPT":    "0",
+		"GIT_NO_REPLACE_OBJECTS": "1",
+		"GIT_CONFIG_NOSYSTEM":    "1",
+		"GIT_HTTP_USER_AGENT":    version.GlobalUserAgent,
 	}
 
-	// Make sure replace is disabled so we can scan all of the refs
-	if err := os.Setenv("GIT_NO_REPLACE_OBJECTS", "1"); err != nil {
-		logger.Error("could not set GIT_NO_REPLACE_OBJECTS=1: %v", err)
+	for key, value := range env {
+		if err := os.Setenv(key, value); err != nil {
+			logger.Error("could not set %s=%s: %v", key, value, err)
+		}
 	}
 }
 

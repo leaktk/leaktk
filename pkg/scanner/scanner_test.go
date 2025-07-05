@@ -73,7 +73,17 @@ func TestScanner(t *testing.T) {
 
 		err = exec.Command("git", "-C", repoDir, "add", "-A").Run() // #nosec:G204
 		require.NoError(t, err)
-		err = exec.Command("git", "-C", repoDir, "commit", "-am", "oops!", "--no-verify").Run() // #nosec:G204
+		err = exec.Command(
+			"git",
+			"-C", repoDir,
+			"-c",
+			"user.name=LeakTK",
+			"-c",
+			"user.email=leaktk@example.com",
+			"commit",
+			"-am",
+			"oops!",
+			"--no-verify").Run() // #nosec:G204
 		require.NoError(t, err)
 
 		var wg sync.WaitGroup
