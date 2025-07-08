@@ -95,17 +95,9 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 			}
 
 			if len(rawImageRef) > 0 {
-				containerImage := &ContainerImage{
-					Arch:            s.Arch,
-					Config:          s.Config,
-					Depth:           s.Depth,
-					Exclusions:      s.Exclusions,
-					MaxArchiveDepth: s.MaxArchiveDepth,
-					RawImageRef:     imageSource.Reference().Transport().Name() + "://" + rawImageRef,
-					Sema:            s.Sema,
-					Since:           s.Since,
-					path:            filepath.Join(s.path, "manifests", digest),
-				}
+				containerImage := *s
+				containerImage.RawImageRef = imageSource.Reference().Transport().Name() + "://" + rawImageRef
+				containerImage.path = filepath.Join(s.path, "manifests", digest)
 
 				if err := containerImage.Fragments(ctx, yield); err != nil {
 					return err
@@ -304,7 +296,6 @@ func yieldWithCommitInfo(commitInfo sources.CommitInfo, yield sources.FragmentsF
 			fragment.CommitInfo = &commitInfo
 			fragment.CommitSHA = commitInfo.SHA
 		}
-
 		return yield(fragment, err)
 	}
 }

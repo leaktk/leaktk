@@ -197,11 +197,11 @@ func (s *Scanner) listen() {
 			})
 		case proto.URLRequestKind:
 			findings, err = gitleaks.ScanURL(ctx, detector, request.Resource, gitleaks.URLScanOpts{
-				FetchURLPatterns: strings.Split(request.Opts.FetchURLs, ":"),
+				FetchURLPatterns: splitFetchURLPatterns(request.Opts.FetchURLs),
 			})
 		case proto.JSONDataRequestKind:
 			findings, err = gitleaks.ScanJSON(ctx, detector, request.Resource, gitleaks.JSONScanOpts{
-				FetchURLPatterns: strings.Split(request.Opts.FetchURLs, ":"),
+				FetchURLPatterns: splitFetchURLPatterns(request.Opts.FetchURLs),
 			})
 		case proto.TextRequestKind:
 			findings, err = gitleaks.ScanReader(ctx, detector, strings.NewReader(request.Resource))
@@ -322,6 +322,12 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 		result.Kind = proto.GitCommitResultKind
 	case proto.ContainerImageRequestKind:
 		result.Notes["image"] = request.Resource
+		// TODO: handle the different kinds like image vs manifest
+		// and sub images and such here where the path needs to be re-mapped
+		// and you can tell the kind based on the path prefix (e.g. layers, manifest, etc)
+		//
+		// Also fix this not returning results:
+		//  ./leaktk scan --kind ContainerImage "docker://quay.io/leaktk/fake-leaks:v1.0.1"
 	case proto.URLRequestKind:
 		result.Notes["url"] = request.Resource
 		result.Kind = proto.GenericResultKind
@@ -433,7 +439,6 @@ func (s *Scanner) cloneGitRepo(ctx context.Context, cloneURL string, opts proto.
 
 func remoteGitRefExists(cloneURL, ref string) bool {
 	cmd := exec.Command("git", "ls-remote", "--exit-code", "--quiet", cloneURL, ref) // #nosec G204
-
 	return cmd.Run() == nil
 }
 
@@ -445,10 +450,18 @@ func checkoutGitSourceConfigFiles(gitDir string) (string, error) {
 		return worktreePath, fmt.Errorf("could not create worktree: %v cmd=%q", err, cmd)
 	}
 
-	cmd = exec.Command("git", "-C", gitDir, "checkout", "-f", "HEAD", "--", ".gitleaks*")
+	cmd = exec.Command("git", "-C", worktreePath, "checkout", "-f", "HEAD", "--", ".gitleaks*") // #nosec G204
 	if err := cmd.Run(); err != nil {
 		return worktreePath, fmt.Errorf("could not checkout gitleaks files: %v cmd=%q", err, cmd)
 	}
 
 	return worktreePath, nil
+}
+
+func splitFetchURLPatterns(patterns string) []string {
+	if len(patterns) == 0 {
+		return []string{}
+	}
+
+	return strings.Split(patterns, ":")
 }

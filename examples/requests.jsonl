@@ -6,10 +6,10 @@
 {"id":"1scwY0WF01D", "kind":"JSONData",       "resource":"{\".gitleaks.toml\": \"[allowlist]\\nregexes = ['BEGIN PRIVATE KEY']\\n\", \"some\":{\"key\": \"-----BEGIN PRIVATE KEY-----c5602d28d0f21422dfc7b572b17e6b138c1b49fd7f477d4c5c961e0756f1ff70-----END PRIVATE KEY-----\"}}"}
 {"id":"h5UEOsC_2Su", "kind":"Files",          "resource":"README.md"}
 {"id":"toSO-HdJWKK", "kind":"URL",            "resource":"https://raw.githubusercontent.com/leaktk/fake-leaks/main/general-test"}
-{"id":"sOLJAWnoUGo", "kind":"ContainerImage", "resource":"quay.io/leaktk/fake-leaks:v1.0.1", "options": {"exclusions": ["2b84bab8609aea9706783cda5f66adb7648a7daedd2650665ca67c717718c3d1"]}}
-{"id":"VkmQgpTcAyI", "kind":"ContainerImage", "resource":"quay.io/leaktk/fake-leaks:v1.0.1", "options": {"depth": 1}}
-{"id":"j1zjPQsiKEY", "kind":"ContainerImage", "resource":"quay.io/leaktk/fake-leaks:v1.0.1", "options": {"since": "2024-02-04"}}
-{"id":"cU17zc8y_IA", "kind":"ContainerImage", "resource":"quay.io/jetstack/cert-manager-controller:v1.16.0"}
+{"id":"sOLJAWnoUGo", "kind":"ContainerImage", "resource":"docker://quay.io/leaktk/fake-leaks:v1.0.1", "options": {"exclusions": ["2b84bab8609aea9706783cda5f66adb7648a7daedd2650665ca67c717718c3d1"]}}
+{"id":"VkmQgpTcAyI", "kind":"ContainerImage", "resource":"docker://quay.io/leaktk/fake-leaks:v1.0.1", "options": {"depth": 1}}
+{"id":"j1zjPQsiKEY", "kind":"ContainerImage", "resource":"docker://quay.io/leaktk/fake-leaks:v1.0.1", "options": {"since": "2024-02-04"}}
+{"id":"cU17zc8y_IA", "kind":"ContainerImage", "resource":"docker://quay.io/jetstack/cert-manager-controller:v1.16.0"}
 {"id":"low-prioz03", "kind": "GitRepo",       "resource": "https://github.com/leaktk/fake-leaks", "options": {"priority": 0}}
 {"id":"high-prioZ-", "kind": "GitRepo",       "resource": "https://github.com/leaktk/fake-leaks", "options": {"priority": 1}}
 {"id":"sXxdJdb1ic5", "kind":"JSONData",       "resource":"{\"url1\":\"https://notreal.co.asd\", \"url2\":\"http://www.google.com\", \"some\":{\"key\": \"-----BEGIN PRIVATE KEY-----c5602d28d0f21422dfc7b572b17e6b138c1b49fd7f477d4c5c961e0756f1ff70-----END PRIVATE KEY-----\"}}", "options": {"fetch_urls": "*"}}

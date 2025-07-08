@@ -55,11 +55,19 @@ func CleanJoin(prefix string, elem string) (string, error) {
 func Split(path string) []string {
 	prefix, part := filepath.Split(path)
 
-	if prefix == "" {
-		return []string{part}
+	if prefix == "" || prefix == "/" {
+		if len(part) > 0 {
+			return []string{part}
+		}
+
+		return []string{}
 	}
 
-	return append(Split(filepath.Clean(prefix)), part)
+	if len(part) > 0 {
+		return append(Split(filepath.Clean(prefix)), part)
+	}
+
+	return Split(filepath.Clean(prefix))
 }
 
 // Match does basic glob matching. It is similar to filepath.Match except

@@ -227,7 +227,7 @@ func runListen(cmd *cobra.Command, args []string) {
 
 	// Prints the output of the scanner as they come
 	go leaktkScanner.Recv(func(response *proto.Response) {
-		fmt.Println(response)
+		fmt.Println(formatJSON(response))
 		wg.Done()
 	})
 
