@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
@@ -52,5 +53,5 @@ func TestScanCommandToRequest(t *testing.T) {
 	request, err = scanCommandToRequest(cmd, args)
 	require.Error(t, err)
 	assert.Nil(t, request)
-	assert.Equal(t, "resource path does not exist: path=\""+dataPath+".invalid\"", err.Error())
+	assert.Equal(t, fmt.Sprintf("resource path does not exist: path=%q", dataPath+".invalid"), err.Error())
 }

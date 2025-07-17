@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -63,11 +62,11 @@ func TestJSON(t *testing.T) {
 
 	require.NoError(t, err)
 	expected := map[string]string{
-		"foo":                              "bar",
-		filepath.Join("baz", "0"):          "bop",
-		filepath.Join("baz", "5", "hello"): "there",
-		"url":                              "hello world",
-		filepath.Join("nested", "url") + sources.InnerPathSeparator + "hello": "world",
+		"foo":         "bar",
+		"baz/0":       "bop",
+		"baz/5/hello": "there",
+		"url":         "hello world",
+		"nested/url" + sources.InnerPathSeparator + "hello": "world",
 		"skipped": "https://example.com",
 		"invalid": "https://raw.githubusercontent.com/leaktk/fake-leaks/main/this-url-doesnt-exist-8UaehX5b24MzZiaeJ428FK5R",
 	}
