@@ -129,4 +129,30 @@ func TestScanner(t *testing.T) {
 
 		wg.Wait()
 	})
+
+	t.Run("LocalArchiveSuccess", func(t *testing.T) {
+		testFolder := "../../testdata/archive"
+		cfg.Scanner.AllowLocal = true
+
+		request := &proto.Request{
+			ID:       "test-local-archive-request",
+			Kind:     proto.FilesRequestKind,
+			Resource: testFolder,
+		}
+		var wg sync.WaitGroup
+
+		scanner := NewScanner(cfg)
+		scanner.Send(request)
+		wg.Add(1)
+
+		go scanner.Recv(func(response *proto.Response) {
+			assert.Equal(t, response.RequestID, request.ID)
+			assert.Nil(t, response.Error)
+			assert.Len(t, response.Results, 1)
+			assert.Equal(t, "YXBpVmVyc2lvbjogdjEKZGF0YToKICBhd3NfYWNjZXNzX2tleV9pZDogUVV0SlFWaFlXRmhZV0ZoWVdGaFlXRmhZV0ZnPQogIGF3c19zZWNyZXRfYWNjZXNzX2tleTogVURSc1JqUlFlalprWjFwaFlsRjBLM0JrVWxCUUsyczNkbk01Um1GMFFWWnVkR2hZU3pkakNnPT0Ka2luZDogU2VjcmV0Cm1ldGFkYXRhOgogIG5hbWVzcGFjZTogZXhhbXBsZQogIG5hbWU6IGF3cy1jcmVkcwo=", response.Results[0].Secret)
+			wg.Done()
+		})
+		wg.Wait()
+
+	})
 }
