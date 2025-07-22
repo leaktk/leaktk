@@ -321,7 +321,24 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 		result.Notes["repository"] = request.Resource
 		result.Kind = proto.GitCommitResultKind
 	case proto.ContainerImageRequestKind:
-		result.Notes["image"] = request.Resource
+		manifest := ""
+		parts := strings.Split(result.Location.Path, "/")
+		if len(parts) > 1 {
+			if strings.Contains(result.Location.Path, "layers/") {
+				loc := strings.Split(result.Location.Path, "!")
+				if len(loc) > 1 {
+					result.Location.Path = loc[1]
+					result.Kind = proto.ContainerLayerResultKind
+				}
+			}
+			manifest = parts[1]
+			result.Kind = proto.ContainerMetdataResultKind
+		}
+		if manifest != "" {
+			result.Notes["image"] = request.Resource + "@" + manifest
+		} else {
+			result.Notes["image"] = request.Resource
+		}
 		// TODO: handle the different kinds like image vs manifest
 		// and sub images and such here where the path needs to be re-mapped
 		// and you can tell the kind based on the path prefix (e.g. layers, manifest, etc)

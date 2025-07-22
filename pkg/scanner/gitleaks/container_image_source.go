@@ -170,7 +170,7 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 		}
 
 		if slices.Contains(s.Exclusions, layerInfo.Digest.Hex()) {
-			logger.Debug("skiping layer in exclusions list: digest=%q", layerInfo.Digest)
+			logger.Debug("skipping layer in exclusions list: digest=%q", layerInfo.Digest)
 			continue
 		}
 
