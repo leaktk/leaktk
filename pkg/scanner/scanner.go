@@ -35,6 +35,7 @@ const (
 	localScanNotAllowedCode
 	scanErrorCode
 	sourceErrorCode
+	timeoutErrorCode
 )
 
 // Scanner holds the config and state for the scanner processes
@@ -140,12 +141,21 @@ func (s *Scanner) listen() {
 
 			if !request.Opts.Local {
 				if sourcePath, gitDir, err = s.cloneGitRepo(ctx, request.Resource, request.Opts); err != nil {
-					logger.Critical("scan failed: could not clone git repo: %v id=%q", err, request.ID)
-					s.respondWithError(request, &proto.Error{
-						Code:    cloneErrorCode,
-						Message: "could not clone git repo",
-						Data:    request,
-					})
+					select {
+					case <-ctx.Done():
+						s.respondWithError(request, &proto.Error{
+							Code:    cloneErrorCode,
+							Message: "clone operation timed out",
+							Data:    request,
+						})
+					default:
+						logger.Critical("scan failed: could not clone git repo: %v id=%q", err, request.ID)
+						s.respondWithError(request, &proto.Error{
+							Code:    cloneErrorCode,
+							Message: "could not clone git repo",
+							Data:    request,
+						})
+					}
 
 					return
 				}
@@ -231,12 +241,23 @@ func (s *Scanner) listen() {
 		var scanErr *proto.Error
 
 		if err != nil {
-			logger.Error("scan error: %v id=%q", err, request.ID)
-			scanErr = &proto.Error{
-				Code:    scanErrorCode,
-				Message: err.Error(),
-				Data:    request,
+			select {
+			case <-ctx.Done():
+				s.respondWithError(request, &proto.Error{
+					Code:    timeoutErrorCode,
+					Message: "operation timed out",
+					Data:    request,
+				})
+				return
+			default:
+				logger.Error("scan error: %v id=%q", err, request.ID)
+				scanErr = &proto.Error{
+					Code:    scanErrorCode,
+					Message: err.Error(),
+					Data:    request,
+				}
 			}
+
 		}
 
 		results := make([]*proto.Result, len(findings))
@@ -260,6 +281,7 @@ func (s *Scanner) listen() {
 
 func (s *Scanner) respondWithError(request *proto.Request, err *proto.Error) {
 	logger.Info("queueing response: id=%q", request.ID)
+	logger.Error("scan error: %s id=%q", err.Message, request.ID)
 	s.responseQueue.Send(&queue.Message[*proto.Response]{
 		Priority: request.Opts.Priority,
 		Value: &proto.Response{
