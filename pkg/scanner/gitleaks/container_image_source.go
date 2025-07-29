@@ -56,7 +56,11 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 
 	imageRef, err := alltransports.ParseImageName(s.RawImageRef)
 	if err != nil {
-		return fmt.Errorf("could not parse image reference: %v image=%q", err, s.RawImageRef)
+		logger.Debug("error parsing image reference %q: %v adding transport and trying again", s.RawImageRef, err)
+		imageRef, err = alltransports.ParseImageName("docker://" + s.RawImageRef)
+		if err != nil {
+			return fmt.Errorf("could not parse image reference: %v image=%q", err, s.RawImageRef)
+		}
 	}
 
 	imageSource, err := imageRef.NewImageSource(ctx, sysCtx)
@@ -82,7 +86,6 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 		if err := json.Unmarshal(rawManifest, &indexManifest); err != nil {
 			return fmt.Errorf("could not unmarshal manifest: %v", err)
 		}
-
 		for _, m := range indexManifest.Manifests {
 			digest := m.Digest.String()
 			var rawImageRef string
@@ -126,7 +129,15 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 
 	ociConfig, err := image.OCIConfig(ctx)
 	if err != nil {
-		return fmt.Errorf("could not get OCI config: %w image=%q", err, s.RawImageRef)
+		return fmt.Errorf("could not get OCI config: %v image=%q", err, s.RawImageRef)
+	}
+
+	configHistories := make([]imagespecv1.History, 0, len(ociConfig.History))
+	for _, h := range ociConfig.History {
+		if h.EmptyLayer {
+			continue
+		}
+		configHistories = append(configHistories, h)
 	}
 
 	commitInfo := s.commitInfoFromConfig(ociConfig)
@@ -147,10 +158,11 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 
 	cache := blobinfocache.DefaultCache(sysCtx)
 	layerInfos := imageManifest.LayerInfos()
+	checkSince := s.Since != nil && len(layerInfos) == len(configHistories)
+
 	for i, layerInfo := range layerInfos {
 		layerCommitInfo := commitInfo
 		layerCommitInfo.SHA = layerInfo.Digest.String()
-
 		if layerInfo.EmptyLayer {
 			logger.Debug("skipping empty layer: digest=%q", layerInfo.Digest)
 			continue
@@ -162,9 +174,9 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 			break
 		}
 
-		if layerHistory := ociConfig.History[i]; s.Since != nil && layerHistory.Created != nil {
-			if layerHistory.Created.Before(*s.Since) {
-				logger.Debug("skipping layer older than provided date: digest=%q created=%q", layerInfo.Digest, layerHistory.Created.Format("2006-01-02"))
+		if checkSince {
+			if history := configHistories[i]; history.Created != nil && history.Created.Before(*s.Since) {
+				logger.Debug("skipping layer older than provided date: digest=%q create=%q", layerInfo.Digest, history.Created.Format("2006-01-02"))
 				continue
 			}
 		}
@@ -182,17 +194,19 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 		logger.Debug("container layer blob size: digest=%q size=%d", digest, blobSize)
 		if err != nil {
 			logger.Error("could not download layer blob: %v", err)
-
 			return err
 		}
 
 		format, stream, err := archives.Identify(ctx, "", blobReader)
 		if err == nil && format != nil {
 			if extractor, ok := format.(archives.Extractor); ok {
-				return s.extractorFragments(ctx, extractor, digest, stream, enrichedYield)
-			}
-			if decompressor, ok := format.(archives.Decompressor); ok {
-				return s.decompressorFragments(ctx, decompressor, digest, stream, enrichedYield)
+				if err := s.extractorFragments(ctx, extractor, digest, stream, enrichedYield); err != nil {
+					return err
+				}
+			} else if decompressor, ok := format.(archives.Decompressor); ok {
+				if err := s.decompressorFragments(ctx, decompressor, digest, stream, enrichedYield); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -208,7 +222,9 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 			logger.Debug("error closing blob reader: %v digest=%q", closeErr, digest)
 		}
 
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -220,7 +236,7 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 		case archives.SevenZip, archives.Zip:
 			tmpfile, err := os.CreateTemp("", "gitleaks-archive-")
 			if err != nil {
-				logger.Error("could not create tmp file for container layer blob: digest=%q", digest)
+				logger.Error("could not create tmp file for container layer blob: %v digest=%q", err, digest)
 
 				return nil
 			}
@@ -231,7 +247,7 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 
 			_, err = io.Copy(tmpfile, reader)
 			if err != nil {
-				logger.Error("could not copy container layer blob: digest=%q", digest)
+				logger.Error("could not copy container layer blob: %v digest=%q", err, digest)
 
 				return nil
 			}
@@ -254,7 +270,7 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 
 		innerReader, err := d.Open()
 		if err != nil {
-			logger.Error("could not open container layer blob inner file: path=%q digest=%q", path, digest)
+			logger.Error("could not open container layer blob inner file: %v path=%q digest=%q", err, path, digest)
 
 			return nil
 		}
@@ -276,7 +292,7 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 func (s *ContainerImage) decompressorFragments(ctx context.Context, decompressor archives.Decompressor, digest string, reader io.Reader, yield sources.FragmentsFunc) error {
 	innerReader, err := decompressor.OpenReader(reader)
 	if err != nil {
-		logger.Error("could not read compressed container layer blob: digest=%q", digest)
+		logger.Error("could not read compressed container layer blob: %v digest=%q", err, digest)
 
 		return nil
 	}
