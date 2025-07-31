@@ -16,7 +16,7 @@ import (
 func TestContainerImage(t *testing.T) {
 	theFuture := time.Now().Add(time.Hour)
 	containerImage := &ContainerImage{
-		RawImageRef: "docker://quay.io/leaktk/fake-leaks:v2.0.0",
+		RawImageRef: "docker://quay.io/leaktk/fake-leaks:v2",
 		Arch:        "amd64",
 		Depth:       1,
 		Sema:        semgroup.NewGroup(context.Background(), 1),
