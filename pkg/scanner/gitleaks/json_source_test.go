@@ -26,6 +26,9 @@ func TestJSON(t *testing.T) {
 		case "/hello.json":
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			content = `{"hello": "world"}`
+		case "/leak.json":
+			w.Header().Add("Content-Type", "application/json")
+			content = `{"quay.io": {"auth": "SUPER SECRET"}}`
 		default:
 			content = "Not sure what happened here"
 		}
@@ -45,12 +48,13 @@ func TestJSON(t *testing.T) {
 			"url": "` + ts.URL + `/hello",
 			"nested": {"url": "` + ts.URL + `/hello.json"},
 			"skipped": "https://example.com",
-			"invalid": "https://raw.githubusercontent.com/leaktk/fake-leaks/main/this-url-doesnt-exist-8UaehX5b24MzZiaeJ428FK5R"
-	} `
+			"invalid": "https://raw.githubusercontent.com/leaktk/fake-leaks/main/this-url-doesnt-exist-8UaehX5b24MzZiaeJ428FK5R",
+			"jsonurl":  "` + ts.URL + `/leak.json"
+	}`
 
 	jsonData := &JSON{
 		RawMessage:       json.RawMessage(data),
-		FetchURLPatterns: []string{"url", "nested/*", "invalid"},
+		FetchURLPatterns: []string{"url", "nested/*", "invalid", "jsonurl"},
 	}
 
 	fragments := []sources.Fragment{}
@@ -69,9 +73,10 @@ func TestJSON(t *testing.T) {
 		"nested/url" + sources.InnerPathSeparator + "hello": "world",
 		"skipped": "https://example.com",
 		"invalid": "https://raw.githubusercontent.com/leaktk/fake-leaks/main/this-url-doesnt-exist-8UaehX5b24MzZiaeJ428FK5R",
+		"jsonurl" + sources.InnerPathSeparator + "quay.io/auth": "SUPER SECRET",
 	}
 
-	assert.Len(t, fragments, 7)
+	assert.Len(t, fragments, 8)
 
 	for _, fragment := range fragments {
 		assert.Contains(t, expected, fragment.FilePath)
