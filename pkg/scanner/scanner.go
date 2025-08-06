@@ -103,7 +103,6 @@ func (s *Scanner) listen() {
 		request := msg.Value
 		logger.Info("starting scan: id=%q", request.ID)
 
-		// TODO: make sure the timeout is handled properly everywhere
 		ctx := context.Background()
 		if s.scanTimeout > 0 {
 			var cancel context.CancelFunc
@@ -361,12 +360,7 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 		} else {
 			result.Notes["image"] = request.Resource
 		}
-		// TODO: handle the different kinds like image vs manifest
-		// and sub images and such here where the path needs to be re-mapped
-		// and you can tell the kind based on the path prefix (e.g. layers, manifest, etc)
-		//
-		// Also fix this not returning results:
-		//  ./leaktk scan --kind ContainerImage "docker://quay.io/leaktk/fake-leaks:v1.0.1"
+
 	case proto.URLRequestKind:
 		result.Notes["url"] = request.Resource
 		result.Kind = proto.GenericResultKind
