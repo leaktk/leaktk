@@ -1,7 +1,7 @@
 name: Build, sign and upload release artifacts
 
 env:
-  GO_VERSION: '1.22'
+  GO_VERSION: '1.23'
   GO111MODULE: on
 
 on:
@@ -27,6 +27,11 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # pin@v4
         with:
           fetch-depth: 0
+
+      - name: Install
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libbtrfs-dev
 
       - name: Set up Go
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # pin@v5

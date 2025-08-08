@@ -4,15 +4,16 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetAndSetLoggerLevel(t *testing.T) {
 	// Default should be INFO
-	assert.Equal(t, GetLoggerLevel().String(), INFO.String())
+	assert.Equal(t, INFO.String(), GetLoggerLevel().String())
 
 	// It should be changeable
-	assert.Nil(t, SetLoggerLevel(DEBUG.String()))
-	assert.Equal(t, GetLoggerLevel().String(), DEBUG.String())
-	assert.Nil(t, SetLoggerLevel(INFO.String()))
-	assert.Equal(t, GetLoggerLevel().String(), INFO.String())
+	require.NoError(t, SetLoggerLevel(DEBUG.String()))
+	assert.Equal(t, DEBUG.String(), GetLoggerLevel().String())
+	require.NoError(t, SetLoggerLevel(INFO.String()))
+	assert.Equal(t, INFO.String(), GetLoggerLevel().String())
 }
