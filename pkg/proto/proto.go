@@ -97,6 +97,11 @@ type Error struct {
 	Data    any    `json:"data,omitempty" toml:"data,omitempty" yaml:"data,omitempty"`
 }
 
+// Error implements go's error interface for Response.Error
+func (e *Error) Error() string {
+	return fmt.Sprintf("%s code=%d", e.Message, e.Code)
+}
+
 // Response from the scanner with the scan result
 type Response struct {
 	ID        string    `json:"id"              toml:"id"              yaml:"id"`

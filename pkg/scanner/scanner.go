@@ -249,14 +249,13 @@ func (s *Scanner) listen() {
 				})
 				return
 			default:
-				logger.Error("scan error: %v id=%q", err, request.ID)
 				scanErr = &proto.Error{
 					Code:    scanErrorCode,
 					Message: err.Error(),
 					Data:    request,
 				}
+				logger.Error("scan error: %v id=%q", scanErr, request.ID)
 			}
-
 		}
 
 		results := make([]*proto.Result, len(findings))
@@ -280,7 +279,7 @@ func (s *Scanner) listen() {
 
 func (s *Scanner) respondWithError(request *proto.Request, err *proto.Error) {
 	logger.Info("queueing response: id=%q", request.ID)
-	logger.Error("scan error: %s id=%q", err.Message, request.ID)
+	logger.Error("scan error: %v id=%q", err, request.ID)
 	s.responseQueue.Send(&queue.Message[*proto.Response]{
 		Priority: request.Opts.Priority,
 		Value: &proto.Response{
