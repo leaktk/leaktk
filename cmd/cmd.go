@@ -82,17 +82,17 @@ func logoutCommand() *cobra.Command {
 func runScan(cmd *cobra.Command, args []string) {
 	leakExitCode, err := cmd.Flags().GetInt("leak-exit-code")
 	if err != nil {
-		logger.Fatal("invalid leak-exit-code: error=%q", err.Error())
+		logger.Fatal("invalid leak-exit-code: %v", err)
 	}
 
 	request, err := scanCommandToRequest(cmd, args)
 	if err != nil {
-		logger.Fatal("could not generate scan request: error=%q", err.Error())
+		logger.Fatal("could not generate scan request: %v", err)
 	}
 
 	formatter, err := NewFormatter(cfg.Formatter)
 	if err != nil {
-		logger.Fatal("%v", err.Error())
+		logger.Fatal("%v", err)
 	}
 
 	var wg sync.WaitGroup
@@ -105,6 +105,9 @@ func runScan(cmd *cobra.Command, args []string) {
 			leaksFound = true
 		}
 		fmt.Println(formatter.Format(response))
+		if response.Error != nil {
+			logger.Fatal("response contains error: %w", response.Error)
+		}
 		wg.Done()
 	})
 
@@ -322,7 +325,7 @@ func configure(cmd *cobra.Command, args []string) error {
 	// Check if the OutputFormat is valid
 	_, err = getOutputFormat(cfg.Formatter.Format)
 	if err != nil {
-		logger.Fatal("%v", err.Error())
+		logger.Fatal("%v", err)
 	}
 
 	return err
@@ -357,6 +360,6 @@ func Execute() {
 		if strings.Contains(err.Error(), "unknown flag") {
 			os.Exit(config.ExitCodeBlockingError)
 		}
-		logger.Fatal("%v", err.Error())
+		logger.Fatal("%v", err)
 	}
 }
