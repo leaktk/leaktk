@@ -226,7 +226,7 @@ func scanCommand() *cobra.Command {
 	flags.StringP("kind", "k", "GitRepo", "the kind of resource to scan")
 	flags.StringP("options", "o", "{}", "additional request options formatted as JSON")
 	flags.Int("leak-exit-code", 0, "the exit code when leaks are found (default 0)")
-	flags.StringP("gitleaks-config", "g", "", "the path to a custom gitleaks config")
+	flags.StringP("gitleaks-config", "", "", "the path to a custom gitleaks config")
 
 	return scanCommand
 }
