@@ -87,6 +87,12 @@ func (p *Patterns) fetchGitleaksConfig(ctx context.Context) (string, error) {
 // gitleaksConfigModTimeExceeds returns true if the file is older than
 // `modTimeLimit` seconds
 func (p *Patterns) gitleaksConfigModTimeExceeds(modTimeLimit int) bool {
+	// When modTimeLimit is 0, expiration checking is effectively disabled
+	// and gitleaksConfigModTimeExceeds returns false in this case.
+	if modTimeLimit == 0 {
+		return false
+	}
+
 	if fileInfo, err := os.Stat(p.config.Gitleaks.ConfigPath); err == nil {
 		return int(time.Since(fileInfo.ModTime()).Seconds()) > modTimeLimit
 	}

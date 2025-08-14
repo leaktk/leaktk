@@ -85,6 +85,27 @@ func runScan(cmd *cobra.Command, args []string) {
 		logger.Fatal("invalid leak-exit-code: %v", err)
 	}
 
+	gitleaksConfig, err := cmd.Flags().GetString("gitleaks-config")
+	if err != nil {
+		logger.Fatal("invalid gitleaks-config: error=%q", err.Error())
+	}
+
+	// Providing a gitleaks-config via command line arguments takes
+	// precedence over gitleaks config set in the leaktk config file
+	if len(gitleaksConfig) != 0 {
+		cfg.Scanner.Patterns.Gitleaks.ConfigPath = gitleaksConfig
+		logger.Debug("using provided gitleaks config: path=%s", gitleaksConfig)
+
+		// Providing a config automatically disables pattern autofetch
+		cfg.Scanner.Patterns.Autofetch = false
+		logger.Debug("disabling pattern autofetch with custom gitleaks config")
+
+		// and disables pattern expiredafter checks
+		cfg.Scanner.Patterns.ExpiredAfter = 0
+		cfg.Scanner.Patterns.RefreshAfter = 0
+		logger.Debug("disabling pattern expiredafter/refreshafter with custom gitleaks config")
+	}
+
 	request, err := scanCommandToRequest(cmd, args)
 	if err != nil {
 		logger.Fatal("could not generate scan request: %v", err)
@@ -201,10 +222,11 @@ func scanCommand() *cobra.Command {
 	}
 
 	flags := scanCommand.Flags()
-	flags.StringP("id", "", id.ID(), "an ID for associating responses to requests")
+	flags.String("id", id.ID(), "an ID for associating responses to requests")
 	flags.StringP("kind", "k", "GitRepo", "the kind of resource to scan")
 	flags.StringP("options", "o", "{}", "additional request options formatted as JSON")
 	flags.Int("leak-exit-code", 0, "the exit code when leaks are found (default 0)")
+	flags.String("gitleaks-config", "", "the path to a custom gitleaks config")
 
 	return scanCommand
 }
