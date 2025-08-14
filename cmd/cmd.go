@@ -99,6 +99,11 @@ func runScan(cmd *cobra.Command, args []string) {
 		// Providing a config automatically disables pattern autofetch
 		cfg.Scanner.Patterns.Autofetch = false
 		logger.Debug("disabling pattern autofetch with custom gitleaks config")
+
+		// and disables pattern expiredafter checks
+		cfg.Scanner.Patterns.ExpiredAfter = 0
+		cfg.Scanner.Patterns.RefreshAfter = 0
+		logger.Debug("disabling pattern expiredafter/refreshafter with custom gitleaks config")
 	}
 
 	request, err := scanCommandToRequest(cmd, args)
