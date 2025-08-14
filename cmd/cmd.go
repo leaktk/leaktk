@@ -94,9 +94,11 @@ func runScan(cmd *cobra.Command, args []string) {
 	// precedence over gitleaks config set in the leaktk config file
 	if len(gitleaksConfig) != 0 {
 		cfg.Scanner.Patterns.Gitleaks.ConfigPath = gitleaksConfig
+		logger.Debug("using provided gitleaks config: path=%s", gitleaksConfig)
 
 		// Providing a config automatically disables pattern autofetch
 		cfg.Scanner.Patterns.Autofetch = false
+		logger.Debug("disabling pattern autofetch with custom gitleaks config")
 	}
 
 	request, err := scanCommandToRequest(cmd, args)
