@@ -199,7 +199,7 @@ func DefaultConfig() *Config {
 				ExpiredAfter: 60 * 60 * 12 * 14, // 7 days
 				RefreshAfter: 60 * 60 * 12,      // 12 hours
 				Gitleaks: Gitleaks{
-					Version: "8.18.2",
+					Version: "8.27.0",
 				},
 				Server: PatternServer{
 					URL: "https://raw.githubusercontent.com/leaktk/patterns/main/target",
