@@ -15,9 +15,9 @@ type PriorityQueue[T any] struct {
 }
 
 // NewPriorityQueue returns a PriorityQueue instance that is ready to send to
-func NewPriorityQueue[T any](queueSize int) *PriorityQueue[T] {
+func NewPriorityQueue[T any](queueCapacity int) *PriorityQueue[T] {
 	pq := &PriorityQueue[T]{
-		heap:    NewMessageHeap[T](queueSize),
+		heap:    NewMessageHeap[T](queueCapacity),
 		out:     make(chan *Message[T]),
 		msgCond: sync.NewCond(&sync.Mutex{}),
 	}
@@ -28,11 +28,7 @@ func NewPriorityQueue[T any](queueSize int) *PriorityQueue[T] {
 	// Set up message forwarding
 	go func() {
 		for {
-			pq.heapMutex.Lock()
-			count := pq.heap.Len()
-			pq.heapMutex.Unlock()
-
-			if count == 0 {
+			if pq.Size() == 0 {
 				pq.waitForMessage()
 			}
 
@@ -44,9 +40,9 @@ func NewPriorityQueue[T any](queueSize int) *PriorityQueue[T] {
 			// need to check the length again just to be sure to avoid any panics.
 			if pq.heap.Len() == 0 {
 				pq.heapMutex.Unlock()
-
 				continue
 			}
+
 			msg := heap.Pop(pq.heap).(*Message[T])
 			pq.heapMutex.Unlock()
 
@@ -83,4 +79,12 @@ func (pq *PriorityQueue[T]) signalMessageRecieved() {
 	pq.msgCond.L.Lock()
 	pq.msgCond.Signal()
 	pq.msgCond.L.Unlock()
+}
+
+// Size returns the current number of items in the queue
+func (pq *PriorityQueue[T]) Size() int {
+	pq.heapMutex.Lock()
+	size := pq.heap.Len()
+	pq.heapMutex.Unlock()
+	return size
 }
