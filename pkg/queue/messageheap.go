@@ -11,14 +11,14 @@ type MessageHeap[T any] struct {
 	data []*Message[T]
 }
 
-// NewMessageHeap returns an initialized MessageHeap of the specified size
-func NewMessageHeap[T any](size int) *MessageHeap[T] {
+// NewMessageHeap returns an initialized MessageHeap of the specified capacity
+func NewMessageHeap[T any](capacity int) *MessageHeap[T] {
 	return &MessageHeap[T]{
-		data: make([]*Message[T], 0, size),
+		data: make([]*Message[T], 0, capacity),
 	}
 }
 
-// Len returns the length of the heap
+// Len returns how many items are on the heap
 func (h *MessageHeap[T]) Len() int {
 	return len(h.data)
 }

@@ -25,8 +25,8 @@ import (
 	httpclient "github.com/leaktk/leaktk/pkg/http"
 )
 
-// Set initial queue size. The queue can grow over time if needed
-const queueSize = 1024
+// Set initial queue capacity. The queue can grow over time if needed
+const initQueueCapacity = 1024
 
 const (
 	noCode = iota
@@ -63,8 +63,8 @@ func NewScanner(cfg *config.Config) *Scanner {
 		maxDecodeDepth:  cfg.Scanner.MaxDecodeDepth,
 		maxScanDepth:    cfg.Scanner.MaxScanDepth,
 		patterns:        NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
-		responseQueue:   queue.NewPriorityQueue[*proto.Response](queueSize),
-		scanQueue:       queue.NewPriorityQueue[*proto.Request](queueSize),
+		responseQueue:   queue.NewPriorityQueue[*proto.Response](initQueueCapacity),
+		scanQueue:       queue.NewPriorityQueue[*proto.Request](initQueueCapacity),
 		scanWorkers:     cfg.Scanner.ScanWorkers,
 	}
 
@@ -82,7 +82,7 @@ func (s *Scanner) Recv(fn func(*proto.Response)) {
 
 // Send accepts a request for scanning and puts it in the queues
 func (s *Scanner) Send(request *proto.Request) {
-	logger.Info("queueing scan: id=%q", request.ID)
+	logger.Info("queueing scan: id=%q queue_size=%d", request.ID, s.scanQueue.Size()+1)
 	s.scanQueue.Send(&queue.Message[*proto.Request]{
 		Priority: request.Opts.Priority,
 		Value:    request,
@@ -263,7 +263,7 @@ func (s *Scanner) listen() {
 			results[i] = findingToResult(request, &finding)
 		}
 
-		logger.Info("queueing response: id=%q", request.ID)
+		logger.Info("queueing response: id=%q queue_size=%d", request.ID, s.responseQueue.Size()+1)
 		s.responseQueue.Send(&queue.Message[*proto.Response]{
 			Priority: msg.Priority,
 			Value: &proto.Response{
@@ -278,7 +278,7 @@ func (s *Scanner) listen() {
 }
 
 func (s *Scanner) respondWithError(request *proto.Request, err *proto.Error) {
-	logger.Info("queueing response: id=%q", request.ID)
+	logger.Info("queueing response: id=%q queue_size=%d", request.ID, s.responseQueue.Size()+1)
 	logger.Error("scan error: %v id=%q", err, request.ID)
 	s.responseQueue.Send(&queue.Message[*proto.Response]{
 		Priority: request.Opts.Priority,
