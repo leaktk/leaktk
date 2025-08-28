@@ -8,10 +8,8 @@ import (
 	"github.com/zricethezav/gitleaks/v8/config"
 )
 
-func ParseConfig(rawConfig string) (*config.Config, error) {
+func ParseConfig(rawConfig string) (cfg *config.Config, err error) {
 	var vc config.ViperConfig
-	var cfg config.Config
-	var err error
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -21,19 +19,22 @@ func ParseConfig(rawConfig string) (*config.Config, error) {
 
 	_, err = toml.Decode(rawConfig, &vc)
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	cfg, err = vc.Translate()
+	vcCfg, err := vc.Translate()
 	if err != nil {
-		return nil, fmt.Errorf("error loading config: %w", err)
+		err = fmt.Errorf("error loading config: %w", err)
+		return
+	}
+	cfg = &vcCfg
+
+	if err = validate(cfg); err != nil {
+		err = fmt.Errorf("invalid config: %w", err)
+		return
 	}
 
-	if err := validate(&cfg); err != nil {
-		return nil, fmt.Errorf("invalid config: %w", err)
-	}
-
-	return &cfg, err
+	return
 }
 
 func validate(cfg *config.Config) error {
