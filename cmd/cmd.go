@@ -154,7 +154,7 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 		return nil, errors.New("missing required field: field=\"kind\"")
 	}
 
-	if len(args) == 0 {
+	if len(args) == 0 || len(args[0]) == 0 {
 		return nil, errors.New("missing required field: field=\"resource\"")
 	}
 
