@@ -177,39 +177,34 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 		return nil, fmt.Errorf("there was an issue with the options flag: error=%q", err)
 	}
 
-	options := make(map[string]any)
-	if err := json.Unmarshal([]byte(rawOpts), &options); err != nil {
-		return nil, fmt.Errorf("could not parse options: error=%q", err)
+	// Convert kind string to enum
+	requestKind, isValidKind := proto.GetRequestKind(kind)
+	if !isValidKind {
+		return nil, fmt.Errorf("unsupported request kind: kind=%q", kind)
 	}
 
-	// automatically set the is local flag
-	if _, isSet := options["local"]; !isSet {
-		if strings.ToLower(kind) == "gitrepo" {
-			options["local"] = fs.PathExists(requestResource)
+	// Parse options once directly into proto.Opts struct
+	var opts proto.Opts
+	if rawOpts != "{}" && len(rawOpts) > 0 {
+		if err := json.Unmarshal([]byte(rawOpts), &opts); err != nil {
+			return nil, fmt.Errorf("could not parse options: error=%q", err)
 		}
 	}
 
-	requestData, err := json.Marshal(
-		map[string]any{
-			"id":       id,
-			"kind":     kind,
-			"resource": requestResource,
-			"options":  options,
-		},
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("could not marshal requestData: error=%q", err)
+	// automatically set the is local flag
+	if requestKind == proto.GitRepoRequestKind && !opts.Local {
+		opts.Local = fs.PathExists(requestResource)
 	}
 
-	var request proto.Request
-
-	err = json.Unmarshal(requestData, &request)
-	if err != nil {
-		return nil, fmt.Errorf("could not unmarshal requestData: error=%q", err)
+	// Create the request
+	request := &proto.Request{
+		ID:       id,
+		Kind:     requestKind,
+		Resource: requestResource,
+		Opts:     opts,
 	}
 
-	return &request, nil
+	return request, nil
 }
 
 func scanCommand() *cobra.Command {
