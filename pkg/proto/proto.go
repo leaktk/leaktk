@@ -50,6 +50,12 @@ var requestKindNameMap = map[string]RequestKind{
 	"URL":            URLRequestKind,
 }
 
+// GetRequestKind converts a string to RequestKind enum
+func GetRequestKind(kind string) (RequestKind, bool) {
+	requestKind, exists := requestKindNameMap[kind]
+	return requestKind, exists
+}
+
 // Request is a request to LeakTK
 type Request struct {
 	ID       string      `json:"id"       toml:"id"       yaml:"id"`
