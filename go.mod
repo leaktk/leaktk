@@ -1,8 +1,8 @@
 module github.com/leaktk/leaktk
 
-go 1.23.8
+go 1.24.5
 
-toolchain go1.24.5
+toolchain go1.24.6
 
 require (
 	github.com/BurntSushi/toml v1.5.0
@@ -10,6 +10,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/containers/image/v5 v5.36.1
 	github.com/fatih/semgroup v1.3.0
+	github.com/leaktk/leaktk/pkg/analyst/ai v0.0.0-00010101000000-000000000000
 	github.com/mholt/archives v0.1.3
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/rs/zerolog v1.34.0
@@ -142,3 +143,5 @@ require (
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 )
+
+replace github.com/leaktk/leaktk/pkg/analyst/ai => ./pkg/analyst/ai

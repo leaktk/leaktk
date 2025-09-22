@@ -14,6 +14,7 @@ import (
 	"github.com/zricethezav/gitleaks/v8/detect"
 	"github.com/zricethezav/gitleaks/v8/report"
 
+	"github.com/leaktk/leaktk/pkg/analyst/ai"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/id"
@@ -50,6 +51,7 @@ type Scanner struct {
 	responseQueue   *queue.PriorityQueue[*proto.Response]
 	scanQueue       *queue.PriorityQueue[*proto.Request]
 	scanWorkers     int
+	aiAnalyst       *ai.Analyst
 }
 
 // NewScanner returns a initialized and listening scanner instance that should
@@ -66,6 +68,10 @@ func NewScanner(cfg *config.Config) *Scanner {
 		responseQueue:   queue.NewPriorityQueue[*proto.Response](queueSize),
 		scanQueue:       queue.NewPriorityQueue[*proto.Request](queueSize),
 		scanWorkers:     cfg.Scanner.ScanWorkers,
+	}
+
+	if cfg.Scanner.EnableAnalysis {
+		scanner.aiAnalyst = ai.NewAnalyst()
 	}
 
 	scanner.start()
@@ -261,6 +267,18 @@ func (s *Scanner) listen() {
 		results := make([]*proto.Result, len(findings))
 		for i, finding := range findings {
 			results[i] = findingToResult(request, &finding)
+			if s.aiAnalyst != nil {
+				model, err := s.patterns.LogisticRegression(ctx)
+				if err == nil {
+					analysis := s.aiAnalyst.Analyze(model, results[i])
+					if results[i].Notes == nil {
+						results[i].Notes = make(map[string]any)
+					}
+					results[i].Notes["predicted_secret_probability"] = analysis.PredictedSecretProbability
+				} else {
+					logger.Error("Could not apply model to result: %v", err)
+				}
+			}
 		}
 
 		logger.Info("queueing response: id=%q", request.ID)
@@ -308,7 +326,7 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 		Context: finding.Line,
 		Entropy: finding.Entropy,
 		Date:    finding.Date,
-		Notes:   map[string]string{},
+		Notes:   map[string]any{},
 		Contact: proto.Contact{
 			Name:  finding.Author,
 			Email: finding.Email,

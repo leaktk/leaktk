@@ -18,6 +18,7 @@ const nixGlobalConfigDir = "/etc/leaktk"
 
 var localConfigDir string
 
+// AnalysisResult will hold the output of the analysis.
 func init() {
 	localConfigDir = filepath.Join(xdg.ConfigHome, "leaktk")
 
@@ -67,6 +68,7 @@ type (
 		Patterns        Patterns `toml:"patterns"`
 		ScanWorkers     int      `toml:"scan_workers"`
 		Workdir         string   `toml:"workdir"`
+		EnableAnalysis  bool     `yaml:"enable_analysis"` //Experimental
 	}
 
 	// Patterns provides configuration for managing pattern updates
