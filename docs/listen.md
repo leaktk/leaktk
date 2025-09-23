@@ -73,6 +73,9 @@ scan if `single_branch` is set to true.
 * Type: `int`
 * Default: excluded
 
+Note: If both `since` and `depth` are set, `since` will be used for cloning but
+both are still used to filtering commits during the scan.
+
 **local**
 
 Scans a local git repo instead of fetching a remote one. When listening
@@ -89,6 +92,9 @@ Is a date formatted `yyyy-mm-dd` used for filtering commits. Sets
 
 * Type: `string`
 * Default: excluded
+
+Note: If both `since` and `depth` are set, `since` will be used for cloning but
+both are still used to filtering commits during the scan.
 
 **staged**
 
