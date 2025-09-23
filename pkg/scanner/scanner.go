@@ -199,7 +199,7 @@ func (s *Scanner) listen() {
 			loadSourceConfig(detector, sourcePath)
 			findings, err = gitleaks.ScanGit(ctx, detector, gitDir, gitleaks.GitScanOpts{
 				Branch:   request.Opts.Branch,
-				Depth:    request.Opts.Depth,
+				Depth:    scanDepth(request.Opts.Depth, s.maxScanDepth),
 				Since:    request.Opts.Since,
 				Staged:   request.Opts.Staged,
 				Unstaged: request.Opts.Unstaged,
@@ -230,7 +230,7 @@ func (s *Scanner) listen() {
 		case proto.ContainerImageRequestKind:
 			findings, err = gitleaks.ScanContainerImage(ctx, detector, request.Resource, gitleaks.ContainerImageScanOpts{
 				Arch:  request.Opts.Arch,
-				Depth: request.Opts.Depth,
+				Depth: scanDepth(request.Opts.Depth, s.maxScanDepth),
 				Since: request.Opts.Since,
 			})
 		default:
@@ -372,6 +372,7 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 
 func absGitDir(path string) (string, error) {
 	cmd := exec.Command("git", "-C", path, "rev-parse", "--absolute-git-dir") // #nosec G204
+	logger.Debug("executing: %s", cmd)
 	stdout, err := cmd.Output()
 
 	return string(bytes.TrimSpace(stdout)), err
@@ -440,12 +441,20 @@ func (s *Scanner) cloneGitRepo(ctx context.Context, cloneURL string, opts proto.
 	if len(opts.Since) > 0 {
 		cloneArgs = append(cloneArgs, "--shallow-since")
 		cloneArgs = append(cloneArgs, opts.Since)
-	}
 
-	if opts.Depth > 0 {
+		if opts.Depth > 0 {
+			logger.Warning(
+				"cloning with since=%q instead of depth=%d; since=%q and depth=%d will be applied to the scan: clone_url=%q",
+				opts.Since,
+				cloneDepth(opts.Depth, s.maxScanDepth),
+				opts.Since,
+				scanDepth(opts.Depth, s.maxScanDepth),
+				cloneURL,
+			)
+		}
+	} else if depth := cloneDepth(opts.Depth, s.maxScanDepth); depth > 0 {
 		cloneArgs = append(cloneArgs, "--depth")
-		// Add 1 to the clone depth to avoid scanning a grafted commit
-		cloneArgs = append(cloneArgs, strconv.Itoa(opts.Depth+1))
+		cloneArgs = append(cloneArgs, strconv.Itoa(depth))
 	}
 
 	// Include the clone URL
@@ -453,6 +462,7 @@ func (s *Scanner) cloneGitRepo(ctx context.Context, cloneURL string, opts proto.
 	cloneArgs = append(cloneArgs, cloneURL, gitDir)
 	gitClone := exec.CommandContext(ctx, "git", cloneArgs...)
 
+	logger.Debug("executing: %s", gitClone)
 	if output, err := gitClone.CombinedOutput(); err != nil {
 		return "", gitDir, fmt.Errorf("git clone failed: %v cmd=%q output=%q", err, gitClone, output)
 	}
@@ -471,6 +481,7 @@ func (s *Scanner) cloneGitRepo(ctx context.Context, cloneURL string, opts proto.
 
 func remoteGitRefExists(cloneURL, ref string) bool {
 	cmd := exec.Command("git", "ls-remote", "--exit-code", "--quiet", cloneURL, ref) // #nosec G204
+	logger.Debug("executing: %s", cmd)
 	return cmd.Run() == nil
 }
 
@@ -478,11 +489,13 @@ func checkoutGitSourceConfigFiles(gitDir string) (string, error) {
 	worktreePath := filepath.Join(gitDir, "leaktk-scan-source")
 
 	cmd := exec.Command("git", "-C", gitDir, "worktree", "add", "--no-checkout", worktreePath) // #nosec G204
+	logger.Debug("executing: %s", cmd)
 	if err := cmd.Run(); err != nil {
 		return worktreePath, fmt.Errorf("could not create worktree: %v cmd=%q", err, cmd)
 	}
 
 	cmd = exec.Command("git", "-C", worktreePath, "checkout", "-f", "HEAD", "--", ".gitleaks*") // #nosec G204
+	logger.Debug("executing: %s", cmd)
 	if err := cmd.Run(); err != nil {
 		return worktreePath, fmt.Errorf("could not checkout gitleaks files: %v cmd=%q", err, cmd)
 	}
@@ -496,4 +509,26 @@ func splitFetchURLPatterns(patterns string) []string {
 	}
 
 	return strings.Split(patterns, ":")
+}
+
+// cloneDepth provides the depth to clone. If there is no max it returns 0.
+// Clones should be one more than the desired scan depth
+func cloneDepth(providedDepth, maxDepth int) int {
+	if depth := scanDepth(providedDepth, maxDepth); depth > 0 {
+		return depth + 1
+	}
+	return 0
+}
+
+// scanDepth provides the depth to scan. If there is no max it returns 0.
+func scanDepth(providedDepth, maxDepth int) int {
+	if maxDepth > 0 {
+		if providedDepth > 0 {
+			return min(providedDepth, maxDepth)
+		}
+
+		return maxDepth
+	}
+
+	return providedDepth
 }
