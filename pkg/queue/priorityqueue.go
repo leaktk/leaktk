@@ -8,18 +8,22 @@ import (
 // PriorityQueue is like a channel but with dynamic buffering and returns items
 // with the highest priority first
 type PriorityQueue[T any] struct {
-	heap      *MessageHeap[T]
-	heapMutex sync.Mutex
-	out       chan *Message[T]
-	msgCond   *sync.Cond
+	heap        *MessageHeap[T]
+	heapMutex   sync.Mutex
+	out         chan *Message[T]
+	msgCond     *sync.Cond
+	maxSizeCond *sync.Cond
+	maxSize     int
 }
 
 // NewPriorityQueue returns a PriorityQueue instance that is ready to send to
-func NewPriorityQueue[T any](queueCapacity int) *PriorityQueue[T] {
+func NewPriorityQueue[T any](queueCapacity, maxSize int) *PriorityQueue[T] {
 	pq := &PriorityQueue[T]{
-		heap:    NewMessageHeap[T](queueCapacity),
-		out:     make(chan *Message[T]),
-		msgCond: sync.NewCond(&sync.Mutex{}),
+		heap:        NewMessageHeap[T](queueCapacity),
+		out:         make(chan *Message[T]),
+		msgCond:     sync.NewCond(&sync.Mutex{}),
+		maxSizeCond: sync.NewCond(&sync.Mutex{}),
+		maxSize:     maxSize,
 	}
 
 	// Init the heap
@@ -48,6 +52,12 @@ func NewPriorityQueue[T any](queueCapacity int) *PriorityQueue[T] {
 
 			// Send the message to the out channel
 			pq.out <- msg
+
+			// Notify pq.Send that it can accept new messages when the queue has a
+			// mazSize
+			if pq.maxSize > 0 && pq.Size() < pq.maxSize {
+				pq.signalQueueSpaceAvailable()
+			}
 		}
 	}()
 
@@ -56,6 +66,11 @@ func NewPriorityQueue[T any](queueCapacity int) *PriorityQueue[T] {
 
 // Send puts items on the queue
 func (pq *PriorityQueue[T]) Send(msg *Message[T]) {
+	// Wait for space if maxSize is set and the queue is full
+	for pq.maxSize > 0 && pq.Size() >= pq.maxSize {
+		pq.waitForSpaceOnQueue()
+	}
+
 	pq.heapMutex.Lock()
 	heap.Push(pq.heap, msg)
 	pq.heapMutex.Unlock()
@@ -79,6 +94,18 @@ func (pq *PriorityQueue[T]) signalMessageRecieved() {
 	pq.msgCond.L.Lock()
 	pq.msgCond.Signal()
 	pq.msgCond.L.Unlock()
+}
+
+func (pq *PriorityQueue[T]) waitForSpaceOnQueue() {
+	pq.maxSizeCond.L.Lock()
+	pq.maxSizeCond.Wait()
+	pq.maxSizeCond.L.Unlock()
+}
+
+func (pq *PriorityQueue[T]) signalQueueSpaceAvailable() {
+	pq.maxSizeCond.L.Lock()
+	pq.maxSizeCond.Signal()
+	pq.maxSizeCond.L.Unlock()
 }
 
 // Size returns the current number of items in the queue
