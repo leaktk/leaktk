@@ -32,7 +32,7 @@ func TestPriorityQueue(t *testing.T) {
 			},
 		}
 
-		pq := NewPriorityQueue[string](len(messages))
+		pq := NewPriorityQueue[string](len(messages), 0)
 
 		var wg sync.WaitGroup
 		var actual []string

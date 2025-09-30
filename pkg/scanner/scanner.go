@@ -63,8 +63,8 @@ func NewScanner(cfg *config.Config) *Scanner {
 		maxDecodeDepth:  cfg.Scanner.MaxDecodeDepth,
 		maxScanDepth:    cfg.Scanner.MaxScanDepth,
 		patterns:        NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
-		responseQueue:   queue.NewPriorityQueue[*proto.Response](initQueueCapacity),
-		scanQueue:       queue.NewPriorityQueue[*proto.Request](initQueueCapacity),
+		responseQueue:   queue.NewPriorityQueue[*proto.Response](initQueueCapacity, cfg.Scanner.MaxResponseQueueSize),
+		scanQueue:       queue.NewPriorityQueue[*proto.Request](initQueueCapacity, cfg.Scanner.MaxScanQueueSize),
 		scanWorkers:     cfg.Scanner.ScanWorkers,
 	}
 

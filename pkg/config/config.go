@@ -59,14 +59,16 @@ type (
 
 	// Scanner provides scanner specific config
 	Scanner struct {
-		AllowLocal      bool     `toml:"allow_local"`
-		ScanTimeout     int      `toml:"scan_timeout"`
-		MaxArchiveDepth int      `toml:"max_archive_depth"`
-		MaxDecodeDepth  int      `toml:"max_decode_depth"`
-		MaxScanDepth    int      `toml:"max_scan_depth"`
-		Patterns        Patterns `toml:"patterns"`
-		ScanWorkers     int      `toml:"scan_workers"`
-		Workdir         string   `toml:"workdir"`
+		AllowLocal           bool     `toml:"allow_local"`
+		ScanTimeout          int      `toml:"scan_timeout"`
+		MaxArchiveDepth      int      `toml:"max_archive_depth"`
+		MaxDecodeDepth       int      `toml:"max_decode_depth"`
+		MaxScanDepth         int      `toml:"max_scan_depth"`
+		MaxScanQueueSize     int      `toml:"max_scan_queue_size"`
+		MaxResponseQueueSize int      `toml:"max_response_queue_size"`
+		Patterns             Patterns `toml:"patterns"`
+		ScanWorkers          int      `toml:"scan_workers"`
+		Workdir              string   `toml:"workdir"`
 	}
 
 	// Patterns provides configuration for managing pattern updates
