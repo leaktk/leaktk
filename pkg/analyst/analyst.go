@@ -13,17 +13,10 @@ import (
 	"github.com/open-policy-agent/opa/v1/rego"
 )
 
-// TODO: swap this out with an embed
-const policy = `
-package main
-
-analysis := input
-`
-
 type AnalyzedResult struct {
 	ID        string `json:"id"`
 	RequestID string `json:"request_id"`
-	Results   any    `json:"results"` // Will hold the array of analyzed findings
+	Analysis  any    `json:"analysis"`
 }
 
 func (a AnalyzedResult) String() string {
@@ -34,63 +27,60 @@ func (a AnalyzedResult) String() string {
 	return string(out)
 }
 
-func AnalyzeStream(ctx context.Context, r io.Reader, w io.Writer) error {
+// AnalyzeStream reads proto.Response JSONL from r, evaluates it against the policy,
+// and writes AnalyzedResult JSONL to w.
+func AnalyzeStream(ctx context.Context, r io.Reader, w io.Writer, policyContent string) error {
 	scanner := bufio.NewScanner(r)
 
-	// 1. Prepare the Rego Query once for efficiency
-	// We use data.analyze.analyzed_response as the query path
 	query, err := rego.New(
 		rego.Query("data.analyze.analyzed_response"),
-		rego.Module("analyze.rego", policy),
+		rego.Module("analyze.rego", policyContent),
 	).PrepareForEval(ctx)
 
 	if err != nil {
-		return fmt.Errorf("could not create query: %w", err)
+		return fmt.Errorf("could not prepare Rego query: %w", err)
 	}
 
-	// 2. Iterate through the input stream, line by line (JSONL)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
-			continue // Skip empty lines
-		}
-
-		var result proto.Result
-		if err := json.Unmarshal(line, &result); err != nil {
-			logger.Error("AnalyzeStream: could not unmarshal line to proto.Result: %v, line: %s", err, string(line))
-			// Skip to the next line on unmarshal error
 			continue
 		}
 
-		// 3. Marshal the single proto.Result object into JSON for OPA input
-		inputBytes, err := json.Marshal(result)
+		var response proto.Response
+		if err := json.Unmarshal(line, &response); err != nil {
+			logger.Error("AnalyzeStream: could not unmarshal line to proto.Response: %v, line: %s", err, string(line))
+			continue
+		}
+
+		results, err := query.Eval(ctx, rego.EvalInput(response))
 		if err != nil {
-			logger.Error("AnalyzeStream: could not marshal proto.Result to JSON: %v", err)
+			logger.Error("AnalyzeStream: could not evaluate query for response ID %s: %v", response.ID, err)
 			continue
 		}
 
-		// 4. Evaluate the query with the single Result object as input
-		results, err := query.Eval(ctx, rego.EvalInput(string(inputBytes)))
-		if err != nil {
-			logger.Error("AnalyzeStream: could not evaluate query: %v", err)
-			continue
-		}
-
-		// 5. Process OPA output and write to output stream (JSONL)
 		if len(results) > 0 && results[0].Expressions != nil && len(results[0].Expressions) > 0 {
 			// OPA returns an array of results; we take the first expression's value
 			opaOutput := results[0].Expressions[0].Value
 
-			// The output should conform to the structure you defined (analyzed_response)
-			outBytes, err := json.Marshal(opaOutput)
+			// Construct the final analyzed result
+			analyzed := AnalyzedResult{
+				ID:        response.ID,
+				RequestID: response.RequestID,
+				Analysis:  opaOutput, // This is the value of 'data.analyze.analyzed_response'
+			}
+
+			// Write the final AnalyzedResult JSON object followed by a newline (JSONL)
+			outBytes, err := json.Marshal(analyzed)
 			if err != nil {
-				logger.Error("AnalyzeStream: could not marshal OPA output: %v", err)
+				logger.Error("AnalyzeStream: could not marshal AnalyzedResult: %v", err)
 				continue
 			}
 
-			// Write the final JSON object followed by a newline (JSONL)
 			w.Write(outBytes)
 			w.Write([]byte{'\n'})
+		} else {
+			logger.Info("AnalyzeStream: OPA policy produced no analysis for response ID %s", response.ID)
 		}
 	}
 
@@ -101,8 +91,12 @@ func AnalyzeStream(ctx context.Context, r io.Reader, w io.Writer) error {
 	return nil
 }
 
-func AnalyzeCommand(ctx context.Context) error {
-	// This is the function you would call in your main CLI logic
-	// It reads from os.Stdin and writes to os.Stdout
-	return AnalyzeStream(ctx, os.Stdin, os.Stdout)
+// AnalyzeCommand is the entry point for the CLI subcommand.
+func AnalyzeCommand(ctx context.Context, policyPath string) error {
+	policyContent, err := os.ReadFile(policyPath)
+	if err != nil {
+		return fmt.Errorf("could not read Rego policy file %s: %w", policyPath, err)
+	}
+
+	return AnalyzeStream(ctx, os.Stdin, os.Stdout, string(policyContent))
 }
