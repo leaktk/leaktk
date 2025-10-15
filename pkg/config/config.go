@@ -46,6 +46,8 @@ type (
 		Logger    Logger    `toml:"logger"`
 		Scanner   Scanner   `toml:"scanner"`
 		Formatter Formatter `toml:"formatter"`
+		CacheDir  string    `toml:"cache_dir"`
+		AI        AI        `toml:"ai"`
 	}
 
 	// Formatter provides a general output format config
@@ -80,6 +82,19 @@ type (
 		Server       PatternServer `toml:"server"`
 	}
 
+	// Models provides configuration for managing model updates
+	Models struct {
+		Autofetch    bool        `toml:"autofetch"`
+		ExpiredAfter int         `toml:"expired_after"`
+		RefreshAfter int         `toml:"refresh_after"`
+		Version      string      `toml:"version"`
+		Server       ModelServer `toml:"server"`
+	}
+
+	AI struct {
+		Models Models `toml:"models"`
+	}
+
 	// Gitleaks holds version and config information for the Gitleaks scanner
 	Gitleaks struct {
 		Version    string `toml:"version"`
@@ -88,6 +103,12 @@ type (
 
 	// PatternServer provides pattern server configuration settings for the scanner
 	PatternServer struct {
+		AuthToken string `toml:"auth_token"`
+		URL       string `toml:"url"`
+	}
+
+	// ModelServer provides model server configuration settings for the scanner
+	ModelServer struct {
 		AuthToken string `toml:"auth_token"`
 		URL       string `toml:"url"`
 	}
@@ -188,6 +209,7 @@ func DefaultConfig() *Config {
 		Logger: Logger{
 			Level: "INFO",
 		},
+		CacheDir: filepath.Join(xdg.CacheHome, "leaktk"),
 		Scanner: Scanner{
 			AllowLocal:      true,
 			ScanTimeout:     0,
@@ -205,6 +227,17 @@ func DefaultConfig() *Config {
 				},
 				Server: PatternServer{
 					URL: "https://raw.githubusercontent.com/leaktk/patterns/main/target",
+				},
+			},
+		},
+		AI: AI{
+			Models: Models{
+				Autofetch:    true,
+				ExpiredAfter: 60 * 60 * 24 * 7, // 7 days
+				RefreshAfter: 60 * 60 * 12,     // 12 hours
+				Version:      "1",
+				Server: ModelServer{
+					URL: "https://raw.githubusercontent.com/leaktk/patterns/main/target", //needs change
 				},
 			},
 		},

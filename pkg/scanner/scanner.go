@@ -71,7 +71,7 @@ func NewScanner(cfg *config.Config) *Scanner {
 	}
 
 	if cfg.Scanner.EnableAnalysis {
-		scanner.aiAnalyst = ai.NewAnalyst()
+
 	}
 
 	scanner.start()
@@ -268,13 +268,15 @@ func (s *Scanner) listen() {
 		for i, finding := range findings {
 			results[i] = findingToResult(request, &finding)
 			if s.aiAnalyst != nil {
-				model, err := s.patterns.LogisticRegression(ctx)
+				model := "LogisticRegression"
 				if err == nil {
-					analysis := s.aiAnalyst.Analyze(model, results[i])
-					if results[i].Notes == nil {
-						results[i].Notes = make(map[string]any)
+					analysis, err := s.aiAnalyst.Analyze(model, results[i])
+					if err == nil {
+						if results[i].Notes == nil {
+							results[i].Notes = make(map[string]any)
+						}
+						results[i].Notes["predicted_secret_probability"] = analysis.PredictedSecretProbability
 					}
-					results[i].Notes["predicted_secret_probability"] = analysis.PredictedSecretProbability
 				} else {
 					logger.Error("Could not apply model to result: %v", err)
 				}
