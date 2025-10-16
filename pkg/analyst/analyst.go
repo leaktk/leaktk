@@ -16,7 +16,7 @@ import (
 type AnalyzedResult struct {
 	ID        string `json:"id"`
 	RequestID string `json:"request_id"`
-	Analysis  any    `json:"analysis"`
+	Analysis  any    `json:"analysis,omitempty"`
 }
 
 func (a AnalyzedResult) String() string {
