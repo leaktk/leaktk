@@ -1,7 +1,6 @@
 package analyst
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,7 +8,6 @@ import (
 	"os"
 
 	"github.com/leaktk/leaktk/pkg/logger"
-	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/open-policy-agent/opa/v1/rego"
 )
 
@@ -29,9 +27,24 @@ func (a AnalyzedResult) String() string {
 
 // AnalyzeStream reads proto.Response JSONL from r, evaluates it against the policy,
 // and writes AnalyzedResult JSONL to w.
-func AnalyzeStream(ctx context.Context, r io.Reader, w io.Writer, policyContent string) error {
-	scanner := bufio.NewScanner(r)
+func AnalyzeResponse(ctx context.Context, r io.Reader, w io.Writer, policyContent string) error {
+	// 1. Read the entire input body from the reader
+	fullInputBytes, err := io.ReadAll(r)
+	if err != nil {
+		return fmt.Errorf("could not read full input body: %w", err)
+	}
+	if len(fullInputBytes) == 0 {
+		return nil // No input, nothing to do
+	}
 
+	// 2. Unmarshal the full input body into a generic type for Rego input
+	var fullInput any
+	if err := json.Unmarshal(fullInputBytes, &fullInput); err != nil {
+		// Log the error and return, as the input is invalid JSON
+		return fmt.Errorf("could not unmarshal full input body as JSON: %w", err)
+	}
+
+	// 3. Prepare Rego query
 	query, err := rego.New(
 		rego.Query("data.analyze.analyzed_response"),
 		rego.Module("analyze.rego", policyContent),
@@ -41,62 +54,61 @@ func AnalyzeStream(ctx context.Context, r io.Reader, w io.Writer, policyContent 
 		return fmt.Errorf("could not prepare Rego query: %w", err)
 	}
 
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-
-		var response proto.Response
-		if err := json.Unmarshal(line, &response); err != nil {
-			logger.Error("AnalyzeStream: could not unmarshal line to proto.Response: %v, line: %s", err, string(line))
-			continue
-		}
-
-		results, err := query.Eval(ctx, rego.EvalInput(response))
-		if err != nil {
-			logger.Error("AnalyzeStream: could not evaluate query for response ID %s: %v", response.ID, err)
-			continue
-		}
-
-		if len(results) > 0 && results[0].Expressions != nil && len(results[0].Expressions) > 0 {
-			// OPA returns an array of results; we take the first expression's value
-			opaOutput := results[0].Expressions[0].Value
-
-			// Construct the final analyzed result
-			analyzed := AnalyzedResult{
-				ID:        response.ID,
-				RequestID: response.RequestID,
-				Analysis:  opaOutput, // This is the value of 'data.analyze.analyzed_response'
-			}
-
-			// Write the final AnalyzedResult JSON object followed by a newline (JSONL)
-			outBytes, err := json.Marshal(analyzed)
-			if err != nil {
-				logger.Error("AnalyzeStream: could not marshal AnalyzedResult: %v", err)
-				continue
-			}
-
-			w.Write(outBytes)
-			w.Write([]byte{'\n'})
-		} else {
-			logger.Info("AnalyzeStream: OPA policy produced no analysis for response ID %s", response.ID)
-		}
+	// 4. Evaluate the Rego policy with the full input
+	// The policy's 'input' variable will contain the unmarshaled 'fullInput' data.
+	results, err := query.Eval(ctx, rego.EvalInput(fullInput))
+	if err != nil {
+		return fmt.Errorf("could not evaluate query against full input: %w", err)
 	}
 
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error reading from input stream: %w", err)
+	// 5. Process the OPA result
+	if len(results) > 0 && results[0].Expressions != nil && len(results[0].Expressions) > 0 {
+		// OPA returns an array of results; we take the first expression's value
+		opaOutput := results[0].Expressions[0].Value
+
+		// The Rego output is expected to be the final JSON structure, so we just marshal it directly.
+		outBytes, err := json.Marshal(opaOutput)
+		if err != nil {
+			return fmt.Errorf("could not marshal OPA output: %w", err)
+		}
+
+		// Write the final analyzed result JSON object followed by a newline
+		w.Write(outBytes)
+		w.Write([]byte{'\n'})
+
+	} else {
+		logger.Info("AnalyzeFullResponse: OPA policy produced no analysis for the full response")
 	}
 
 	return nil
 }
 
 // AnalyzeCommand is the entry point for the CLI subcommand.
-func AnalyzeCommand(ctx context.Context, policyPath string) error {
+func AnalyzeCommand(ctx context.Context, policyPath string, inputPath string) error {
 	policyContent, err := os.ReadFile(policyPath)
 	if err != nil {
 		return fmt.Errorf("could not read Rego policy file %s: %w", policyPath, err)
 	}
 
-	return AnalyzeStream(ctx, os.Stdin, os.Stdout, string(policyContent))
+	// Determine the input reader
+	var r io.Reader = os.Stdin
+	var closeFunc func() error = func() error { return nil }
+
+	if inputPath != "" {
+		f, err := os.Open(inputPath)
+		if err != nil {
+			return fmt.Errorf("could not open input file %s: %w", inputPath, err)
+		}
+		r = f
+		closeFunc = f.Close
+	}
+	// Ensure the file is closed if we opened one
+	defer func() {
+		if err := closeFunc(); err != nil {
+			logger.Error("AnalyzeCommand: failed to close input reader: %v", err)
+		}
+	}()
+
+	// Use the new function that analyzes the entire response as a single object.
+	return AnalyzeResponse(ctx, r, os.Stdout, string(policyContent))
 }
