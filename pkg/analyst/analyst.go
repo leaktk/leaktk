@@ -11,23 +11,10 @@ import (
 	"github.com/open-policy-agent/opa/v1/rego"
 )
 
-type AnalyzedResult struct {
-	ID        string `json:"id"`
-	RequestID string `json:"request_id"`
-	Analysis  any    `json:"analysis,omitempty"`
-}
-
-func (a AnalyzedResult) String() string {
-	out, err := json.Marshal(a)
-	if err != nil {
-		return fmt.Sprintf("Error marshaling analysis: %v", err)
-	}
-	return string(out)
-}
-
-// AnalyzeStream reads proto.Response JSONL from r, evaluates it against the policy,
-// and writes AnalyzedResult JSONL to w.
-func AnalyzeResponse(ctx context.Context, r io.Reader, w io.Writer, policyContent string) error {
+// AnalyzeFullResponse reads the entire input from r as a single JSON object (the "full response"),
+// evaluates it against the Rego policy, and writes the analyzed output to w.
+// The Rego policy is now expected to handle the input structure and return the full output structure.
+func AnalyzeFullResponse(ctx context.Context, r io.Reader, w io.Writer, policyContent string) error {
 	// 1. Read the entire input body from the reader
 	fullInputBytes, err := io.ReadAll(r)
 	if err != nil {
@@ -84,6 +71,8 @@ func AnalyzeResponse(ctx context.Context, r io.Reader, w io.Writer, policyConten
 }
 
 // AnalyzeCommand is the entry point for the CLI subcommand.
+// It now accepts an inputPath string to read the Leaktk response from a file.
+// If inputPath is empty, it reads from os.Stdin.
 func AnalyzeCommand(ctx context.Context, policyPath string, inputPath string) error {
 	policyContent, err := os.ReadFile(policyPath)
 	if err != nil {
@@ -105,10 +94,10 @@ func AnalyzeCommand(ctx context.Context, policyPath string, inputPath string) er
 	// Ensure the file is closed if we opened one
 	defer func() {
 		if err := closeFunc(); err != nil {
-			logger.Error("AnalyzeCommand: failed to close input reader: %v", err)
+			logger.Error("AnalyzeCommand: failed to  iclosenput reader: %v", err)
 		}
 	}()
 
 	// Use the new function that analyzes the entire response as a single object.
-	return AnalyzeResponse(ctx, r, os.Stdout, string(policyContent))
+	return AnalyzeFullResponse(ctx, r, os.Stdout, string(policyContent))
 }
