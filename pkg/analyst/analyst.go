@@ -36,19 +36,19 @@ func NewAnalyst(ctx context.Context, policyContent string) (*Analyst, error) {
 }
 
 func (a *Analyst) Analyze(response *proto.Response) (*proto.Response, error) {
-	// 1. Marshal the struct into JSON bytes to serve as OPA input
+	// Marshal the struct into JSON bytes to serve as OPA input
 	inputBytes, err := json.Marshal(response)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal response struct for OPA input: %w", err)
 	}
 
-	// 2. Unmarshal into a generic type for Rego
+	// Unmarshal into a generic type for Rego
 	var opaInput any
 	if err := json.Unmarshal(inputBytes, &opaInput); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal JSON into generic type for OPA: %w", err)
 	}
 
-	// 3. Evaluate the Rego policy
+	// Evaluate the Rego policy
 	results, err := a.query.Eval(a.ctx, rego.EvalInput(opaInput))
 	if err != nil {
 		return nil, fmt.Errorf("could not evaluate query for response ID %s: %w", response.ID, err)
@@ -60,16 +60,16 @@ func (a *Analyst) Analyze(response *proto.Response) (*proto.Response, error) {
 		return response, nil
 	}
 
-	// 4. Extract the OPA output (the enriched JSON structure)
+	// Extract the OPA output (the enriched JSON structure)
 	opaOutput := results[0].Expressions[0].Value
 
-	// 5. Marshal the enriched structure back to JSON bytes
+	// Marshal the enriched structure back to JSON bytes
 	outputBytes, err := json.Marshal(opaOutput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal OPA output to JSON: %w", err)
 	}
 
-	// 6. Unmarshal the enriched JSON back into a new Response struct
+	// Unmarshal the enriched JSON back into a new Response struct
 	var enrichedResponse proto.Response
 	if err := json.Unmarshal(outputBytes, &enrichedResponse); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal enriched JSON back into Response struct: %w", err)
@@ -125,19 +125,19 @@ func AnalyzeStream(a *Analyst, r io.Reader, w io.Writer) error {
 // AnalyzeCommand is the entry point for the CLI subcommand.
 // It sets up the Analyst and passes the input stream to AnalyzeStream.
 func AnalyzeCommand(ctx context.Context, policyPath string, inputPath string) error {
-	//Read Policy Content
+	// Read Policy Content
 	policyContent, err := os.ReadFile(policyPath)
 	if err != nil {
 		return fmt.Errorf("could not read Rego policy file %s: %w", policyPath, err)
 	}
 
-	//Initialize the Analyst once
+	// Initialize the Analyst once
 	analyst, err := NewAnalyst(ctx, string(policyContent))
 	if err != nil {
 		return fmt.Errorf("failed to initialize analyst: %w", err)
 	}
 
-	//Determine the input reader (File or Stdin)
+	// Determine the input reader (File or Stdin)
 	var r io.Reader = os.Stdin
 	var closeFunc func() error = func() error { return nil }
 
@@ -155,6 +155,6 @@ func AnalyzeCommand(ctx context.Context, policyPath string, inputPath string) er
 		}
 	}()
 
-	//Start processing the JSONL stream
+	// Start processing the JSONL stream
 	return AnalyzeStream(analyst, r, os.Stdout)
 }
