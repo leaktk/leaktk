@@ -125,19 +125,19 @@ func AnalyzeStream(a *Analyst, r io.Reader, w io.Writer) error {
 // AnalyzeCommand is the entry point for the CLI subcommand.
 // It sets up the Analyst and passes the input stream to AnalyzeStream.
 func AnalyzeCommand(ctx context.Context, policyPath string, inputPath string) error {
-	// 1. Read Policy Content
+	//Read Policy Content
 	policyContent, err := os.ReadFile(policyPath)
 	if err != nil {
 		return fmt.Errorf("could not read Rego policy file %s: %w", policyPath, err)
 	}
 
-	// 2. Initialize the Analyst once
+	//Initialize the Analyst once
 	analyst, err := NewAnalyst(ctx, string(policyContent))
 	if err != nil {
 		return fmt.Errorf("failed to initialize analyst: %w", err)
 	}
 
-	// 3. Determine the input reader (File or Stdin)
+	//Determine the input reader (File or Stdin)
 	var r io.Reader = os.Stdin
 	var closeFunc func() error = func() error { return nil }
 
@@ -155,6 +155,6 @@ func AnalyzeCommand(ctx context.Context, policyPath string, inputPath string) er
 		}
 	}()
 
-	// 4. Start processing the JSONL stream
+	//Start processing the JSONL stream
 	return AnalyzeStream(analyst, r, os.Stdout)
 }
