@@ -8,8 +8,18 @@ import (
 	"os"
 
 	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/open-policy-agent/opa/v1/rego"
 )
+
+type Analyst struct {
+	query rego.PreparedEvalQuery
+	ctx   context.Context
+}
+
+func (a *Analyst) Analyze(response *proto.Response) (*proto.Response, error) {
+
+}
 
 // AnalyzeFullResponse reads the entire input from r as a single JSON object (the "full response"),
 // evaluates it against the Rego policy, and writes the analyzed output to w.
