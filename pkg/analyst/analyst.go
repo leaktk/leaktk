@@ -1,6 +1,7 @@
 package analyst
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -17,79 +18,126 @@ type Analyst struct {
 	ctx   context.Context
 }
 
-func (a *Analyst) Analyze(response *proto.Response) (*proto.Response, error) {
-
-}
-
-// AnalyzeFullResponse reads the entire input from r as a single JSON object (the "full response"),
-// evaluates it against the Rego policy, and writes the analyzed output to w.
-// The Rego policy is now expected to handle the input structure and return the full output structure.
-func AnalyzeFullResponse(ctx context.Context, r io.Reader, w io.Writer, policyContent string) error {
-	// 1. Read the entire input body from the reader
-	fullInputBytes, err := io.ReadAll(r)
-	if err != nil {
-		return fmt.Errorf("could not read full input body: %w", err)
-	}
-	if len(fullInputBytes) == 0 {
-		return nil // No input, nothing to do
-	}
-
-	// 2. Unmarshal the full input body into a generic type for Rego input
-	var fullInput any
-	if err := json.Unmarshal(fullInputBytes, &fullInput); err != nil {
-		// Log the error and return, as the input is invalid JSON
-		return fmt.Errorf("could not unmarshal full input body as JSON: %w", err)
-	}
-
-	// 3. Prepare Rego query
+// NewAnalyst initializes and prepares the Rego engine. This should be called only once.
+func NewAnalyst(ctx context.Context, policyContent string) (*Analyst, error) {
 	query, err := rego.New(
 		rego.Query("data.analyze.analyzed_response"),
 		rego.Module("analyze.rego", policyContent),
 	).PrepareForEval(ctx)
 
 	if err != nil {
-		return fmt.Errorf("could not prepare Rego query: %w", err)
+		return nil, fmt.Errorf("could not prepare Rego query: %w", err)
 	}
 
-	// 4. Evaluate the Rego policy with the full input
-	// The policy's 'input' variable will contain the unmarshaled 'fullInput' data.
-	results, err := query.Eval(ctx, rego.EvalInput(fullInput))
+	return &Analyst{
+		query: query,
+		ctx:   ctx,
+	}, nil
+}
+
+func (a *Analyst) Analyze(response *proto.Response) (*proto.Response, error) {
+	// 1. Marshal the struct into JSON bytes to serve as OPA input
+	inputBytes, err := json.Marshal(response)
 	if err != nil {
-		return fmt.Errorf("could not evaluate query against full input: %w", err)
+		return nil, fmt.Errorf("failed to marshal response struct for OPA input: %w", err)
 	}
 
-	// 5. Process the OPA result
-	if len(results) > 0 && results[0].Expressions != nil && len(results[0].Expressions) > 0 {
-		// OPA returns an array of results; we take the first expression's value
-		opaOutput := results[0].Expressions[0].Value
+	// 2. Unmarshal into a generic type for Rego
+	var opaInput any
+	if err := json.Unmarshal(inputBytes, &opaInput); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON into generic type for OPA: %w", err)
+	}
 
-		// The Rego output is expected to be the final JSON structure, so we just marshal it directly.
-		outBytes, err := json.Marshal(opaOutput)
-		if err != nil {
-			return fmt.Errorf("could not marshal OPA output: %w", err)
+	// 3. Evaluate the Rego policy
+	results, err := a.query.Eval(a.ctx, rego.EvalInput(opaInput))
+	if err != nil {
+		return nil, fmt.Errorf("could not evaluate query for response ID %s: %w", response.ID, err)
+	}
+
+	if len(results) == 0 || results[0].Expressions == nil || len(results[0].Expressions) == 0 {
+		// If Rego produced no output, return the original response without analysis
+		logger.Info("Analyze: OPA policy produced no analysis for response ID %s", response.ID)
+		return response, nil
+	}
+
+	// 4. Extract the OPA output (the enriched JSON structure)
+	opaOutput := results[0].Expressions[0].Value
+
+	// 5. Marshal the enriched structure back to JSON bytes
+	outputBytes, err := json.Marshal(opaOutput)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal OPA output to JSON: %w", err)
+	}
+
+	// 6. Unmarshal the enriched JSON back into a new Response struct
+	var enrichedResponse proto.Response
+	if err := json.Unmarshal(outputBytes, &enrichedResponse); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal enriched JSON back into Response struct: %w", err)
+	}
+
+	return &enrichedResponse, nil
+}
+
+// AnalyzeStream processes a JSONL stream of proto.Response structs from r,
+// analyzes each one using the provided Analyst, and writes the enriched
+// JSONL stream to w.
+func AnalyzeStream(a *Analyst, r io.Reader, w io.Writer) error {
+	scanner := bufio.NewScanner(r)
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
 		}
 
-		// Write the final analyzed result JSON object followed by a newline
+		// Unmarshal the raw JSON line into a Response struct
+		var response proto.Response
+		if err := json.Unmarshal(line, &response); err != nil {
+			logger.Error("AnalyzeStream: could not unmarshal line to proto.Response: %v, line: %s", err, string(line))
+			continue
+		}
+
+		// Run the struct through the decoupled analysis method
+		enrichedResponse, err := a.Analyze(&response)
+		if err != nil {
+			logger.Error("AnalyzeStream: failed to analyze response ID %s: %v", response.ID, err)
+			continue
+		}
+
+		// Write the final enriched Response JSON object followed by a newline (JSONL)
+		outBytes, err := json.Marshal(enrichedResponse)
+		if err != nil {
+			logger.Error("AnalyzeStream: could not marshal enriched Response: %v", err)
+			continue
+		}
+
 		w.Write(outBytes)
 		w.Write([]byte{'\n'})
+	}
 
-	} else {
-		logger.Info("AnalyzeFullResponse: OPA policy produced no analysis for the full response")
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("error reading from input stream: %w", err)
 	}
 
 	return nil
 }
 
 // AnalyzeCommand is the entry point for the CLI subcommand.
-// It now accepts an inputPath string to read the Leaktk response from a file.
-// If inputPath is empty, it reads from os.Stdin.
+// It sets up the Analyst and passes the input stream to AnalyzeStream.
 func AnalyzeCommand(ctx context.Context, policyPath string, inputPath string) error {
+	// 1. Read Policy Content
 	policyContent, err := os.ReadFile(policyPath)
 	if err != nil {
 		return fmt.Errorf("could not read Rego policy file %s: %w", policyPath, err)
 	}
 
-	// Determine the input reader
+	// 2. Initialize the Analyst once
+	analyst, err := NewAnalyst(ctx, string(policyContent))
+	if err != nil {
+		return fmt.Errorf("failed to initialize analyst: %w", err)
+	}
+
+	// 3. Determine the input reader (File or Stdin)
 	var r io.Reader = os.Stdin
 	var closeFunc func() error = func() error { return nil }
 
@@ -101,13 +149,12 @@ func AnalyzeCommand(ctx context.Context, policyPath string, inputPath string) er
 		r = f
 		closeFunc = f.Close
 	}
-	// Ensure the file is closed if we opened one
 	defer func() {
 		if err := closeFunc(); err != nil {
-			logger.Error("AnalyzeCommand: failed to  iclosenput reader: %v", err)
+			logger.Error("AnalyzeCommand: failed to close input reader: %v", err)
 		}
 	}()
 
-	// Use the new function that analyzes the entire response as a single object.
-	return AnalyzeFullResponse(ctx, r, os.Stdout, string(policyContent))
+	// 4. Start processing the JSONL stream
+	return AnalyzeStream(analyst, r, os.Stdout)
 }
