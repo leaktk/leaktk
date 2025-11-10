@@ -37,19 +37,19 @@ func NewAnalyst(ctx context.Context, policyContent string) (*Analyst, error) {
 
 func (a *Analyst) Analyze(response *proto.Response) (*proto.Response, error) {
 	// Marshal the struct into JSON bytes to serve as OPA input
-	inputBytes, err := json.Marshal(response)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal response struct for OPA input: %w", err)
-	}
+	// inputBytes, err := json.Marshal(response)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to marshal response struct for OPA input: %w", err)
+	// }
 
-	// Unmarshal into a generic type for Rego
-	var opaInput any
-	if err := json.Unmarshal(inputBytes, &opaInput); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal JSON into generic type for OPA: %w", err)
-	}
+	// // Unmarshal into a generic type for Rego
+	// var opaInput any
+	// if err := json.Unmarshal(inputBytes, &opaInput); err != nil {
+	// 	return nil, fmt.Errorf("failed to unmarshal JSON into generic type for OPA: %w", err)
+	// }
 
 	// Evaluate the Rego policy
-	results, err := a.query.Eval(a.ctx, rego.EvalInput(opaInput))
+	results, err := a.query.Eval(a.ctx, rego.EvalInput(response))
 	if err != nil {
 		return nil, fmt.Errorf("could not evaluate query for response ID %s: %w", response.ID, err)
 	}
@@ -125,36 +125,36 @@ func AnalyzeStream(a *Analyst, r io.Reader, w io.Writer) error {
 // AnalyzeCommand is the entry point for the CLI subcommand.
 // It sets up the Analyst and passes the input stream to AnalyzeStream.
 func AnalyzeCommand(ctx context.Context, policyPath string, inputPath string) error {
-	// Read Policy Content
+	// 1. Read Policy Content
 	policyContent, err := os.ReadFile(policyPath)
 	if err != nil {
 		return fmt.Errorf("could not read Rego policy file %s: %w", policyPath, err)
 	}
 
-	// Initialize the Analyst once
+	// REQUIREMENT: If the analyze subcommand is called, an input file MUST be provided.
+	if inputPath == "" {
+		return fmt.Errorf("input file path is required. Use the --input flag to specify the file containing the JSONL responses")
+	}
+
+	// 2. Initialize the Analyst once
 	analyst, err := NewAnalyst(ctx, string(policyContent))
 	if err != nil {
 		return fmt.Errorf("failed to initialize analyst: %w", err)
 	}
 
-	// Determine the input reader (File or Stdin)
-	var r io.Reader = os.Stdin
-	var closeFunc func() error = func() error { return nil }
-
-	if inputPath != "" {
-		f, err := os.Open(inputPath)
-		if err != nil {
-			return fmt.Errorf("could not open input file %s: %w", inputPath, err)
-		}
-		r = f
-		closeFunc = f.Close
+	// 3. Open the required input file
+	f, err := os.Open(inputPath)
+	if err != nil {
+		return fmt.Errorf("could not open input file %s: %w", inputPath, err)
 	}
+	r := f
+
 	defer func() {
-		if err := closeFunc(); err != nil {
+		if err := f.Close(); err != nil {
 			logger.Error("AnalyzeCommand: failed to close input reader: %v", err)
 		}
 	}()
 
-	// Start processing the JSONL stream
+	// 4. Start processing the JSONL stream
 	return AnalyzeStream(analyst, r, os.Stdout)
 }

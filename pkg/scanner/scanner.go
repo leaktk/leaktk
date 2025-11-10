@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/zricethezav/gitleaks/v8/detect"
 	"github.com/zricethezav/gitleaks/v8/report"
 
+	"github.com/leaktk/leaktk/pkg/analyst"
 	"github.com/leaktk/leaktk/pkg/analyst/ai"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
@@ -41,22 +43,30 @@ const (
 
 // Scanner holds the config and state for the scanner processes
 type Scanner struct {
-	allowLocal      bool
-	scanTimeout     time.Duration
-	clonesDir       string
-	maxArchiveDepth int
-	maxDecodeDepth  int
-	maxScanDepth    int
-	patterns        *Patterns
-	responseQueue   *queue.PriorityQueue[*proto.Response]
-	scanQueue       *queue.PriorityQueue[*proto.Request]
-	scanWorkers     int
-	aiAnalyst       *ai.Analyst
+	allowLocal       bool
+	scanTimeout      time.Duration
+	clonesDir        string
+	maxArchiveDepth  int
+	maxDecodeDepth   int
+	maxScanDepth     int
+	patterns         *Patterns
+	responseQueue    *queue.PriorityQueue[*proto.Response]
+	scanQueue        *queue.PriorityQueue[*proto.Request]
+	scanWorkers      int
+	aiAnalyst        *ai.Analyst
+	Analyst          *analyst.Analyst
+	analyzeResponses bool
 }
 
 // NewScanner returns a initialized and listening scanner instance that should
 // be closed when it's no longer needed.
 func NewScanner(cfg *config.Config) *Scanner {
+	analystInstance, err := analyst.NewAnalyst(context.Background(), "policy")
+	if err != nil {
+		// You should use a logger or panic here since this is a fatal setup error.
+		log.Fatalf("FATAL: Failed to initialize Rego Analyst: %v", err)
+	}
+
 	scanner := &Scanner{
 		allowLocal:      cfg.Scanner.AllowLocal,
 		scanTimeout:     time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
@@ -68,6 +78,9 @@ func NewScanner(cfg *config.Config) *Scanner {
 		responseQueue:   queue.NewPriorityQueue[*proto.Response](queueSize),
 		scanQueue:       queue.NewPriorityQueue[*proto.Request](queueSize),
 		scanWorkers:     cfg.Scanner.ScanWorkers,
+		//aiAnalyst: ai.NewAnalyst(),
+		Analyst:          analystInstance,
+		analyzeResponses: true,
 	}
 
 	if cfg.Scanner.EnableAnalysis {
@@ -283,16 +296,27 @@ func (s *Scanner) listen() {
 			}
 		}
 
-		logger.Info("queueing response: id=%q", request.ID)
+		response := &proto.Response{
+			ID:        id.ID(),
+			Kind:      proto.ScanResultsResponseKind,
+			RequestID: request.ID,
+			Error:     scanErr,
+			Results:   results,
+		}
+
+		if s.analyzeResponses {
+			logger.Info("analyzing response: id=%q", request.ID)
+			if analyzedResponse, err := s.Analyst.Analyze(response); err != nil {
+				logger.Error("error analyzing response: %v", err)
+			} else {
+				response = analyzedResponse
+			}
+		}
+
+		logger.Info("queueing response: id=%q queue_size=%d", request.ID)
 		s.responseQueue.Send(&queue.Message[*proto.Response]{
 			Priority: msg.Priority,
-			Value: &proto.Response{
-				ID:        id.ID(),
-				Kind:      proto.ScanResultsResponseKind,
-				RequestID: request.ID,
-				Error:     scanErr,
-				Results:   results,
-			},
+			Value:    response,
 		})
 	})
 }
