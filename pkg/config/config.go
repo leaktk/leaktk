@@ -46,8 +46,6 @@ type (
 		Logger    Logger    `toml:"logger"`
 		Scanner   Scanner   `toml:"scanner"`
 		Formatter Formatter `toml:"formatter"`
-		CacheDir  string    `toml:"cache_dir"`
-		AI        AI        `toml:"ai"`
 	}
 
 	// Formatter provides a general output format config
@@ -68,6 +66,7 @@ type (
 		MaxDecodeDepth  int      `toml:"max_decode_depth"`
 		MaxScanDepth    int      `toml:"max_scan_depth"`
 		Patterns        Patterns `toml:"patterns"`
+		Models          Models   `toml:"models"`
 		ScanWorkers     int      `toml:"scan_workers"`
 		Workdir         string   `toml:"workdir"`
 		EnableAnalysis  bool     `yaml:"enable_analysis"` //Experimental
@@ -86,17 +85,18 @@ type (
 	Models struct {
 		Autofetch    bool        `toml:"autofetch"`
 		ExpiredAfter int         `toml:"expired_after"`
+		LeakTK       LeakTK      `toml:"leaktk"`
 		RefreshAfter int         `toml:"refresh_after"`
-		Version      string      `toml:"version"`
 		Server       ModelServer `toml:"server"`
-	}
-
-	AI struct {
-		Models Models `toml:"models"`
 	}
 
 	// Gitleaks holds version and config information for the Gitleaks scanner
 	Gitleaks struct {
+		Version    string `toml:"version"`
+		ConfigPath string `toml:"config_path"`
+	}
+
+	LeakTK struct {
 		Version    string `toml:"version"`
 		ConfigPath string `toml:"config_path"`
 	}
@@ -209,7 +209,6 @@ func DefaultConfig() *Config {
 		Logger: Logger{
 			Level: "INFO",
 		},
-		CacheDir: filepath.Join(xdg.CacheHome, "leaktk"),
 		Scanner: Scanner{
 			AllowLocal:      true,
 			ScanTimeout:     0,
@@ -229,15 +228,15 @@ func DefaultConfig() *Config {
 					URL: "https://raw.githubusercontent.com/leaktk/patterns/main/target",
 				},
 			},
-		},
-		AI: AI{
 			Models: Models{
 				Autofetch:    true,
-				ExpiredAfter: 60 * 60 * 24 * 7, // 7 days
-				RefreshAfter: 60 * 60 * 12,     // 12 hours
-				Version:      "1",
+				ExpiredAfter: 60 * 60 * 12 * 14, // 7 days
+				RefreshAfter: 60 * 60 * 12,      // 12 hours
+				LeakTK: LeakTK{
+					Version: "1",
+				},
 				Server: ModelServer{
-					URL: "https://raw.githubusercontent.com/leaktk/patterns/main/target", //needs change
+					URL: "https://raw.githubusercontent.com/alayne222/patterns/refs/heads/main/patterns/leaktk/1/models.json",
 				},
 			},
 		},
