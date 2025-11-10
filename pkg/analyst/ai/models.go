@@ -9,128 +9,32 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
+	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
 	// Assuming 'client' is an http.Client available on a struct or passed in
 )
 
-type ModelConfig struct {
-	Version  string   `json:"version"`
-	Features []string `json:"features"`
-	// ... other fields
+type Models struct {
+	client       *http.Client
+	config       *config.Models
+	modelsConfig *MLModelsConfig
+	mutex        sync.Mutex
 }
 
-func (p *Models) cachePath() string {
-	// Assuming p.config.CacheDir is available and contains the base path.
-	return filepath.Join(p.cacheDir, "leaktk", "1", "models.json")
-}
-
-func (p *Models) parseConfig(rawConfig string) (*MLModelsConfig, error) {
-	var modelsConfig MLModelsConfig
-	err := json.Unmarshal([]byte(rawConfig), &modelsConfig)
-	if err != nil {
-		return nil, err
+func NewModels(cfg *config.Models, client *http.Client) *Models {
+	return &Models{
+		client: client,
+		config: cfg,
 	}
-	logger.Info("successfully parsed %d models", len(modelsConfig.Models))
-	return &modelsConfig, nil
 }
 
-func (p *Models) modelsModTimeExceeds(modTimeLimit int) bool {
-	// When modTimeLimit is 0, expiration checking is effectively disabled.
-	if modTimeLimit == 0 {
-		return false
-	}
-
-	localPath := p.cachePath()
-
-	if fileInfo, err := os.Stat(localPath); err == nil {
-		return int(time.Since(fileInfo.ModTime()).Seconds()) > modTimeLimit
-	}
-
-	// If os.Stat returns an error (e.g., file not found), treat it as expired/missing
-	// to force a fetch or fail on expired check.
-	return true
-}
-
-func (p *Models) GetModels(ctx context.Context) (*MLModelsConfig, error) {
-	// Lock since this updates the value of p.mlModelsConfig on the fly
-	// and updates files on the filesystem
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-
-	localPath := p.cachePath()
-
-	// 1. Autofetch and Refresh Logic
-	if p.config.Autofetch && p.modelsModTimeExceeds(p.config.RefreshAfter) {
-		// Fetch new data (we will use the existing p.fetchModels from analyst.go)
-		rawConfig, err := p.fetchModels(ctx)
-		if err != nil {
-			// Return existing in-memory config on fetch failure
-			return p.mlModelsConfig, fmt.Errorf("failed to fetch models config: %w", err)
-		}
-
-		// Parse the fetched config
-		parsedConfig, err := p.parseConfig(rawConfig)
-		if err != nil {
-			logger.Debug("fetched config:\n%s", rawConfig)
-			return p.mlModelsConfig, fmt.Errorf("could not parse fetched models config: %w", err)
-		}
-
-		// Cache the new config in memory
-		p.mlModelsConfig = parsedConfig
-
-		// Write the config to disk after successful parsing
-		if err := os.MkdirAll(filepath.Dir(localPath), 0700); err != nil {
-			return p.mlModelsConfig, fmt.Errorf("could not create config dir: %w", err)
-		}
-		if err := os.WriteFile(localPath, []byte(rawConfig), 0600); err != nil {
-			return p.mlModelsConfig, fmt.Errorf("could not write config: path=%q error=%w", localPath, err)
-		}
-
-		logger.Info("updated ML models configuration")
-
-		// 2. Initial Load or Expired Check
-	} else if p.mlModelsConfig == nil { // Not in memory, try loading from disk
-
-		// Check if the local file is expired before loading from disk
-		if p.modelsModTimeExceeds(p.config.ExpiredAfter) {
-			return nil, fmt.Errorf(
-				"ML models config is expired and autofetch is disabled: config_path=%q",
-				localPath,
-			)
-		}
-
-		// Load config from disk
-		rawConfig, err := os.ReadFile(localPath)
-		if err != nil {
-			// File not found or other read error
-			return p.mlModelsConfig, fmt.Errorf("failed to read cached config: %w", err)
-		}
-
-		// Parse the loaded config
-		parsedConfig, err := p.parseConfig(string(rawConfig))
-		if err != nil {
-			logger.Debug("loaded config:\n%s\n", rawConfig)
-			return p.mlModelsConfig, fmt.Errorf("could not parse loaded models config: %w", err)
-		}
-
-		// Cache the config in memory
-		p.mlModelsConfig = parsedConfig
-	}
-
-	// 3. Return the in-memory config
-	return p.mlModelsConfig, nil
-}
-
-func (p *Models) fetchModels(ctx context.Context) (string, error) {
+func (m *Models) fetchModels(ctx context.Context) (string, error) {
 	logger.Info("fetching AI model configuration")
-
-	// --- 1. Construct the URL ---
-	// The path is "patterns/patterns/leaktk/1/models.json".
 	modelURL, err := url.JoinPath(
-		p.config.Server.URL, // Use p.config instead of f.config
-		"patterns",
+		m.config.Server.URL, // Use m.config instead of f.config
 		"patterns",
 		"leaktk",
 		"1",
@@ -142,46 +46,126 @@ func (p *Models) fetchModels(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("failed to construct model URL: %w", err)
 	}
 
-	// --- 2. Create the Request ---
 	request, err := http.NewRequestWithContext(ctx, "GET", modelURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create HTTP request: %w", err)
+		return "", err
 	}
 
-	// --- 3. Add Authorization Header ---
-	if len(p.config.Server.AuthToken) > 0 {
+	if len(m.config.Server.AuthToken) > 0 {
 		logger.Debug("setting authorization header")
 		request.Header.Add(
 			"Authorization",
-			"Bearer "+p.config.Server.AuthToken,
+			"Bearer "+m.config.Server.AuthToken,
 		)
 	}
 
-	// --- 4. Execute the Request ---
-	// Use p.client instead of f.client
-	response, err := p.client.Do(request)
+	response, err := m.client.Do(request)
 	if err != nil {
-		return "", fmt.Errorf("HTTP request failed: %w", err)
+		return "", err
 	}
 
-	// Ensure the response body is closed
 	defer func() {
 		if err := response.Body.Close(); err != nil {
-			logger.Debug("error closing response body: %v", err)
+			logger.Debug("error closing model response body: %v", err)
 		}
 	}()
 
-	// --- 5. Check Status Code ---
 	if response.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("unexpected status code fetching model config: status_code=%d", response.StatusCode)
 	}
 
-	// --- 6. Read the Body (NO FILE WRITING) ---
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// Return the raw configuration string
 	return string(body), nil
+}
+
+// leakTKConfigModTimeExceeds returns true if the file is older than
+// `modTimeLimit` seconds
+func (m *Models) leakTKConfigModTimeExceeds(modTimeLimit int) bool {
+	// When modTimeLimit is 0, expiration checking is effectively disabled
+	// and leakTKConfigModTimeExceeds returns false in this case.
+	if modTimeLimit == 0 {
+		return false
+	}
+
+	if fileInfo, err := os.Stat(m.config.LeakTK.ConfigPath); err == nil {
+		return int(time.Since(fileInfo.ModTime()).Seconds()) > modTimeLimit
+	}
+
+	return true
+}
+
+// LeakTK returns a LeakTK Models config object if it's able to
+func (m *Models) LeakTK(ctx context.Context) (*MLModelsConfig, error) {
+	// Lock since this updates the value of m.modelsConfig on the fly
+	// and updates files on the filesystem
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if m.config.Autofetch && m.leakTKConfigModTimeExceeds(m.config.RefreshAfter) {
+		rawConfig, err := m.fetchModels(ctx)
+		if err != nil {
+			return m.modelsConfig, err
+		}
+
+		m.modelsConfig, err = m.parseConfig(rawConfig)
+		if err != nil {
+			logger.Debug("fetched config:\n%s", rawConfig)
+
+			return m.modelsConfig, fmt.Errorf("could not parse config: error=%q", err)
+		}
+
+		if err := os.MkdirAll(filepath.Dir(m.config.LeakTK.ConfigPath), 0700); err != nil {
+			return m.modelsConfig, fmt.Errorf("could not create config dir: error=%q", err)
+		}
+
+		// only write the config after parsing it, that way we don't break a good
+		// existing config if the server returns an invalid response
+		if err := os.WriteFile(m.config.LeakTK.ConfigPath, []byte(rawConfig), 0600); err != nil {
+			return m.modelsConfig, fmt.Errorf("could not write config: path=%q error=%q", m.config.LeakTK.ConfigPath, err)
+		}
+
+		// if hash := sha256.Sum256([]byte(rawConfig)); p.gitleaksConfigHash != hash {
+		// 	p.gitleaksConfigHash = hash
+		// 	logger.Info("updated gitleaks patterns: hash=%s", p.GitleaksConfigHash())
+		// }
+	} else if m.modelsConfig == nil {
+		if m.leakTKConfigModTimeExceeds(m.config.ExpiredAfter) {
+			return nil, fmt.Errorf(
+				"leaktk config is expired and autofetch is disabled: config_path=%q",
+				m.config.LeakTK.ConfigPath,
+			)
+		}
+
+		rawConfig, err := os.ReadFile(m.config.LeakTK.ConfigPath)
+		if err != nil {
+			return m.modelsConfig, err
+		}
+
+		m.modelsConfig, err = m.parseConfig(string(rawConfig))
+		if err != nil {
+			logger.Debug("loaded config:\n%s\n", rawConfig)
+
+			return m.modelsConfig, fmt.Errorf("could not parse config: error=%q", err)
+		}
+
+		// if hash := sha256.Sum256(rawConfig); p.gitleaksConfigHash != hash {
+		// 	p.gitleaksConfigHash = hash
+		// }
+	}
+
+	return m.modelsConfig, nil
+}
+
+func (m *Models) parseConfig(rawConfig string) (*MLModelsConfig, error) {
+	var modelsConfig MLModelsConfig
+	err := json.Unmarshal([]byte(rawConfig), &modelsConfig)
+	if err != nil {
+		return nil, err
+	}
+	logger.Info("successfully parsed %d models", len(modelsConfig.Models))
+	return &modelsConfig, nil
 }

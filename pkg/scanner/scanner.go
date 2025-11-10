@@ -50,6 +50,7 @@ type Scanner struct {
 	maxDecodeDepth   int
 	maxScanDepth     int
 	patterns         *Patterns
+	models           *ai.Models
 	responseQueue    *queue.PriorityQueue[*proto.Response]
 	scanQueue        *queue.PriorityQueue[*proto.Request]
 	scanWorkers      int
@@ -75,6 +76,7 @@ func NewScanner(cfg *config.Config) *Scanner {
 		maxDecodeDepth:  cfg.Scanner.MaxDecodeDepth,
 		maxScanDepth:    cfg.Scanner.MaxScanDepth,
 		patterns:        NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
+		models:          ai.NewModels(&cfg.Scanner.Models, httpclient.NewClient()),
 		responseQueue:   queue.NewPriorityQueue[*proto.Response](queueSize),
 		scanQueue:       queue.NewPriorityQueue[*proto.Request](queueSize),
 		scanWorkers:     cfg.Scanner.ScanWorkers,

@@ -3,25 +3,12 @@ package ai
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"sync"
 
-	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/proto"
 )
 
 type Analyst struct {
 	models *Models
-}
-
-type Models struct {
-	client *http.Client
-	config *config.Models
-	// Add mutex for concurrent safety
-	mutex    sync.Mutex
-	cacheDir string
-	// Add in-memory cache for the parsed models config
-	mlModelsConfig *MLModelsConfig
 }
 
 func NewAnalyst(m *Models) *Analyst {
@@ -39,14 +26,11 @@ type MLModelsConfig struct {
 }
 
 func (a *Analyst) Analyze(model string, result *proto.Result) (*AnalysisResult, error) {
-
-	// 1. Retrieve the models config
-	modelsConfig, err := a.models.GetModels(context.TODO())
+	modelsConfig, err := a.models.LeakTK(context.Background())
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Get the specific model data
 	modelData, ok := modelsConfig.Models[model]
 	if !ok {
 		return nil, fmt.Errorf("model %q not found", model)
@@ -72,12 +56,4 @@ func (a *Analyst) Analyze(model string, result *proto.Result) (*AnalysisResult, 
 
 type AnalysisResult struct {
 	PredictedSecretProbability float64
-}
-
-func NewModels(cfg *config.Models, client *http.Client, cacheDir string) *Models {
-	return &Models{
-		client:   client,
-		config:   cfg,
-		cacheDir: cacheDir,
-	}
 }
