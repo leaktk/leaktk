@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -61,26 +62,30 @@ type Scanner struct {
 // NewScanner returns a initialized and listening scanner instance that should
 // be closed when it's no longer needed.
 func NewScanner(cfg *config.Config) *Scanner {
-	//analystInstance, err := analyst.NewAnalyst(context.Background(), "policy")
-	// if err != nil {
-	// 	// You should use a logger or panic here since this is a fatal setup error.
-	// 	log.Fatalf("FATAL: Failed to initialize Rego Analyst: %v", err)
-	// }
+	policyContent, err := os.ReadFile("pkg/analyst/policy.rego")
+	if err != nil {
+		log.Fatalf("failed to read file %s: %v", "pkg/analyst/policy.rego", err)
+	}
+
+	analystInstance, err := analyst.NewAnalyst(context.Background(), string(policyContent))
+	if err != nil {
+		log.Fatalf("FATAL: Failed to initialize Rego Analyst: %v", err)
+	}
 
 	scanner := &Scanner{
-		allowLocal:      cfg.Scanner.AllowLocal,
-		scanTimeout:     time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
-		clonesDir:       filepath.Join(cfg.Scanner.Workdir, "clones"),
-		maxArchiveDepth: cfg.Scanner.MaxArchiveDepth,
-		maxDecodeDepth:  cfg.Scanner.MaxDecodeDepth,
-		maxScanDepth:    cfg.Scanner.MaxScanDepth,
-		patterns:        NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
-		models:          ai.NewModels(&cfg.Scanner.Models, httpclient.NewClient()),
-		responseQueue:   queue.NewPriorityQueue[*proto.Response](queueSize),
-		scanQueue:       queue.NewPriorityQueue[*proto.Request](queueSize),
-		scanWorkers:     cfg.Scanner.ScanWorkers,
-		aiAnalyst:       ai.NewAnalyst(ai.NewModels(&cfg.Scanner.Models, httpclient.NewClient())),
-		//Analyst:          analystInstance,
+		allowLocal:       cfg.Scanner.AllowLocal,
+		scanTimeout:      time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
+		clonesDir:        filepath.Join(cfg.Scanner.Workdir, "clones"),
+		maxArchiveDepth:  cfg.Scanner.MaxArchiveDepth,
+		maxDecodeDepth:   cfg.Scanner.MaxDecodeDepth,
+		maxScanDepth:     cfg.Scanner.MaxScanDepth,
+		patterns:         NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
+		models:           ai.NewModels(&cfg.Scanner.Models, httpclient.NewClient()),
+		responseQueue:    queue.NewPriorityQueue[*proto.Response](queueSize),
+		scanQueue:        queue.NewPriorityQueue[*proto.Request](queueSize),
+		scanWorkers:      cfg.Scanner.ScanWorkers,
+		aiAnalyst:        ai.NewAnalyst(ai.NewModels(&cfg.Scanner.Models, httpclient.NewClient())),
+		Analyst:          analystInstance,
 		analyzeResponses: true,
 	}
 
@@ -308,14 +313,14 @@ func (s *Scanner) listen() {
 			Results:   results,
 		}
 
-		// if s.analyzeResponses {
-		// 	logger.Info("analyzing response: id=%q", request.ID)
-		// 	if analyzedResponse, err := s.Analyst.Analyze(response); err != nil {
-		// 		logger.Error("error analyzing response: %v", err)
-		// 	} else {
-		// 		response = analyzedResponse
-		// 	}
-		// }
+		if s.analyzeResponses {
+			logger.Info("analyzing response: id=%q", request.ID)
+			if analyzedResponse, err := s.Analyst.Analyze(response); err != nil {
+				logger.Error("error analyzing response: %v", err)
+			} else {
+				response = analyzedResponse
+			}
+		}
 
 		logger.Info("queueing response: id=%q", request.ID)
 		s.responseQueue.Send(&queue.Message[*proto.Response]{
