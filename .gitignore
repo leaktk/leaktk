@@ -17,3 +17,6 @@ leaktk
 go.work
 # Added by goreleaser init:
 dist/
+
+#downloaded models for leaktk ai
+~/.leaktk/models.json
