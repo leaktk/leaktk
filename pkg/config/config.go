@@ -236,7 +236,7 @@ func DefaultConfig() *Config {
 					Version: "1",
 				},
 				Server: ModelServer{
-					URL: "https://raw.githubusercontent.com/alayne222/patterns/refs/heads/main/patterns/leaktk/1/models.json",
+					URL: "https://raw.githubusercontent.com/alayne222/patterns/main/target",
 				},
 			},
 		},

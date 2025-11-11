@@ -2,7 +2,9 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math"
 
 	"github.com/leaktk/leaktk/pkg/proto"
 )
@@ -25,6 +27,31 @@ type MLModelsConfig struct {
 	} `json:"models"` // Adjust the JSON key to what's actually in the file
 }
 
+type AnalysisResult struct {
+	PredictedSecretProbability float64
+}
+
+type Coefficients struct {
+	Intercept                    float64 `json:"intercept"`
+	Entropy                      float64 `json:"entropy"`
+	LineHasKeyword               float64 `json:"line_has_keyword"`
+	NumNumbers                   float64 `json:"num_numbers"`
+	MatchHasKeyword              float64 `json:"match_has_keyword"`
+	LineHasConsecutiveTrigrams   float64 `json:"line_has_consecutive_trigrams"`
+	MatchHasConsecutiveTrigrams  float64 `json:"match_has_consecutive_trigrams"`
+	SecretHasConsecutiveTrigrams float64 `json:"secret_has_consecutive_trigrams"`
+	NumSpecial                   float64 `json:"num_special"`
+	SecretHasKeyword             float64 `json:"secret_has_keyword"`
+	LineHasRepeatingTrigrams     float64 `json:"line_has_repeating_trigrams"`
+	LineHasStopword              float64 `json:"line_has_stopword"`
+	SecretLength                 float64 `json:"secret_length"`
+	SecretHasRepeatingTrigrams   float64 `json:"secret_has_repeating_trigrams"`
+	MatchHasRepeatingTrigrams    float64 `json:"match_has_repeating_trigrams"`
+	SecretHasStopword            float64 `json:"secret_has_stopword"`
+	MatchHasStopword             float64 `json:"match_has_stopword"`
+	SecretHasDictionaryWord      float64 `json:"secret_has_dictionary_word"`
+}
+
 func (a *Analyst) Analyze(model string, result *proto.Result) (*AnalysisResult, error) {
 	modelsConfig, err := a.models.LeakTK(context.Background())
 	if err != nil {
@@ -38,22 +65,64 @@ func (a *Analyst) Analyze(model string, result *proto.Result) (*AnalysisResult, 
 
 	match := result.Match
 	secret := result.Secret
+	path := result.Location.Path
+	startLine := result.Location.Start.Line
 
 	// 3. Pass the keywords/stopwords to the pipeline
 	features := NewFeaturesPipeline(
 		match,
 		secret,
+		path,
+		startLine,
 		modelData.Keywords,
 		modelData.Stopwords,
 		modelData.Dictwords,
 	)
 
-	fmt.Println(features)
+	coefficients, err := convertCoefficients(modelData.Coefficients)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare model coefficients for scoring: %w", err)
+	}
 
-	return &AnalysisResult{}, nil
+	predictedProbability := runLogisticRegression(features, coefficients)
+
+	return &AnalysisResult{
+		PredictedSecretProbability: predictedProbability,
+	}, nil
 
 }
 
-type AnalysisResult struct {
-	PredictedSecretProbability float64
+func runLogisticRegression(f *Features, c *Coefficients) float64 {
+
+	z := c.Intercept +
+		f.Entropy*c.Entropy +
+		f.LineHasKeyword*c.LineHasKeyword +
+		f.NumNumbers*c.NumNumbers +
+		f.MatchHasKeyword*c.MatchHasKeyword +
+		f.LineHasConsecutiveTrigrams*c.LineHasConsecutiveTrigrams +
+		f.MatchHasConsecutiveTrigrams*c.MatchHasConsecutiveTrigrams +
+		f.SecretHasConsecutiveTrigrams*c.SecretHasConsecutiveTrigrams +
+		f.NumSpecial*c.NumSpecial +
+		f.SecretHasKeyword*c.SecretHasKeyword +
+		f.LineHasRepeatingTrigrams*c.LineHasRepeatingTrigrams +
+		f.LineHasStopword*c.LineHasStopword +
+		f.SecretLength*c.SecretLength +
+		f.SecretHasRepeatingTrigrams*c.SecretHasRepeatingTrigrams +
+		f.MatchHasRepeatingTrigrams*c.MatchHasRepeatingTrigrams +
+		f.SecretHasStopword*c.SecretHasStopword +
+		f.MatchHasStopword*c.MatchHasStopword +
+		f.SecretHasDictionaryWord*c.SecretHasDictionaryWord
+	return 1.0 / (1.0 + math.Exp(-z))
+}
+
+func convertCoefficients(coeffMap map[string]float64) (*Coefficients, error) {
+	jsonBytes, err := json.Marshal(coeffMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal coefficients map: %w", err)
+	}
+	var c Coefficients
+	if err := json.Unmarshal(jsonBytes, &c); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal coefficients JSON to struct: %w", err)
+	}
+	return &c, nil
 }

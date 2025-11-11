@@ -1,10 +1,15 @@
 package ai
 
 import (
+	"bufio"
+	"fmt"
 	"math"
+	"os"
 	"regexp"
 	"strings"
 )
+
+type DictionaryMap map[string]bool
 
 type Features struct {
 	Entropy                      float64
@@ -26,35 +31,52 @@ type Features struct {
 	SecretHasDictionaryWord      float64
 }
 
+func buildDictionaryMap(dictwords []string) DictionaryMap {
+	dict := make(DictionaryMap, len(dictwords))
+	for _, word := range dictwords {
+		dict[strings.ToLower(word)] = true
+	}
+	return dict
+}
+
 func NewFeaturesPipeline(
 	match string,
 	secret string,
+	path string,
+	line int,
 	keywords []string,
 	stopwords []string,
 	dictwords []string,
 ) *Features {
 	f := &Features{}
 
-	//line := input
+	dictionaryMap := buildDictionaryMap(dictwords)
 
 	// Feature calculation
+	lineString, err := GetLineFromFile(path, line)
+	if err != nil {
+		f.LineHasKeyword = 0.0
+		f.LineHasConsecutiveTrigrams = 0.0
+		f.LineHasRepeatingTrigrams = 0.0
+		f.LineHasStopword = 0.0
+	}
 	f.Entropy = calculateEntropy(secret)
-	//f.LineHasKeyword = hasAnyKeyword(line)
+	f.LineHasKeyword = hasAnyKeyword(lineString, keywords)
 	f.NumNumbers = countNumbers(secret)
 	f.MatchHasKeyword = hasAnyKeyword(match, keywords)
-	//f.LineHasConsecutiveTrigrams = hasConsecutiveTrigrams(line)
+	f.LineHasConsecutiveTrigrams = hasConsecutiveTrigrams(lineString)
 	f.MatchHasConsecutiveTrigrams = hasConsecutiveTrigrams(match)
 	f.SecretHasConsecutiveTrigrams = hasConsecutiveTrigrams(secret)
 	f.NumSpecial = countSpecialChars(secret)
 	f.SecretHasKeyword = hasAnyKeyword(secret, keywords)
-	//f.LineHasRepeatingTrigrams = hasRepeatingTrigrams(line)
-	//f.LineHasStopword = hasAnyStopword(line)
+	f.LineHasRepeatingTrigrams = hasRepeatingTrigrams(lineString)
+	f.LineHasStopword = hasAnyStopword(lineString, stopwords)
 	f.SecretLength = float64(len(secret))
 	f.SecretHasRepeatingTrigrams = hasRepeatingTrigrams(secret)
 	f.MatchHasRepeatingTrigrams = hasRepeatingTrigrams(match)
 	f.SecretHasStopword = hasAnyStopword(secret, stopwords)
 	f.MatchHasStopword = hasAnyStopword(match, stopwords)
-	//f.SecretHasDictionaryWord = hasDictionaryWord(secret)
+	f.SecretHasDictionaryWord = hasDictionaryWord(secret, dictionaryMap)
 
 	return f
 }
@@ -136,13 +158,39 @@ func hasAnyStopword(s string, stopwords []string) float64 {
 	return 0.0
 }
 
-// hasDictionaryWord checks if a string contains any word from a predefined dictionary.
-// func hasDictionaryWord(s string) float64 {
-// 	words := strings.Fields(strings.ToLower(s))
-// 	for _, word := range words {
-// 		if _, ok := dictionary[word]; ok {
-// 			return 1.0
-// 		}
-// 	}
-// 	return 0.0
-// }
+func GetLineFromFile(filePath string, lineNumber int) (string, error) {
+	if lineNumber <= 0 {
+		return "", fmt.Errorf("line number must be a positive integer, got %d", lineNumber)
+	}
+	f, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open file %s: %w", filePath, err)
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	currentLine := 0
+	for scanner.Scan() {
+		currentLine++
+		if currentLine == lineNumber {
+			return scanner.Text(), nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("error reading file %s: %w", filePath, err)
+	}
+	return "", fmt.Errorf("line number %d is out of range (file only has %d lines)", lineNumber, currentLine)
+}
+
+func hasDictionaryWord(s string, dictionary DictionaryMap) float64 {
+	words := strings.Fields(strings.ToLower(s))
+	re := regexp.MustCompile(`[^a-z0-9]+$`)
+	for _, word := range words {
+		cleanedWord := re.ReplaceAllString(word, "")
+		if len(cleanedWord) > 0 {
+			if _, ok := dictionary[cleanedWord]; ok {
+				return 1.0
+			}
+		}
+	}
+	return 0.0
+}
