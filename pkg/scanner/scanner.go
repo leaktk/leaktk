@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -62,11 +61,11 @@ type Scanner struct {
 // NewScanner returns a initialized and listening scanner instance that should
 // be closed when it's no longer needed.
 func NewScanner(cfg *config.Config) *Scanner {
-	analystInstance, err := analyst.NewAnalyst(context.Background(), "policy")
-	if err != nil {
-		// You should use a logger or panic here since this is a fatal setup error.
-		log.Fatalf("FATAL: Failed to initialize Rego Analyst: %v", err)
-	}
+	//analystInstance, err := analyst.NewAnalyst(context.Background(), "policy")
+	// if err != nil {
+	// 	// You should use a logger or panic here since this is a fatal setup error.
+	// 	log.Fatalf("FATAL: Failed to initialize Rego Analyst: %v", err)
+	// }
 
 	scanner := &Scanner{
 		allowLocal:      cfg.Scanner.AllowLocal,
@@ -80,8 +79,8 @@ func NewScanner(cfg *config.Config) *Scanner {
 		responseQueue:   queue.NewPriorityQueue[*proto.Response](queueSize),
 		scanQueue:       queue.NewPriorityQueue[*proto.Request](queueSize),
 		scanWorkers:     cfg.Scanner.ScanWorkers,
-		//aiAnalyst: ai.NewAnalyst(),
-		Analyst:          analystInstance,
+		aiAnalyst:       ai.NewAnalyst(ai.NewModels(&cfg.Scanner.Models, httpclient.NewClient())),
+		//Analyst:          analystInstance,
 		analyzeResponses: true,
 	}
 
@@ -282,6 +281,7 @@ func (s *Scanner) listen() {
 		results := make([]*proto.Result, len(findings))
 		for i, finding := range findings {
 			results[i] = findingToResult(request, &finding)
+			results[i].Notes["predicted_secret_probability"] = "hello"
 			if s.aiAnalyst != nil {
 				model := "LogisticRegression"
 				if err == nil {
@@ -295,6 +295,8 @@ func (s *Scanner) listen() {
 				} else {
 					logger.Error("Could not apply model to result: %v", err)
 				}
+			} else {
+				results[i].Notes["predicted_secret_probability"] = "fail"
 			}
 		}
 
@@ -306,16 +308,16 @@ func (s *Scanner) listen() {
 			Results:   results,
 		}
 
-		if s.analyzeResponses {
-			logger.Info("analyzing response: id=%q", request.ID)
-			if analyzedResponse, err := s.Analyst.Analyze(response); err != nil {
-				logger.Error("error analyzing response: %v", err)
-			} else {
-				response = analyzedResponse
-			}
-		}
+		// if s.analyzeResponses {
+		// 	logger.Info("analyzing response: id=%q", request.ID)
+		// 	if analyzedResponse, err := s.Analyst.Analyze(response); err != nil {
+		// 		logger.Error("error analyzing response: %v", err)
+		// 	} else {
+		// 		response = analyzedResponse
+		// 	}
+		// }
 
-		logger.Info("queueing response: id=%q queue_size=%d", request.ID)
+		logger.Info("queueing response: id=%q", request.ID)
 		s.responseQueue.Send(&queue.Message[*proto.Response]{
 			Priority: msg.Priority,
 			Value:    response,

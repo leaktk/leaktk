@@ -233,10 +233,11 @@ func DefaultConfig() *Config {
 				ExpiredAfter: 60 * 60 * 12 * 14, // 7 days
 				RefreshAfter: 60 * 60 * 12,      // 12 hours
 				LeakTK: LeakTK{
-					Version: "1",
+					Version:    "1",
+					ConfigPath: "~/.leaktk/models.json",
 				},
 				Server: ModelServer{
-					URL: "https://raw.githubusercontent.com/alayne222/patterns/main/target",
+					URL: "https://raw.githubusercontent.com/alayne222/patterns/refs/heads/main",
 				},
 			},
 		},

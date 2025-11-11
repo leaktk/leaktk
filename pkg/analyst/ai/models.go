@@ -109,6 +109,7 @@ func (m *Models) LeakTK(ctx context.Context) (*MLModelsConfig, error) {
 		rawConfig, err := m.fetchModels(ctx)
 		if err != nil {
 			return m.modelsConfig, err
+
 		}
 
 		m.modelsConfig, err = m.parseConfig(rawConfig)

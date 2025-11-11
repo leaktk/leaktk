@@ -17,14 +17,16 @@ func NewAnalyst(m *Models) *Analyst {
 	return &Analyst{models: m}
 }
 
+type ModelData struct {
+	Kind         string             `json:"kind"`
+	Coefficients map[string]float64 `json:"coefficients"`
+	Keywords     []string           `json:"keywords"`
+	Stopwords    []string           `json:"stopwords"`
+	Dictwords    []string           `json:"dictwords"`
+}
+
 type MLModelsConfig struct {
-	Models map[string]struct {
-		Kind         string             `json:"kind"`
-		Coefficients map[string]float64 `json:"coefficients"`
-		Keywords     []string           `json:"keywords"`
-		Stopwords    []string           `json:"stopwords"`
-		Dictwords    []string           `json:"dictwords"`
-	} `json:"models"` // Adjust the JSON key to what's actually in the file
+	Models []ModelData `json:"models"`
 }
 
 type AnalysisResult struct {
@@ -58,9 +60,18 @@ func (a *Analyst) Analyze(model string, result *proto.Result) (*AnalysisResult, 
 		return nil, err
 	}
 
-	modelData, ok := modelsConfig.Models[model]
-	if !ok {
-		return nil, fmt.Errorf("model %q not found", model)
+	var modelData ModelData
+	found := false
+	for _, mData := range modelsConfig.Models {
+		if mData.Kind == model {
+			modelData = mData
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return nil, fmt.Errorf("model %q not found in configuration", model)
 	}
 
 	match := result.Match
@@ -84,7 +95,11 @@ func (a *Analyst) Analyze(model string, result *proto.Result) (*AnalysisResult, 
 		return nil, fmt.Errorf("failed to prepare model coefficients for scoring: %w", err)
 	}
 
-	predictedProbability := runLogisticRegression(features, coefficients)
+	predictedProbability := -1.0
+
+	if modelData.Kind == "LogisticRegression" {
+		predictedProbability = runLogisticRegression(features, coefficients)
+	}
 
 	return &AnalysisResult{
 		PredictedSecretProbability: predictedProbability,
@@ -93,7 +108,6 @@ func (a *Analyst) Analyze(model string, result *proto.Result) (*AnalysisResult, 
 }
 
 func runLogisticRegression(f *Features, c *Coefficients) float64 {
-
 	z := c.Intercept +
 		f.Entropy*c.Entropy +
 		f.LineHasKeyword*c.LineHasKeyword +
