@@ -15,11 +15,9 @@ require (
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.10.1
 	github.com/stretchr/testify v1.11.1
-	github.com/zricethezav/gitleaks/v8 v8.28.0
+	github.com/zricethezav/gitleaks/v8 v8.29.0
 	gopkg.in/yaml.v3 v3.0.1
 )
-
-replace github.com/zricethezav/gitleaks/v8 v8.28.0 => github.com/leaktk/gitleaks/v8 v8.24.3-0.20250923090937-8fd9677bfae2
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
@@ -69,6 +67,7 @@ require (
 	github.com/h2non/filetype v1.1.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
+	github.com/hashicorp/go-version v1.7.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
