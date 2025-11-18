@@ -123,7 +123,7 @@ func TestGitleaksConfigModTimeExceeds(t *testing.T) {
 
 		// Create a Patterns instance with the temporary file path
 		cfg := config.DefaultConfig()
-		cfg.Scanner.Patterns.Gitleaks.ConfigPath = tempFilePath
+		cfg.Scanner.Patterns.Gitleaks.LocalPath = tempFilePath
 
 		patterns := &Patterns{
 			config: &cfg.Scanner.Patterns,
@@ -138,7 +138,7 @@ func TestGitleaksConfigModTimeExceeds(t *testing.T) {
 
 	t.Run("FileDoesNotExist", func(t *testing.T) {
 		cfg := config.DefaultConfig()
-		cfg.Scanner.Patterns.Gitleaks.ConfigPath = "/path/to/nonexistent/file.toml"
+		cfg.Scanner.Patterns.Gitleaks.LocalPath = "/path/to/nonexistent/file.toml"
 
 		// Create a Patterns instance with a non-existent file path
 		patterns := &Patterns{
@@ -153,7 +153,7 @@ func TestGitleaksConfigModTimeExceeds(t *testing.T) {
 	t.Run("FileExistsButErrorOnStat", func(t *testing.T) {
 		// Create a Patterns instance with a file path that causes an error on Stat
 		cfg := config.DefaultConfig()
-		cfg.Scanner.Patterns.Gitleaks.ConfigPath = "/dev/zero"
+		cfg.Scanner.Patterns.Gitleaks.LocalPath = "/dev/zero"
 
 		patterns := &Patterns{
 			config: &cfg.Scanner.Patterns,
