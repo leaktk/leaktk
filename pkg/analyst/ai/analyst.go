@@ -109,18 +109,18 @@ func (a *Analyst) Analyze(model string, result *proto.Result) (*AnalysisResult, 
 
 func runLogisticRegression(f *Features, c *Coefficients) float64 {
 	z := c.Intercept +
-		f.Entropy*c.Entropy +
+		(f.Entropy/6.03598)*c.Entropy +
 		f.LineHasKeyword*c.LineHasKeyword +
-		f.NumNumbers*c.NumNumbers +
+		((f.NumNumbers-1)/456)*c.NumNumbers +
 		f.MatchHasKeyword*c.MatchHasKeyword +
 		f.LineHasConsecutiveTrigrams*c.LineHasConsecutiveTrigrams +
 		f.MatchHasConsecutiveTrigrams*c.MatchHasConsecutiveTrigrams +
 		f.SecretHasConsecutiveTrigrams*c.SecretHasConsecutiveTrigrams +
-		f.NumSpecial*c.NumSpecial +
+		(f.NumSpecial/90)*c.NumSpecial +
 		f.SecretHasKeyword*c.SecretHasKeyword +
 		f.LineHasRepeatingTrigrams*c.LineHasRepeatingTrigrams +
 		f.LineHasStopword*c.LineHasStopword +
-		f.SecretLength*c.SecretLength +
+		((f.SecretLength-1)/3495)*c.SecretLength +
 		f.SecretHasRepeatingTrigrams*c.SecretHasRepeatingTrigrams +
 		f.MatchHasRepeatingTrigrams*c.MatchHasRepeatingTrigrams +
 		f.SecretHasStopword*c.SecretHasStopword +

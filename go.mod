@@ -35,6 +35,7 @@ require (
 	github.com/bodgit/plumbing v1.3.0 // indirect
 	github.com/bodgit/sevenzip v1.6.0 // indirect
 	github.com/bodgit/windows v1.0.1 // indirect
+	github.com/cdipaolo/goml v0.0.0-20220715001353-00e0c845ae1c // indirect
 	github.com/charmbracelet/lipgloss v0.13.0 // indirect
 	github.com/charmbracelet/x/ansi v0.3.2 // indirect
 	github.com/containerd/cgroups/v3 v3.0.5 // indirect
