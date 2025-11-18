@@ -91,7 +91,7 @@ func (m *Models) leakTKConfigModTimeExceeds(modTimeLimit int) bool {
 		return false
 	}
 
-	if fileInfo, err := os.Stat(m.config.LeakTK.ConfigPath); err == nil {
+	if fileInfo, err := os.Stat(m.config.LeakTK.LocalPath); err == nil {
 		return int(time.Since(fileInfo.ModTime()).Seconds()) > modTimeLimit
 	}
 
@@ -119,14 +119,14 @@ func (m *Models) LeakTK(ctx context.Context) (*MLModelsConfig, error) {
 			return m.modelsConfig, fmt.Errorf("could not parse config: error=%q", err)
 		}
 
-		if err := os.MkdirAll(filepath.Dir(m.config.LeakTK.ConfigPath), 0700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(m.config.LeakTK.LocalPath), 0700); err != nil {
 			return m.modelsConfig, fmt.Errorf("could not create config dir: error=%q", err)
 		}
 
 		// only write the config after parsing it, that way we don't break a good
 		// existing config if the server returns an invalid response
-		if err := os.WriteFile(m.config.LeakTK.ConfigPath, []byte(rawConfig), 0600); err != nil {
-			return m.modelsConfig, fmt.Errorf("could not write config: path=%q error=%q", m.config.LeakTK.ConfigPath, err)
+		if err := os.WriteFile(m.config.LeakTK.LocalPath, []byte(rawConfig), 0600); err != nil {
+			return m.modelsConfig, fmt.Errorf("could not write config: path=%q error=%q", m.config.LeakTK.LocalPath, err)
 		}
 
 		// if hash := sha256.Sum256([]byte(rawConfig)); p.gitleaksConfigHash != hash {
@@ -137,11 +137,11 @@ func (m *Models) LeakTK(ctx context.Context) (*MLModelsConfig, error) {
 		if m.leakTKConfigModTimeExceeds(m.config.ExpiredAfter) {
 			return nil, fmt.Errorf(
 				"leaktk config is expired and autofetch is disabled: config_path=%q",
-				m.config.LeakTK.ConfigPath,
+				m.config.LeakTK.LocalPath,
 			)
 		}
 
-		rawConfig, err := os.ReadFile(m.config.LeakTK.ConfigPath)
+		rawConfig, err := os.ReadFile(m.config.LeakTK.LocalPath)
 		if err != nil {
 			return m.modelsConfig, err
 		}

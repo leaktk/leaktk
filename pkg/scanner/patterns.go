@@ -93,7 +93,7 @@ func (p *Patterns) gitleaksConfigModTimeExceeds(modTimeLimit int) bool {
 		return false
 	}
 
-	if fileInfo, err := os.Stat(p.config.Gitleaks.ConfigPath); err == nil {
+	if fileInfo, err := os.Stat(p.config.Gitleaks.LocalPath); err == nil {
 		return int(time.Since(fileInfo.ModTime()).Seconds()) > modTimeLimit
 	}
 
@@ -120,14 +120,14 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*gitleaksconfig.Config, error)
 			return p.gitleaksConfig, fmt.Errorf("could not parse config: error=%q", err)
 		}
 
-		if err := os.MkdirAll(filepath.Dir(p.config.Gitleaks.ConfigPath), 0700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(p.config.Gitleaks.LocalPath), 0700); err != nil {
 			return p.gitleaksConfig, fmt.Errorf("could not create config dir: error=%q", err)
 		}
 
 		// only write the config after parsing it, that way we don't break a good
 		// existing config if the server returns an invalid response
-		if err := os.WriteFile(p.config.Gitleaks.ConfigPath, []byte(rawConfig), 0600); err != nil {
-			return p.gitleaksConfig, fmt.Errorf("could not write config: path=%q error=%q", p.config.Gitleaks.ConfigPath, err)
+		if err := os.WriteFile(p.config.Gitleaks.LocalPath, []byte(rawConfig), 0600); err != nil {
+			return p.gitleaksConfig, fmt.Errorf("could not write config: path=%q error=%q", p.config.Gitleaks.LocalPath, err)
 		}
 
 		if hash := sha256.Sum256([]byte(rawConfig)); p.gitleaksConfigHash != hash {
@@ -138,11 +138,11 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*gitleaksconfig.Config, error)
 		if p.gitleaksConfigModTimeExceeds(p.config.ExpiredAfter) {
 			return nil, fmt.Errorf(
 				"gitleaks config is expired and autofetch is disabled: config_path=%q",
-				p.config.Gitleaks.ConfigPath,
+				p.config.Gitleaks.LocalPath,
 			)
 		}
 
-		rawConfig, err := os.ReadFile(p.config.Gitleaks.ConfigPath)
+		rawConfig, err := os.ReadFile(p.config.Gitleaks.LocalPath)
 		if err != nil {
 			return p.gitleaksConfig, err
 		}

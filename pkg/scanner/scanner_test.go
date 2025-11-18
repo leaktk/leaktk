@@ -21,7 +21,7 @@ func TestScanner(t *testing.T) {
 	cfg.Scanner.MaxArchiveDepth = 5
 	cfg.Scanner.ScanWorkers = 2
 	cfg.Scanner.Workdir = tempDir
-	cfg.Scanner.Patterns.Gitleaks.ConfigPath = filepath.Join(tempDir, "gitleaks.toml")
+	cfg.Scanner.Patterns.Gitleaks.LocalPath = filepath.Join(tempDir, "gitleaks.toml")
 
 	t.Run("RemoteScanSuccess", func(t *testing.T) {
 		scanner := NewScanner(cfg)
