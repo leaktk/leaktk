@@ -74,31 +74,27 @@ type (
 
 	// Patterns provides configuration for managing pattern updates
 	Patterns struct {
-		Autofetch    bool          `toml:"autofetch"`
-		ExpiredAfter int           `toml:"expired_after"`
-		Gitleaks     Gitleaks      `toml:"gitleaks"`
-		RefreshAfter int           `toml:"refresh_after"`
-		Server       PatternServer `toml:"server"`
+		Autofetch    bool                `toml:"autofetch"`
+		ExpiredAfter int                 `toml:"expired_after"`
+		Gitleaks     ProviderPatternsRef `toml:"gitleaks"`
+		LeakTK       ProviderPatternsRef `toml:"leaktk"`
+		RefreshAfter int                 `toml:"refresh_after"`
+		Server       PatternServer       `toml:"server"`
 	}
 
 	// Models provides configuration for managing model updates
 	Models struct {
-		Autofetch    bool        `toml:"autofetch"`
-		ExpiredAfter int         `toml:"expired_after"`
-		LeakTK       LeakTK      `toml:"leaktk"`
-		RefreshAfter int         `toml:"refresh_after"`
-		Server       ModelServer `toml:"server"`
+		Autofetch    bool                `toml:"autofetch"`
+		ExpiredAfter int                 `toml:"expired_after"`
+		LeakTK       ProviderPatternsRef `toml:"leaktk"`
+		RefreshAfter int                 `toml:"refresh_after"`
+		Server       ModelServer         `toml:"server"`
 	}
 
 	// Gitleaks holds version and config information for the Gitleaks scanner
-	Gitleaks struct {
-		Version    string `toml:"version"`
-		ConfigPath string `toml:"config_path"`
-	}
-
-	LeakTK struct {
-		Version    string `toml:"version"`
-		ConfigPath string `toml:"config_path"`
+	ProviderPatternsRef struct {
+		Version   string `toml:"version"`
+		LocalPath string `toml:"local_path"`
 	}
 
 	// PatternServer provides pattern server configuration settings for the scanner
@@ -139,10 +135,17 @@ func setMissingValues(cfg *Config) *Config {
 		cfg.Scanner.Patterns.Server.AuthToken = authToken
 	}
 
-	if len(cfg.Scanner.Patterns.Gitleaks.ConfigPath) == 0 {
-		cfg.Scanner.Patterns.Gitleaks.ConfigPath = filepath.Join(
+	if len(cfg.Scanner.Patterns.Gitleaks.LocalPath) == 0 {
+		cfg.Scanner.Patterns.Gitleaks.LocalPath = filepath.Join(
 			cfg.Scanner.Workdir, "patterns", "gitleaks",
 			cfg.Scanner.Patterns.Gitleaks.Version,
+		)
+	}
+
+	if len(cfg.Scanner.Patterns.LeakTK.LocalPath) == 0 {
+		cfg.Scanner.Patterns.LeakTK.LocalPath = filepath.Join(
+			cfg.Scanner.Workdir, "patterns", "leaktk",
+			cfg.Scanner.Patterns.LeakTK.Version,
 		)
 	}
 
@@ -221,7 +224,7 @@ func DefaultConfig() *Config {
 				Autofetch:    true,
 				ExpiredAfter: 60 * 60 * 12 * 14, // 7 days
 				RefreshAfter: 60 * 60 * 12,      // 12 hours
-				Gitleaks: Gitleaks{
+				Gitleaks: ProviderPatternsRef{
 					Version: "8.18.2",
 				},
 				Server: PatternServer{
@@ -232,9 +235,8 @@ func DefaultConfig() *Config {
 				Autofetch:    true,
 				ExpiredAfter: 60 * 60 * 12 * 14, // 7 days
 				RefreshAfter: 60 * 60 * 12,      // 12 hours
-				LeakTK: LeakTK{
-					Version:    "1",
-					ConfigPath: "~/.leaktk/models.json",
+				LeakTK: ProviderPatternsRef{
+					Version: "1",
 				},
 				Server: ModelServer{
 					URL: "https://raw.githubusercontent.com/alayne222/patterns/refs/heads/main",
