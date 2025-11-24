@@ -155,4 +155,31 @@ func TestScanner(t *testing.T) {
 		wg.Wait()
 
 	})
+
+	t.Run("depth", func(t *testing.T) {
+		tests := []struct {
+			providedDepth      int
+			maxDepth           int
+			expectedScanDepth  int
+			expectedCloneDepth int
+		}{
+			// No max was provided and no depth was set, so no depth is returned
+			{0, 0, 0, 0},
+			// A depth of one was provided but no max, so we over clone by one and scan one
+			{3, 0, 3, 4},
+			// No depth was provided but a max depth was set so we limit to the max (+1 for the over clone)
+			{0, 10, 10, 11},
+			// Depth provided but it's less than the max
+			{8, 10, 8, 9},
+			// Depth provided and it's more than the max
+			{20, 10, 10, 11},
+		}
+
+		for _, tt := range tests {
+			actualCloneDepth := cloneDepth(tt.providedDepth, tt.maxDepth)
+			assert.Equal(t, tt.expectedCloneDepth, actualCloneDepth, "cloneDepth")
+			actualScanDepth := scanDepth(tt.providedDepth, tt.maxDepth)
+			assert.Equal(t, tt.expectedScanDepth, actualScanDepth, "scanDepth")
+		}
+	})
 }
