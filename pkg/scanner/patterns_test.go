@@ -27,7 +27,21 @@ description = "test-rule"
 regex = '''test-rule'''
 `
 
-func TestPatternsFetchGitleaksConfig(t *testing.T) {
+func setupPatterns(patternsCfg *config.Patterns, client *http.Client) *Patterns {
+	// 1. Ensure fetch logic runs by forcing expiration/autofetch
+	patternsCfg.Autofetch = true
+	patternsCfg.RefreshAfter = 1
+
+	// 2. Clean up any local files to ensure fetching occurs
+	if len(patternsCfg.Gitleaks.LocalPath) > 0 {
+		os.Remove(patternsCfg.Gitleaks.LocalPath)
+	}
+
+	// 3. Use the existing NewPatterns constructor
+	return NewPatterns(patternsCfg, client)
+}
+
+func TestPatternsGitleaks(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Success", func(t *testing.T) {
@@ -46,27 +60,34 @@ func TestPatternsFetchGitleaksConfig(t *testing.T) {
 		cfg.Scanner.Patterns.Gitleaks.Version = "x.y.z"
 
 		client := httpclient.NewClient()
-		p := NewPatterns(&cfg.Scanner.Patterns, client)
+		// Use the helper to initialize the consolidated struct
+		p := setupPatterns(&cfg.Scanner.Patterns, client)
 
-		rawConfig, err := p.fetchGitleaksConfig(ctx)
+		// Call the public method that now contains the fetch logic
+		gitleaksCfg, err := p.Gitleaks(ctx)
+
 		require.NoError(t, err)
-		assert.Contains(t, rawConfig, "test-rule")
+		require.NotNil(t, gitleaksCfg)
 	})
 
 	t.Run("InvalidURL", func(t *testing.T) {
 		cfg := config.DefaultConfig()
+		// Invalid URL that will cause a network error during fetch
 		cfg.Scanner.Patterns.Server.URL = "invalid-url"
 		cfg.Scanner.Patterns.Gitleaks.Version = "x.y.z"
 
 		client := httpclient.NewClient()
-		p := NewPatterns(&cfg.Scanner.Patterns, client)
+		p := setupPatterns(&cfg.Scanner.Patterns, client)
 
-		_, err := p.fetchGitleaksConfig(ctx)
+		// Call the public method
+		_, err := p.Gitleaks(ctx)
+		// The error will be a network-related error from the fetch logic
 		require.Error(t, err)
 	})
 
 	t.Run("HTTPError", func(t *testing.T) {
 		ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Server returns a non-200 status code
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
 		ts.Start()
@@ -77,16 +98,20 @@ func TestPatternsFetchGitleaksConfig(t *testing.T) {
 		cfg.Scanner.Patterns.Gitleaks.Version = "x.y.z"
 
 		client := httpclient.NewClient()
-		p := NewPatterns(&cfg.Scanner.Patterns, client)
+		p := setupPatterns(&cfg.Scanner.Patterns, client)
 
-		_, err := p.fetchGitleaksConfig(ctx)
+		// Call the public method
+		_, err := p.Gitleaks(ctx)
 		require.Error(t, err)
+		// The error will be the one returned by fetchConfig/Gitleaks for bad status
+		assert.Contains(t, err.Error(), "unexpected status code")
 	})
 
 	t.Run("WithAuthToken", func(t *testing.T) {
 		ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "GET", r.Method)
 			assert.Equal(t, "/patterns/gitleaks/x.y.z", r.URL.Path)
+			// Assert that the Authorization header was correctly set
 			assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 			w.WriteHeader(http.StatusOK)
 			_, err := io.WriteString(w, mockConfig)
@@ -101,11 +126,11 @@ func TestPatternsFetchGitleaksConfig(t *testing.T) {
 		cfg.Scanner.Patterns.Gitleaks.Version = "x.y.z"
 
 		client := httpclient.NewClient()
-		p := NewPatterns(&cfg.Scanner.Patterns, client)
+		p := setupPatterns(&cfg.Scanner.Patterns, client)
 
-		rawConfig, err := p.fetchGitleaksConfig(ctx)
+		// Call the public method
+		_, err := p.Gitleaks(ctx)
 		require.NoError(t, err)
-		assert.Contains(t, rawConfig, "test-rule")
 	})
 }
 
@@ -126,14 +151,14 @@ func TestGitleaksConfigModTimeExceeds(t *testing.T) {
 		cfg.Scanner.Patterns.Gitleaks.LocalPath = tempFilePath
 
 		patterns := &Patterns{
-			config: &cfg.Scanner.Patterns,
+			patternsConfig: &cfg.Scanner.Patterns,
 		}
 
 		// Test with a modTimeLimit of 5 seconds
-		assert.True(t, patterns.gitleaksConfigModTimeExceeds(5))
+		assert.True(t, patterns.configModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
 
 		// Test with a modTimeLimit of 15 seconds
-		assert.False(t, patterns.gitleaksConfigModTimeExceeds(15))
+		assert.False(t, patterns.configModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
 	})
 
 	t.Run("FileDoesNotExist", func(t *testing.T) {
@@ -142,12 +167,12 @@ func TestGitleaksConfigModTimeExceeds(t *testing.T) {
 
 		// Create a Patterns instance with a non-existent file path
 		patterns := &Patterns{
-			config: &cfg.Scanner.Patterns,
+			patternsConfig: &cfg.Scanner.Patterns,
 		}
 
 		// Test with any modTimeLimit
-		assert.True(t, patterns.gitleaksConfigModTimeExceeds(5))
-		assert.True(t, patterns.gitleaksConfigModTimeExceeds(15))
+		assert.True(t, patterns.configModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
+		assert.True(t, patterns.configModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
 	})
 
 	t.Run("FileExistsButErrorOnStat", func(t *testing.T) {
@@ -156,11 +181,11 @@ func TestGitleaksConfigModTimeExceeds(t *testing.T) {
 		cfg.Scanner.Patterns.Gitleaks.LocalPath = "/dev/zero"
 
 		patterns := &Patterns{
-			config: &cfg.Scanner.Patterns,
+			patternsConfig: &cfg.Scanner.Patterns,
 		}
 
 		// Test with any modTimeLimit
-		assert.True(t, patterns.gitleaksConfigModTimeExceeds(5))
-		assert.True(t, patterns.gitleaksConfigModTimeExceeds(15))
+		assert.True(t, patterns.configModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
+		assert.True(t, patterns.configModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
 	})
 }

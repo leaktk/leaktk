@@ -80,11 +80,11 @@ func NewScanner(cfg *config.Config) *Scanner {
 		maxDecodeDepth:   cfg.Scanner.MaxDecodeDepth,
 		maxScanDepth:     cfg.Scanner.MaxScanDepth,
 		patterns:         NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
-		models:           ai.NewModels(&cfg.Scanner.Models, httpclient.NewClient()),
+		models:           ai.NewModels(&cfg.Scanner.Patterns, httpclient.NewClient()),
 		responseQueue:    queue.NewPriorityQueue[*proto.Response](queueSize),
 		scanQueue:        queue.NewPriorityQueue[*proto.Request](queueSize),
 		scanWorkers:      cfg.Scanner.ScanWorkers,
-		aiAnalyst:        ai.NewAnalyst(ai.NewModels(&cfg.Scanner.Models, httpclient.NewClient())),
+		aiAnalyst:        ai.NewAnalyst(ai.NewModels(&cfg.Scanner.Patterns, httpclient.NewClient())),
 		Analyst:          analystInstance,
 		analyzeResponses: true,
 	}

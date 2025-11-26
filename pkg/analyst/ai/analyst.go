@@ -140,3 +140,12 @@ func convertCoefficients(coeffMap map[string]float64) (*Coefficients, error) {
 	}
 	return &c, nil
 }
+
+func ParseConfig(rawConfig string) (*MLModelsConfig, error) {
+	config := &MLModelsConfig{}
+	err := json.Unmarshal([]byte(rawConfig), config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal ML models config: %w", err)
+	}
+	return config, nil
+}

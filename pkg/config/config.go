@@ -66,7 +66,6 @@ type (
 		MaxDecodeDepth  int      `toml:"max_decode_depth"`
 		MaxScanDepth    int      `toml:"max_scan_depth"`
 		Patterns        Patterns `toml:"patterns"`
-		Models          Models   `toml:"models"`
 		ScanWorkers     int      `toml:"scan_workers"`
 		Workdir         string   `toml:"workdir"`
 		EnableAnalysis  bool     `yaml:"enable_analysis"` //Experimental
@@ -80,15 +79,6 @@ type (
 		LeakTK       ProviderPatternsRef `toml:"leaktk"`
 		RefreshAfter int                 `toml:"refresh_after"`
 		Server       PatternServer       `toml:"server"`
-	}
-
-	// Models provides configuration for managing model updates
-	Models struct {
-		Autofetch    bool                `toml:"autofetch"`
-		ExpiredAfter int                 `toml:"expired_after"`
-		LeakTK       ProviderPatternsRef `toml:"leaktk"`
-		RefreshAfter int                 `toml:"refresh_after"`
-		Server       ModelServer         `toml:"server"`
 	}
 
 	// Gitleaks holds version and config information for the Gitleaks scanner
@@ -227,19 +217,11 @@ func DefaultConfig() *Config {
 				Gitleaks: ProviderPatternsRef{
 					Version: "8.18.2",
 				},
-				Server: PatternServer{
-					URL: "https://raw.githubusercontent.com/leaktk/patterns/main/target",
-				},
-			},
-			Models: Models{
-				Autofetch:    true,
-				ExpiredAfter: 60 * 60 * 12 * 14, // 7 days
-				RefreshAfter: 60 * 60 * 12,      // 12 hours
 				LeakTK: ProviderPatternsRef{
 					Version: "1",
 				},
-				Server: ModelServer{
-					URL: "https://raw.githubusercontent.com/alayne222/patterns/refs/heads/main",
+				Server: PatternServer{
+					URL: "https://raw.githubusercontent.com/leaktk/patterns/main/target",
 				},
 			},
 		},

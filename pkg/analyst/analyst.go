@@ -158,3 +158,13 @@ func AnalyzeCommand(ctx context.Context, inputPath string) error {
 
 	return AnalyzeStream(analyst, r, os.Stdout)
 }
+
+func (m *Models) parseConfig(rawConfig string) (*MLModelsConfig, error) {
+	var modelsConfig MLModelsConfig
+	err := json.Unmarshal([]byte(rawConfig), &modelsConfig)
+	if err != nil {
+		return nil, err
+	}
+	logger.Info("successfully parsed %d models", len(modelsConfig.Models))
+	return &modelsConfig, nil
+}

@@ -14,27 +14,91 @@ import (
 
 	gitleaksconfig "github.com/zricethezav/gitleaks/v8/config"
 
+	"github.com/leaktk/leaktk/pkg/analyst/ai"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/scanner/gitleaks"
 )
 
-// Patterns acts as an abstraction for fetching different scanner patterns
-// and keeping them up to date and cached
+// Patterns manages fetching, caching, and updating configuration for
+// both gitleaks patterns and LeakTK ML models.
 type Patterns struct {
-	client             *http.Client
-	config             *config.Patterns
+	client *http.Client
+	mutex  sync.Mutex
+
+	// Gitleaks Patterns fields
+	patternsConfig     *config.Patterns
 	gitleaksConfigHash [32]byte
 	gitleaksConfig     *gitleaksconfig.Config
-	mutex              sync.Mutex
+
+	// LeakTK Models fields
+	modelsConfig *ai.MLModelsConfig
 }
 
-// NewPatterns returns a configured instance of Patterns
-func NewPatterns(cfg *config.Patterns, client *http.Client) *Patterns {
+// NewConfigFetcher returns a configured instance of Patterns.
+func NewPatterns(patternsCfg *config.Patterns, client *http.Client) *Patterns {
 	return &Patterns{
-		client: client,
-		config: cfg,
+		client:         client,
+		patternsConfig: patternsCfg,
 	}
+}
+
+// --- Generic Helpers ---
+
+// configModTimeExceeds returns true if the local configuration file at 'path'
+// is older than 'modTimeLimit' seconds.
+func (c *Patterns) configModTimeExceeds(path string, modTimeLimit int) bool {
+	// When modTimeLimit is 0, expiration checking is effectively disabled.
+	if modTimeLimit == 0 {
+		return false
+	}
+
+	if fileInfo, err := os.Stat(path); err == nil {
+		return int(time.Since(fileInfo.ModTime()).Seconds()) > modTimeLimit
+	}
+
+	// If os.Stat fails (e.g., file doesn't exist), assume we need to fetch.
+	return true
+}
+
+// fetchConfig fetches the raw config file from the server.
+func (c *Patterns) fetchConfig(ctx context.Context, configURL string, authToken string) (string, error) {
+	logger.Debug("config url: url=%q", configURL)
+
+	request, err := http.NewRequestWithContext(ctx, "GET", configURL, nil)
+	if err != nil {
+		return "", err
+	}
+
+	if len(authToken) > 0 {
+		logger.Debug("setting authorization header")
+		request.Header.Add(
+			"Authorization",
+			"Bearer "+authToken,
+		)
+	}
+
+	response, err := c.client.Do(request)
+	if err != nil {
+		return "", err
+	}
+
+	defer (func() {
+		if closeErr := response.Body.Close(); closeErr != nil {
+			logger.Debug("error closing pattern response body: %v", closeErr)
+		}
+	})()
+
+	if response.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected status code: status_code=%d", response.StatusCode)
+	}
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return string(body), nil
 }
 
 func (p *Patterns) fetchGitleaksConfig(ctx context.Context) (string, error) {
@@ -84,85 +148,174 @@ func (p *Patterns) fetchGitleaksConfig(ctx context.Context) (string, error) {
 	return string(body), err
 }
 
-// gitleaksConfigModTimeExceeds returns true if the file is older than
-// `modTimeLimit` seconds
-func (p *Patterns) gitleaksConfigModTimeExceeds(modTimeLimit int) bool {
-	// When modTimeLimit is 0, expiration checking is effectively disabled
-	// and gitleaksConfigModTimeExceeds returns false in this case.
-	if modTimeLimit == 0 {
-		return false
-	}
+// --- Gitleaks Config Methods ---
 
-	if fileInfo, err := os.Stat(p.config.Gitleaks.LocalPath); err == nil {
-		return int(time.Since(fileInfo.ModTime()).Seconds()) > modTimeLimit
-	}
-
-	return true
+func (c *Patterns) gitleaksFetchURL() (string, error) {
+	return url.JoinPath(
+		c.patternsConfig.Server.URL, "patterns", "gitleaks", c.patternsConfig.Gitleaks.Version,
+	)
 }
 
-// Gitleaks returns a Gitleaks config object if it's able to
-func (p *Patterns) Gitleaks(ctx context.Context) (*gitleaksconfig.Config, error) {
-	// Lock since this updates the value of p.gitleaksConfig on the fly
-	// and updates files on the filesystem
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
+// Gitleaks returns a Gitleaks config object, fetching/caching/updating as necessary.
+func (c *Patterns) Gitleaks(ctx context.Context) (*gitleaksconfig.Config, error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
-	if p.config.Autofetch && p.gitleaksConfigModTimeExceeds(p.config.RefreshAfter) {
-		rawConfig, err := p.fetchGitleaksConfig(ctx)
+	cfg := c.patternsConfig
+	localPath := cfg.Gitleaks.LocalPath
+	modTimeExceeds := c.configModTimeExceeds(localPath, cfg.RefreshAfter)
+
+	if cfg.Autofetch && modTimeExceeds {
+		logger.Info("fetching gitleaks patterns")
+		patternURL, err := c.gitleaksFetchURL()
 		if err != nil {
-			return p.gitleaksConfig, err
+			return c.gitleaksConfig, err
 		}
 
-		p.gitleaksConfig, err = gitleaks.ParseConfig(rawConfig)
+		rawConfig, err := c.fetchConfig(ctx, patternURL, cfg.Server.AuthToken)
+		if err != nil {
+			return c.gitleaksConfig, err
+		}
+
+		newConfig, err := gitleaks.ParseConfig(rawConfig)
 		if err != nil {
 			logger.Debug("fetched config:\n%s", rawConfig)
+			return c.gitleaksConfig, fmt.Errorf("could not parse gitleaks config: error=%q", err)
+		}
+		c.gitleaksConfig = newConfig
 
-			return p.gitleaksConfig, fmt.Errorf("could not parse config: error=%q", err)
+		if err := c.updateLocalConfig(localPath, rawConfig); err != nil {
+			return c.gitleaksConfig, err
 		}
 
-		if err := os.MkdirAll(filepath.Dir(p.config.Gitleaks.LocalPath), 0700); err != nil {
-			return p.gitleaksConfig, fmt.Errorf("could not create config dir: error=%q", err)
+		if hash := sha256.Sum256([]byte(rawConfig)); c.gitleaksConfigHash != hash {
+			c.gitleaksConfigHash = hash
+			logger.Info("updated gitleaks patterns: hash=%s", c.GitleaksConfigHash())
 		}
-
-		// only write the config after parsing it, that way we don't break a good
-		// existing config if the server returns an invalid response
-		if err := os.WriteFile(p.config.Gitleaks.LocalPath, []byte(rawConfig), 0600); err != nil {
-			return p.gitleaksConfig, fmt.Errorf("could not write config: path=%q error=%q", p.config.Gitleaks.LocalPath, err)
-		}
-
-		if hash := sha256.Sum256([]byte(rawConfig)); p.gitleaksConfigHash != hash {
-			p.gitleaksConfigHash = hash
-			logger.Info("updated gitleaks patterns: hash=%s", p.GitleaksConfigHash())
-		}
-	} else if p.gitleaksConfig == nil {
-		if p.gitleaksConfigModTimeExceeds(p.config.ExpiredAfter) {
+	} else if c.gitleaksConfig == nil {
+		if c.configModTimeExceeds(localPath, cfg.ExpiredAfter) {
 			return nil, fmt.Errorf(
 				"gitleaks config is expired and autofetch is disabled: config_path=%q",
-				p.config.Gitleaks.LocalPath,
+				localPath,
 			)
 		}
 
-		rawConfig, err := os.ReadFile(p.config.Gitleaks.LocalPath)
+		rawConfig, err := os.ReadFile(localPath)
 		if err != nil {
-			return p.gitleaksConfig, err
+			return c.gitleaksConfig, err
 		}
 
-		p.gitleaksConfig, err = gitleaks.ParseConfig(string(rawConfig))
+		newConfig, err := gitleaks.ParseConfig(string(rawConfig))
 		if err != nil {
 			logger.Debug("loaded config:\n%s\n", rawConfig)
-
-			return p.gitleaksConfig, fmt.Errorf("could not parse config: error=%q", err)
+			return c.gitleaksConfig, fmt.Errorf("could not parse gitleaks config: error=%q", err)
 		}
+		c.gitleaksConfig = newConfig
 
-		if hash := sha256.Sum256(rawConfig); p.gitleaksConfigHash != hash {
-			p.gitleaksConfigHash = hash
+		if hash := sha256.Sum256(rawConfig); c.gitleaksConfigHash != hash {
+			c.gitleaksConfigHash = hash
 		}
 	}
 
-	return p.gitleaksConfig, nil
+	return c.gitleaksConfig, nil
 }
 
-// GitleaksConfigHash returns the sha256 hash for the current gitleaks config
-func (p *Patterns) GitleaksConfigHash() string {
-	return fmt.Sprintf("%x", p.gitleaksConfigHash)
+// GitleaksConfigHash returns the sha256 hash for the current gitleaks config.
+func (c *Patterns) GitleaksConfigHash() string {
+	return fmt.Sprintf("%x", c.gitleaksConfigHash)
+}
+
+// --- LeakTK Models Methods ---
+
+func (c *Patterns) leakTKFetchURL() (string, error) {
+	return url.JoinPath(
+		c.patternsConfig.Server.URL, "models", "leaktk", c.patternsConfig.LeakTK.Version,
+	)
+}
+
+// LeakTK returns a LeakTK Models config object, fetching/caching/updating as necessary.
+func (c *Patterns) LeakTK(ctx context.Context) (*ai.MLModelsConfig, error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	cfg := c.patternsConfig
+	localPath := cfg.LeakTK.LocalPath
+	modTimeExceeds := c.configModTimeExceeds(localPath, cfg.RefreshAfter)
+
+	if cfg.Autofetch && modTimeExceeds {
+		logger.Info("fetching leaktk models")
+		modelURL, err := c.leakTKFetchURL()
+		if err != nil {
+			return c.modelsConfig, err
+		}
+
+		rawConfig, err := c.fetchConfig(ctx, modelURL, cfg.Server.AuthToken)
+		if err != nil {
+			return c.modelsConfig, err
+		}
+
+		newConfig, err := c.parseMLModelsConfig(rawConfig)
+		if err != nil {
+			logger.Debug("fetched config:\n%s", rawConfig)
+			return c.modelsConfig, fmt.Errorf("could not parse leaktk models config: error=%q", err)
+		}
+		c.modelsConfig = newConfig
+
+		if err := c.updateLocalConfig(localPath, rawConfig); err != nil {
+			return c.modelsConfig, err
+		}
+
+		// NOTE: The original code for LeakTK did not update a hash, but you could add one here if needed.
+		// if hash := sha256.Sum256([]byte(rawConfig)); c.modelsConfigHash != hash {
+		// 	c.modelsConfigHash = hash
+		// 	logger.Info("updated leaktk models")
+		// }
+	} else if c.modelsConfig == nil {
+		if c.configModTimeExceeds(localPath, cfg.ExpiredAfter) {
+			return nil, fmt.Errorf(
+				"leaktk config is expired and autofetch is disabled: config_path=%q",
+				localPath,
+			)
+		}
+
+		rawConfig, err := os.ReadFile(localPath)
+		if err != nil {
+			return c.modelsConfig, err
+		}
+
+		newConfig, err := c.parseMLModelsConfig(string(rawConfig))
+		if err != nil {
+			logger.Debug("loaded config:\n%s\n", rawConfig)
+			return c.modelsConfig, fmt.Errorf("could not parse leaktk models config: error=%q", err)
+		}
+		c.modelsConfig = newConfig
+
+		// NOTE: Same as above, add hash update if necessary.
+	}
+
+	return c.modelsConfig, nil
+}
+
+// updateLocalConfig writes the raw config content to the specified local file path.
+// It creates the directory if it does not exist.
+func (c *Patterns) updateLocalConfig(localPath, rawConfig string) error {
+	if err := os.MkdirAll(filepath.Dir(localPath), 0700); err != nil {
+		return fmt.Errorf("could not create config dir: error=%q", err)
+	}
+
+	// Only write the config after successful parsing
+	if err := os.WriteFile(localPath, []byte(rawConfig), 0600); err != nil {
+		return fmt.Errorf("could not write config: path=%q error=%q", localPath, err)
+	}
+	return nil
+}
+
+func (c *Patterns) parseMLModelsConfig(rawConfig string) (*ai.MLModelsConfig, error) {
+	// Calls the external parser from the 'ai' package.
+	config, err := ai.ParseConfig(rawConfig)
+	if err != nil {
+		// Adds context-specific error wrapping.
+		return nil, fmt.Errorf("failed to parse LeakTK models config: %w", err)
+	}
+	return config, nil
 }
