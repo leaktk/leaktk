@@ -19,12 +19,12 @@ import (
 
 type Models struct {
 	client       *http.Client
-	config       *config.Models
+	config       *config.Patterns
 	modelsConfig *MLModelsConfig
 	mutex        sync.Mutex
 }
 
-func NewModels(cfg *config.Models, client *http.Client) *Models {
+func NewModels(cfg *config.Patterns, client *http.Client) *Models {
 	return &Models{
 		client: client,
 		config: cfg,

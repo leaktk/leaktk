@@ -18,6 +18,14 @@ type Analyst struct {
 	ctx   context.Context
 }
 
+type OPAConfig struct {
+	Policy OPAData `json:"opa_policy"`
+}
+
+type OPAData struct {
+	Rego string `json:"rego"`
+}
+
 // NewAnalyst initializes and prepares the Rego engine. This should be called only once.
 func NewAnalyst(ctx context.Context, policyContent string) (*Analyst, error) {
 	query, err := rego.New(
@@ -157,14 +165,4 @@ func AnalyzeCommand(ctx context.Context, inputPath string) error {
 	}()
 
 	return AnalyzeStream(analyst, r, os.Stdout)
-}
-
-func (m *Models) parseConfig(rawConfig string) (*MLModelsConfig, error) {
-	var modelsConfig MLModelsConfig
-	err := json.Unmarshal([]byte(rawConfig), &modelsConfig)
-	if err != nil {
-		return nil, err
-	}
-	logger.Info("successfully parsed %d models", len(modelsConfig.Models))
-	return &modelsConfig, nil
 }
