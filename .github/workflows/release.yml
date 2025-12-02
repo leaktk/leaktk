@@ -1,7 +1,7 @@
 name: Build, sign and upload release artifacts
 
 env:
-  GO_VERSION: '1.23'
+  GO_VERSION: '1.24'
   GO111MODULE: on
 
 on:
