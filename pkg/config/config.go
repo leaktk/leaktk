@@ -45,6 +45,11 @@ type (
 		Logger    Logger    `toml:"logger"`
 		Scanner   Scanner   `toml:"scanner"`
 		Formatter Formatter `toml:"formatter"`
+		Monitor   Monitor   `toml:"monitor"`
+		Sources   []Source  `toml:"sources"`
+
+		// built internally from Sources and not set directly
+		SourcesByID map[string]Source `toml:"-"`
 	}
 
 	// Formatter provides a general output format config
@@ -91,10 +96,26 @@ type (
 		AuthToken string `toml:"auth_token"`
 		URL       string `toml:"url"`
 	}
+
+	// Monitor provides configuration for monitoring sources and generating
+	// scan requests
+	Monitor struct {
+		SourceIDs []string `toml:"source_ids"`
+	}
+
+	// Source provides configuration for fetching resources from a configured source
+	Source struct {
+		ID   string     `toml:"id"`
+		Kind SourceKind `toml:"kind"`
+		URL  string     `toml:"url"`
+	}
+
+	// SourceKind tells scanner what kind of source it's working with
+	SourceKind string // TODO: turn into an enum
 )
 
 // Make sure that any config returned to the code goes through this function
-func setMissingValues(cfg *Config) *Config {
+func setMissingValues(cfg *Config) (*Config, error) {
 	envLoggerLevel := os.Getenv("LEAKTK_LOGGER_LEVEL")
 	if len(envLoggerLevel) > 0 {
 		cfg.Logger.Level = envLoggerLevel
@@ -125,7 +146,22 @@ func setMissingValues(cfg *Config) *Config {
 		)
 	}
 
-	return cfg
+	// Map sources by ID for direct access to a specific source and ensure each
+	// has a unique ID
+	cfg.SourcesByID = make(map[string]Source, len(cfg.Sources))
+	for i, srcCfg := range cfg.Sources {
+		if len(srcCfg.ID) == 0 {
+			return nil, fmt.Errorf("source config missing ID: index=%d", i)
+		}
+
+		if _, exists := cfg.SourcesByID[srcCfg.ID]; exists {
+			return nil, fmt.Errorf("duplicate source config ID detected: id=%q", srcCfg.ID)
+		} else {
+			cfg.SourcesByID[srcCfg.ID] = srcCfg
+		}
+	}
+
+	return cfg, nil
 }
 
 func loadPatternServerAuthTokenFromFile(path string) string {
@@ -223,7 +259,7 @@ func LoadConfigFromFile(path string) (*Config, error) {
 		return nil, err
 	}
 
-	return setMissingValues(cfg), err
+	return setMissingValues(cfg)
 }
 
 // LocateAndLoadConfig looks through the possible places for the config
@@ -253,7 +289,7 @@ func LocateAndLoadConfig(path string) (*Config, error) {
 		return LoadConfigFromFile(path)
 	}
 
-	return setMissingValues(DefaultConfig()), nil
+	return setMissingValues(DefaultConfig())
 }
 
 // SavePatternServerAuthToken saves the token in the path where it should go

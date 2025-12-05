@@ -52,8 +52,7 @@ type Scanner struct {
 	scanWorkers     int
 }
 
-// NewScanner returns a initialized and listening scanner instance that should
-// be closed when it's no longer needed.
+// NewScanner returns a initialized and listening scanner instance
 func NewScanner(cfg *config.Config) *Scanner {
 	scanner := &Scanner{
 		allowLocal:      cfg.Scanner.AllowLocal,

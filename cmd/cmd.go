@@ -17,6 +17,7 @@ import (
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/pkg/monitor"
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/scanner"
 	"github.com/leaktk/leaktk/pkg/version"
@@ -127,7 +128,7 @@ func runScan(cmd *cobra.Command, args []string) {
 		}
 		fmt.Println(formatter.Format(response))
 		if response.Error != nil {
-			logger.Fatal("response contains error: %w", response.Error)
+			logger.Fatal("response contains error: %v", response.Error)
 		}
 		wg.Done()
 	})
@@ -236,6 +237,42 @@ func readLine(reader *bufio.Reader) ([]byte, error) {
 		if err != nil || !isPrefix {
 			return buf.Bytes(), err
 		}
+	}
+}
+
+func runMonitor(cmd *cobra.Command, args []string) {
+	// Initial sanity checks since there wouldn't be anything to monitor if no
+	// sources are listed
+	monSrcIDSize := len(cfg.Monitor.SourceIDs)
+	if monSrcIDSize == 0 {
+		logger.Fatal("no source IDs listed to monitor")
+	}
+
+	// Load the sources from the config
+	sources := make([]monitor.Source, 0, monSrcIDSize)
+	for i, id := range cfg.Monitor.SourceIDs {
+		if srcCfg, ok := cfg.SourcesByID[id]; ok {
+			sources[i] = monitor.NewSource(srcCfg)
+		} else {
+			logger.Fatal("monitor source id not defined in sources: id=%q", id)
+		}
+	}
+
+	monitor.NewMonitor(sources).ScanRequests(func(request *proto.Request) {
+		data, err := json.Marshal(request)
+		if err != nil {
+			logger.Error("could not marshal scan request: %v %v", err, request)
+		} else {
+			fmt.Println(string(data))
+		}
+	})
+}
+
+func monitorCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "monitor",
+		Short: "Monitor configured sources for leaks",
+		Run:   runMonitor,
 	}
 }
 
@@ -366,6 +403,7 @@ func rootCommand() *cobra.Command {
 	rootCommand.AddCommand(logoutCommand())
 	rootCommand.AddCommand(scanCommand())
 	rootCommand.AddCommand(listenCommand())
+	rootCommand.AddCommand(monitorCommand())
 	rootCommand.AddCommand(versionCommand())
 
 	return rootCommand
