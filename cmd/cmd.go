@@ -20,6 +20,7 @@ import (
 	"github.com/leaktk/leaktk/pkg/monitor"
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/scanner"
+	"github.com/leaktk/leaktk/pkg/sources"
 	"github.com/leaktk/leaktk/pkg/version"
 )
 
@@ -249,16 +250,20 @@ func runMonitor(cmd *cobra.Command, args []string) {
 	}
 
 	// Load the sources from the config
-	sources := make([]monitor.Source, 0, monSrcIDSize)
+	srcs := make([]sources.Source, 0, monSrcIDSize)
 	for i, id := range cfg.Monitor.SourceIDs {
-		if srcCfg, ok := cfg.SourcesByID[id]; ok {
-			sources[i] = monitor.NewSource(srcCfg)
-		} else {
+		srcCfg, srcExists := cfg.SourcesByID[id]
+		if !srcExists {
 			logger.Fatal("monitor source id not defined in sources: id=%q", id)
 		}
+		src, err := sources.NewSource(srcCfg)
+		if err != nil {
+			logger.Fatal("error creating source: %v monitor_source_id_index=%d", err, i)
+		}
+		srcs[i] = src
 	}
 
-	monitor.NewMonitor(sources).ScanRequests(func(request *proto.Request) {
+	monitor.NewMonitor(srcs).ScanRequests(func(request *proto.Request) {
 		data, err := json.Marshal(request)
 		if err != nil {
 			logger.Error("could not marshal scan request: %v %v", err, request)

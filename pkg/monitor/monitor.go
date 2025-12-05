@@ -3,14 +3,15 @@ package monitor
 import (
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/queue"
+	"github.com/leaktk/leaktk/pkg/sources"
 )
 
 type Monitor struct {
 	scanRequestQueue *queue.PriorityQueue[*proto.Request]
-	sources          []Source
+	sources          []sources.Source
 }
 
-func NewMonitor(sources []Source) *Monitor {
+func NewMonitor(sources []sources.Source) *Monitor {
 	// It's expected the queue should flush pretty quick but this gives
 	// some extra room in case it hasn't flused by the time the monitor has a
 	// new scan request ready

@@ -109,9 +109,6 @@ type (
 		Kind SourceKind `toml:"kind"`
 		URL  string     `toml:"url"`
 	}
-
-	// SourceKind tells scanner what kind of source it's working with
-	SourceKind string // TODO: turn into an enum
 )
 
 // Make sure that any config returned to the code goes through this function
