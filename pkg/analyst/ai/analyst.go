@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -54,11 +53,7 @@ type Coefficients struct {
 	SecretHasDictionaryWord      float64 `json:"secret_has_dictionary_word"`
 }
 
-func (a *Analyst) Analyze(model string, result *proto.Result) (*AnalysisResult, error) {
-	modelsConfig, err := a.models.LeakTK(context.Background())
-	if err != nil {
-		return nil, err
-	}
+func (a *Analyst) Analyze(model string, modelsConfig *MLModelsConfig, result *proto.Result) (*AnalysisResult, error) {
 
 	var modelData ModelData
 	found := false

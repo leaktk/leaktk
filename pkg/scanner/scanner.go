@@ -62,15 +62,6 @@ type Scanner struct {
 // NewScanner returns a initialized and listening scanner instance that should
 // be closed when it's no longer needed.
 func NewScanner(cfg *config.Config) *Scanner {
-	policyContent, err := os.ReadFile("pkg/analyst/policy.rego")
-	if err != nil {
-		log.Fatalf("failed to read file %s: %v", "pkg/analyst/policy.rego", err)
-	}
-
-	analystInstance, err := analyst.NewAnalyst(context.Background(), string(policyContent))
-	if err != nil {
-		log.Fatalf("FATAL: Failed to initialize Rego Analyst: %v", err)
-	}
 
 	scanner := &Scanner{
 		allowLocal:       cfg.Scanner.AllowLocal,
@@ -85,7 +76,6 @@ func NewScanner(cfg *config.Config) *Scanner {
 		scanQueue:        queue.NewPriorityQueue[*proto.Request](queueSize),
 		scanWorkers:      cfg.Scanner.ScanWorkers,
 		aiAnalyst:        ai.NewAnalyst(ai.NewModels(&cfg.Scanner.Patterns, httpclient.NewClient())),
-		Analyst:          analystInstance,
 		analyzeResponses: true,
 	}
 
@@ -283,6 +273,13 @@ func (s *Scanner) listen() {
 			}
 		}
 
+		analystConfig, err := s.patterns.LeakTK(ctx)
+
+		s.Analyst, err = analyst.NewAnalyst(context.Background(), analystConfig.OPA.Policy.Rego)
+		if err != nil {
+			log.Fatalf("FATAL: Failed to initialize Rego Analyst: %v", err)
+		}
+
 		results := make([]*proto.Result, len(findings))
 		for i, finding := range findings {
 			results[i] = findingToResult(request, &finding)
@@ -290,7 +287,7 @@ func (s *Scanner) listen() {
 			if s.aiAnalyst != nil {
 				model := "LogisticRegression"
 				if err == nil {
-					analysis, err := s.aiAnalyst.Analyze(model, results[i])
+					analysis, err := s.aiAnalyst.Analyze(model, analystConfig.ModelsConfig, results[i])
 					if err == nil {
 						if results[i].Notes == nil {
 							results[i].Notes = make(map[string]any)
