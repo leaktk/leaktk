@@ -38,11 +38,9 @@ type Patterns struct {
 	combinedConfig *CombinedModelsConfig
 }
 
-// CombinedModelsConfig holds the parsed AI models configuration and the fetched OPA policy data.
-// The structure remains the same, but it is now loaded from a single file.
 type CombinedModelsConfig struct {
-	ModelsConfig *ai.MLModelsConfig `json:"models"`     // The existing AI models config
-	OPA          *analyst.OPAConfig `json:"opa_policy"` // The new OPA policy data
+	ModelsConfig *ai.MLModelsConfig `json:"models"`
+	OPA          *analyst.OPAConfig `json:"opa_policy"`
 }
 
 // NewPatterns returns a configured instance of Patterns.
@@ -52,8 +50,6 @@ func NewPatterns(patternsCfg *config.Patterns, client *http.Client) *Patterns {
 		patternsConfig: patternsCfg,
 	}
 }
-
-// --- Generic Helpers ---
 
 // configModTimeExceeds returns true if the local configuration file at 'path'
 // is older than 'modTimeLimit' seconds.
@@ -121,8 +117,6 @@ func (c *Patterns) updateLocalConfig(localPath, rawConfig string) error {
 	}
 	return nil
 }
-
-// --- Gitleaks Config Methods (Unchanged) ---
 
 func (c *Patterns) gitleaksFetchURL() (string, error) {
 	return url.JoinPath(
@@ -199,13 +193,10 @@ func (c *Patterns) GitleaksConfigHash() string {
 	return fmt.Sprintf("%x", c.gitleaksConfigHash)
 }
 
-// --- LeakTK Combined Config Methods (Refactored) ---
-
 // LeakTKFetchURL now points to the single combined config file.
 func (c *Patterns) LeakTKFetchURL() (string, error) {
-	// Assumes the config specifies the base path for LeakTK config retrieval
 	return url.JoinPath(
-		c.patternsConfig.Server.URL, "patterns", "leaktk", c.patternsConfig.LeakTK.Version, "models.json",
+		c.patternsConfig.Server.URL, "patterns", "leaktk", c.patternsConfig.LeakTK.Version,
 	)
 }
 
