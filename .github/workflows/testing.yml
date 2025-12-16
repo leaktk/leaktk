@@ -82,10 +82,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # pin@v4
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # pin@v6.0.1
 
       - name: Run Gosec Security Scanner
-        uses: securego/gosec@c9453023c4e81ebdb6dde29e22d9cd5e2285fb16 # pin@master
+        uses: securego/gosec@b72378a2da300339c40788e1eddf1ddea6498558 # pin@v2.22.11
         with:
           args: ./...
 
@@ -107,7 +107,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Lint
-        uses: golangci/golangci-lint-action@e7fa5ac41e1cf5b7d48e45e42232ce7ada589601 # pin@v9.1.0
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # pin@9.2.0
         with:
           args: --timeout=2m
           version: latest
