@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -169,7 +168,7 @@ func (s *Scanner) listen() {
 				return
 			}
 
-			gitDir, err = absGitDir(gitDir)
+			gitDir, err = absGitDir(ctx, gitDir)
 			if err != nil {
 				logger.Critical("scan failed: could not determine gitdir: %v id=%q", err, request.ID)
 				s.respondWithError(request, &proto.Error{
@@ -370,8 +369,8 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 	return result
 }
 
-func absGitDir(path string) (string, error) {
-	cmd := exec.Command("git", "-C", path, "rev-parse", "--absolute-git-dir") // #nosec G204
+func absGitDir(ctx context.Context, path string) (string, error) {
+	cmd := gitCommand(ctx, "-C", path, "rev-parse", "--absolute-git-dir") // #nosec G204
 	logger.Debug("executing: %s", cmd)
 	stdout, err := cmd.Output()
 
@@ -425,7 +424,7 @@ func (s *Scanner) cloneGitRepo(ctx context.Context, cloneURL string, opts proto.
 	// The --[no-]single-branch flags are still needed with mirror due to how
 	// things like --depth and --shallow-since behave
 	if len(opts.Branch) > 0 {
-		if !remoteGitRefExists(cloneURL, opts.Branch) {
+		if !remoteGitRefExists(ctx, cloneURL, opts.Branch) {
 			return "", "", fmt.Errorf("remote ref does not exist: ref=%q", opts.Branch)
 		}
 
@@ -460,7 +459,7 @@ func (s *Scanner) cloneGitRepo(ctx context.Context, cloneURL string, opts proto.
 	// Include the clone URL
 	gitDir := filepath.Join(s.clonesDir, id.ID())
 	cloneArgs = append(cloneArgs, cloneURL, gitDir)
-	gitClone := exec.CommandContext(ctx, "git", cloneArgs...)
+	gitClone := gitCommand(ctx, cloneArgs...)
 
 	logger.Debug("executing: %s", gitClone)
 	if output, err := gitClone.CombinedOutput(); err != nil {
@@ -471,7 +470,7 @@ func (s *Scanner) cloneGitRepo(ctx context.Context, cloneURL string, opts proto.
 		return "", "", fmt.Errorf("clone timeout exceeded: %v", ctx.Err())
 	}
 
-	sourcePath, err := checkoutGitSourceConfigFiles(gitDir)
+	sourcePath, err := checkoutGitSourceConfigFiles(ctx, gitDir)
 	if err != nil {
 		logger.Debug("could not checkout source config files: %v clone_url=%q", err, cloneURL)
 	}
@@ -479,22 +478,22 @@ func (s *Scanner) cloneGitRepo(ctx context.Context, cloneURL string, opts proto.
 	return sourcePath, gitDir, nil
 }
 
-func remoteGitRefExists(cloneURL, ref string) bool {
-	cmd := exec.Command("git", "ls-remote", "--exit-code", "--quiet", cloneURL, ref) // #nosec G204
+func remoteGitRefExists(ctx context.Context, cloneURL, ref string) bool {
+	cmd := gitCommand(ctx, "ls-remote", "--exit-code", "--quiet", cloneURL, ref) // #nosec G204
 	logger.Debug("executing: %s", cmd)
 	return cmd.Run() == nil
 }
 
-func checkoutGitSourceConfigFiles(gitDir string) (string, error) {
+func checkoutGitSourceConfigFiles(ctx context.Context, gitDir string) (string, error) {
 	worktreePath := filepath.Join(gitDir, "leaktk-scan-source")
 
-	cmd := exec.Command("git", "-C", gitDir, "worktree", "add", "--no-checkout", worktreePath) // #nosec G204
+	cmd := gitCommand(ctx, "-C", gitDir, "worktree", "add", "--no-checkout", worktreePath) // #nosec G204
 	logger.Debug("executing: %s", cmd)
 	if err := cmd.Run(); err != nil {
 		return worktreePath, fmt.Errorf("could not create worktree: %v cmd=%q", err, cmd)
 	}
 
-	cmd = exec.Command("git", "-C", worktreePath, "checkout", "-f", "HEAD", "--", ".gitleaks*") // #nosec G204
+	cmd = gitCommand(ctx, "-C", worktreePath, "checkout", "-f", "HEAD", "--", ".gitleaks*") // #nosec G204
 	logger.Debug("executing: %s", cmd)
 	if err := cmd.Run(); err != nil {
 		return worktreePath, fmt.Errorf("could not checkout gitleaks files: %v cmd=%q", err, cmd)
