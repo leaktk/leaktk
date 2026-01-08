@@ -119,7 +119,7 @@ func ScanContainerImage(ctx context.Context, detector *detect.Detector, rawImage
 }
 
 func ScanGit(ctx context.Context, detector *detect.Detector, gitDir string, opts GitScanOpts) ([]report.Finding, error) {
-	gitCmd, err := newGitCmd(gitDir, opts)
+	gitCmd, err := newGitCmd(ctx, gitDir, opts)
 	if err != nil {
 		return nil, fmt.Errorf("could not create git command: %w", err)
 	}
@@ -160,9 +160,9 @@ func shallowCommits(gitDir string) []string {
 	return shallowCommits
 }
 
-func newGitCmd(gitDir string, opts GitScanOpts) (gitCmd *sources.GitCmd, err error) {
+func newGitCmd(ctx context.Context, gitDir string, opts GitScanOpts) (gitCmd *sources.GitCmd, err error) {
 	if opts.Unstaged || opts.Staged {
-		if gitCmd, err = sources.NewGitDiffCmd(gitDir, opts.Staged); err != nil {
+		if gitCmd, err = sources.NewGitDiffCmdContext(ctx, gitDir, opts.Staged); err != nil {
 			return nil, fmt.Errorf("could not create git diff cmd: %w", err)
 		}
 
@@ -192,7 +192,7 @@ func newGitCmd(gitDir string, opts GitScanOpts) (gitCmd *sources.GitCmd, err err
 		logOpts = append(logOpts, shallowCommits...)
 	}
 
-	if gitCmd, err = sources.NewGitLogCmd(gitDir, strings.Join(logOpts, " ")); err != nil {
+	if gitCmd, err = sources.NewGitLogCmdContext(ctx, gitDir, strings.Join(logOpts, " ")); err != nil {
 		return nil, fmt.Errorf("could not create git log cmd: %w", err)
 	}
 

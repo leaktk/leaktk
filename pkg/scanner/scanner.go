@@ -122,7 +122,7 @@ func (s *Scanner) listen() {
 			return
 		}
 
-		detector := detect.NewDetector(*cfg)
+		detector := detect.NewDetectorContext(ctx, *cfg)
 		detector.FollowSymlinks = false
 		detector.IgnoreGitleaksAllow = false
 		detector.MaxArchiveDepth = s.maxArchiveDepth

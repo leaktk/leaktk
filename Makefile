@@ -37,7 +37,7 @@ lint: vet
 	golangci-lint run
 
 build: import
-	go build $(LDFLAGS)
+	CGO_ENABLED=0 go build $(LDFLAGS)
 
 import:
 	goimports -local $(MODULE) -l -w .
