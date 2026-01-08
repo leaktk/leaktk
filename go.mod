@@ -17,8 +17,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-replace github.com/zricethezav/gitleaks/v8 v8.28.0 => github.com/leaktk/gitleaks/v8 v8.24.3-0.20250923090937-8fd9677bfae2
-
 require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
