@@ -92,14 +92,12 @@ docker_signs:
 
 signs:
   - cmd: cosign
-    signature: "${artifact}.sig"
-    certificate: "${artifact}.pem"
+    signature: "${artifact}.sigstore.json"
     artifacts: all
     output: true
     args:
       - sign-blob
       - '--oidc-provider=github-actions'
-      - '--output-certificate=${certificate}'
-      - '--output-signature=${signature}'
+      - '--bundle=${signature}'
       - '${artifact}'
       - --yes
