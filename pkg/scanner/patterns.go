@@ -193,7 +193,7 @@ func (c *Patterns) GitleaksConfigHash() string {
 	return fmt.Sprintf("%x", c.gitleaksConfigHash)
 }
 
-// LeakTKFetchURL now points to the single combined config file.
+// LeakTKFetchURL fetches the path of the current leaktk file.
 func (c *Patterns) LeakTKFetchURL() (string, error) {
 	return url.JoinPath(
 		c.patternsConfig.Server.URL, "patterns", "leaktk", c.patternsConfig.LeakTK.Version,

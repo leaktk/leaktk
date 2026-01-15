@@ -74,7 +74,6 @@ func (a *Analyst) Analyze(model string, modelsConfig *MLModelsConfig, result *pr
 	path := result.Location.Path
 	startLine := result.Location.Start.Line
 
-	// 3. Pass the keywords/stopwords to the pipeline
 	features := NewFeaturesPipeline(
 		match,
 		secret,

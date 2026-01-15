@@ -18,7 +18,6 @@ const nixGlobalConfigDir = "/etc/leaktk"
 
 var localConfigDir string
 
-// AnalysisResult will hold the output of the analysis.
 func init() {
 	localConfigDir = filepath.Join(xdg.ConfigHome, "leaktk")
 
@@ -81,7 +80,7 @@ type (
 		Server       PatternServer       `toml:"server"`
 	}
 
-	// Gitleaks holds version and config information for the Gitleaks scanner
+	// ProviderPatternsRef defines a reference to a remote location to fetch patterns from a patterns provider.
 	ProviderPatternsRef struct {
 		Version   string `toml:"version"`
 		LocalPath string `toml:"local_path"`
@@ -89,12 +88,6 @@ type (
 
 	// PatternServer provides pattern server configuration settings for the scanner
 	PatternServer struct {
-		AuthToken string `toml:"auth_token"`
-		URL       string `toml:"url"`
-	}
-
-	// ModelServer provides model server configuration settings for the scanner
-	ModelServer struct {
 		AuthToken string `toml:"auth_token"`
 		URL       string `toml:"url"`
 	}

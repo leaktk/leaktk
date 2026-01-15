@@ -60,10 +60,8 @@ func TestPatternsGitleaks(t *testing.T) {
 		cfg.Scanner.Patterns.Gitleaks.Version = "x.y.z"
 
 		client := httpclient.NewClient()
-		// Use the helper to initialize the consolidated struct
 		p := setupPatterns(&cfg.Scanner.Patterns, client)
 
-		// Call the public method that now contains the fetch logic
 		gitleaksCfg, err := p.Gitleaks(ctx)
 
 		require.NoError(t, err)
@@ -79,7 +77,6 @@ func TestPatternsGitleaks(t *testing.T) {
 		client := httpclient.NewClient()
 		p := setupPatterns(&cfg.Scanner.Patterns, client)
 
-		// Call the public method
 		_, err := p.Gitleaks(ctx)
 		// The error will be a network-related error from the fetch logic
 		require.Error(t, err)

@@ -55,7 +55,7 @@ type Scanner struct {
 	scanQueue        *queue.PriorityQueue[*proto.Request]
 	scanWorkers      int
 	aiAnalyst        *ai.Analyst
-	Analyst          *analyst.Analyst
+	analyst          *analyst.Analyst
 	analyzeResponses bool
 }
 
@@ -275,7 +275,7 @@ func (s *Scanner) listen() {
 
 		analystConfig, err := s.patterns.LeakTK(ctx)
 
-		s.Analyst, err = analyst.NewAnalyst(context.Background(), analystConfig.OPA.Policy.Rego)
+		s.analyst, err = analyst.NewAnalyst(context.Background(), analystConfig.OPA.Policy.Rego)
 		if err != nil {
 			log.Fatalf("FATAL: Failed to initialize Rego Analyst: %v", err)
 		}
@@ -312,7 +312,7 @@ func (s *Scanner) listen() {
 
 		if s.analyzeResponses {
 			logger.Info("analyzing response: id=%q", request.ID)
-			if analyzedResponse, err := s.Analyst.Analyze(response); err != nil {
+			if analyzedResponse, err := s.analyst.Analyze(response); err != nil {
 				logger.Error("error analyzing response: %v", err)
 			} else {
 				response = analyzedResponse
