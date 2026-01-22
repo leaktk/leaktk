@@ -34,7 +34,21 @@ changelog:
     exclude:
       - "^docs:"
       - "^test:"
-
+      
+homebrew_casks:
+  - repository:
+      owner: leaktk
+      name: homebrew-tap
+    homepage: https://github.com/leaktk/leaktk
+    description: A growing toolkit of utilities for leak detection, mitigation and prevention.
+    license: MIT
+    completions:
+      bash: "completions/bash/leaktk"
+      zsh: "completions/zsh/_leaktk"
+      fish: "completions/fish/leaktk.fish"
+    url:
+      verified: github.com/leaktk/leaktk
+      
 dockers:
   - image_templates:
       - "quay.io/leaktk/{{ .ProjectName }}:{{ .Version }}-amd64"
