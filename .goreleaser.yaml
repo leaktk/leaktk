@@ -14,6 +14,17 @@ builds:
     ldflags:
       - -X github.com/leaktk/{{ .ProjectName }}/pkg/version.Version={{ .Version }} -X github.com/leaktk/{{ .ProjectName }}/pkg/version.Commit={{ .FullCommit }}
 
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      sign:
+        certificate: "{{.Env.MACOS_SIGN_P12}}"
+        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
+      notarize:
+        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
+        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
+        key: "{{.Env.MACOS_NOTARY_KEY}}"
+
 archives:
   - formats: tar.xz
     name_template: >-
@@ -27,6 +38,17 @@ archives:
     format_overrides:
       - goos: windows
         formats: zip
+    files:
+      - src: LICENSE
+        info:
+          owner: root
+          group: root
+          mtime: "{{ .CommitDate }}"
+      - src: completions/*
+        info:
+          owner: root
+          group: root
+          mtime: "{{ .CommitDate }}"
 
 changelog:
   sort: asc
@@ -39,6 +61,7 @@ homebrew_casks:
   - repository:
       owner: leaktk
       name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/leaktk/leaktk
     description: A growing toolkit of utilities for leak detection, mitigation and prevention.
     license: MIT
