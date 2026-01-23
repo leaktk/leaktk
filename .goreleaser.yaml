@@ -39,7 +39,7 @@ archives:
       - goos: windows
         formats: zip
     files:
-      - src: LICENSE.md
+      - src: LICENSE
         info:
           owner: root
           group: root
