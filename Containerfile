@@ -1,5 +1,7 @@
 FROM quay.io/fedora/fedora:42
-COPY --chown=0:0 --chmod=0755 leaktk /usr/local/bin/leaktk
+ARG TARGETPLATFORM
+
+COPY --chown=0:0 --chmod=0755 $TARGETPLATFORM/leaktk /usr/local/bin/leaktk
 
 RUN \
   dnf install -y --setopt=tsflags=nodocs git && \
