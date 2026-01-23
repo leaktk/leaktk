@@ -54,3 +54,16 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT with access to write contents to leaktk/homebrew-tap
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          # The base64 of the contents of your '.p12' key.
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          # The password to open the '.p12' key.
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          # The base64 of the contents of your '.p8' key.
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          # The ID of the '.p8' key.
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          # The issuer UUID.
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          
