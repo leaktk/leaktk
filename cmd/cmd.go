@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 
@@ -15,6 +16,7 @@ import (
 
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
+	"github.com/leaktk/leaktk/pkg/hooks"
 	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/proto"
@@ -207,6 +209,28 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 	return request, nil
 }
 
+func runHook(cmd *cobra.Command, args []string) {
+	hookName := args[0]
+
+	if !slices.Contains(cmd.ValidArgs, hookName) {
+		logger.Fatal("invalid hookname: hookname=%q", hookName)
+	}
+
+	if err := hooks.Run(cfg, hookName, args[1:]); err != nil {
+		logger.Fatal("error running hook: %v hookname=%q", err, hookName)
+	}
+}
+
+func hookCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:       "hook [flags] <hookname> [hookargs]...",
+		Short:     "Hook leaktk into existng workflows",
+		Args:      cobra.MinimumNArgs(1),
+		ValidArgs: hooks.HookNames,
+		Run:       runHook,
+	}
+}
+
 func scanCommand() *cobra.Command {
 	scanCommand := &cobra.Command{
 		Use:                   "scan [flags] <resource>",
@@ -362,9 +386,10 @@ func rootCommand() *cobra.Command {
 	flags.StringP("config", "c", "", "config file path")
 	flags.StringP("format", "f", "", "output format [json, human, csv, toml, yaml] (default \"json\")")
 
+	rootCommand.AddCommand(scanCommand())
 	rootCommand.AddCommand(loginCommand())
 	rootCommand.AddCommand(logoutCommand())
-	rootCommand.AddCommand(scanCommand())
+	rootCommand.AddCommand(hookCommand())
 	rootCommand.AddCommand(listenCommand())
 	rootCommand.AddCommand(versionCommand())
 
