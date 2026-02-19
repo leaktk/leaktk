@@ -1,4 +1,4 @@
-package scanner
+package patterns
 
 import (
 	"context"
@@ -28,16 +28,15 @@ regex = '''test-rule'''
 `
 
 func setupPatterns(patternsCfg *config.Patterns, client *http.Client) *Patterns {
-	// 1. Ensure fetch logic runs by forcing expiration/autofetch
+	// Ensure fetch logic runs by forcing expiration/autofetch
 	patternsCfg.Autofetch = true
 	patternsCfg.RefreshAfter = 1
 
-	// 2. Clean up any local files to ensure fetching occurs
+	// Clean up any local files to ensure fetching occurs
 	if len(patternsCfg.Gitleaks.LocalPath) > 0 {
 		os.Remove(patternsCfg.Gitleaks.LocalPath)
 	}
 
-	// 3. Use the existing NewPatterns constructor
 	return NewPatterns(patternsCfg, client)
 }
 

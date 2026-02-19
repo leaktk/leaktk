@@ -9,14 +9,14 @@ import (
 )
 
 type Analyst struct {
-	models *Models
+	models []MLModelsConfig
 }
 
-func NewAnalyst(m *Models) *Analyst {
+func NewAnalyst(m []MLModelsConfig) *Analyst {
 	return &Analyst{models: m}
 }
 
-type ModelData struct {
+type MLModelsConfig struct {
 	Kind         string             `json:"kind"`
 	Coefficients map[string]float64 `json:"coefficients"`
 	Keywords     []string           `json:"keywords"`
@@ -24,9 +24,9 @@ type ModelData struct {
 	Dictwords    []string           `json:"dictwords"`
 }
 
-type MLModelsConfig struct {
-	Models []ModelData `json:"models"`
-}
+// type MLModelsConfig struct {
+// 	Models []ModelData `json:"models"`
+// }
 
 type AnalysisResult struct {
 	PredictedSecretProbability float64
@@ -53,11 +53,11 @@ type Coefficients struct {
 	SecretHasDictionaryWord      float64 `json:"secret_has_dictionary_word"`
 }
 
-func (a *Analyst) Analyze(model string, modelsConfig *MLModelsConfig, result *proto.Result) (*AnalysisResult, error) {
+func (a *Analyst) Analyze(model string, modelsConfig []MLModelsConfig, result *proto.Result) (*AnalysisResult, error) {
 
-	var modelData ModelData
+	var modelData MLModelsConfig
 	found := false
-	for _, mData := range modelsConfig.Models {
+	for _, mData := range modelsConfig {
 		if mData.Kind == model {
 			modelData = mData
 			found = true

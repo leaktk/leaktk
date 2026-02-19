@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,11 +15,11 @@ import (
 	"github.com/zricethezav/gitleaks/v8/report"
 
 	"github.com/leaktk/leaktk/pkg/analyst"
-	"github.com/leaktk/leaktk/pkg/analyst/ai"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/pkg/patterns"
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/queue"
 	"github.com/leaktk/leaktk/pkg/scanner/gitleaks"
@@ -49,12 +48,10 @@ type Scanner struct {
 	maxArchiveDepth  int
 	maxDecodeDepth   int
 	maxScanDepth     int
-	patterns         *Patterns
-	models           *ai.Models
+	patterns         *patterns.Patterns
 	responseQueue    *queue.PriorityQueue[*proto.Response]
 	scanQueue        *queue.PriorityQueue[*proto.Request]
 	scanWorkers      int
-	aiAnalyst        *ai.Analyst
 	analyst          *analyst.Analyst
 	analyzeResponses bool
 }
@@ -63,6 +60,13 @@ type Scanner struct {
 // be closed when it's no longer needed.
 func NewScanner(cfg *config.Config) *Scanner {
 
+	p := patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient())
+
+	a, err := analyst.NewAnalyst(p)
+	if err != nil {
+		logger.Fatal("could not create analyst: %v", err)
+	}
+
 	scanner := &Scanner{
 		allowLocal:       cfg.Scanner.AllowLocal,
 		scanTimeout:      time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
@@ -70,12 +74,11 @@ func NewScanner(cfg *config.Config) *Scanner {
 		maxArchiveDepth:  cfg.Scanner.MaxArchiveDepth,
 		maxDecodeDepth:   cfg.Scanner.MaxDecodeDepth,
 		maxScanDepth:     cfg.Scanner.MaxScanDepth,
-		patterns:         NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
-		models:           ai.NewModels(&cfg.Scanner.Patterns, httpclient.NewClient()),
+		patterns:         p,
 		responseQueue:    queue.NewPriorityQueue[*proto.Response](queueSize),
 		scanQueue:        queue.NewPriorityQueue[*proto.Request](queueSize),
 		scanWorkers:      cfg.Scanner.ScanWorkers,
-		aiAnalyst:        ai.NewAnalyst(ai.NewModels(&cfg.Scanner.Patterns, httpclient.NewClient())),
+		analyst:          a,
 		analyzeResponses: true,
 	}
 
@@ -273,33 +276,9 @@ func (s *Scanner) listen() {
 			}
 		}
 
-		analystConfig, err := s.patterns.LeakTK(ctx)
-
-		s.analyst, err = analyst.NewAnalyst(context.Background(), analystConfig.OPA.Policy.Rego)
-		if err != nil {
-			log.Fatalf("FATAL: Failed to initialize Rego Analyst: %v", err)
-		}
-
 		results := make([]*proto.Result, len(findings))
 		for i, finding := range findings {
 			results[i] = findingToResult(request, &finding)
-			results[i].Notes["predicted_secret_probability"] = "hello"
-			if s.aiAnalyst != nil {
-				model := "LogisticRegression"
-				if err == nil {
-					analysis, err := s.aiAnalyst.Analyze(model, analystConfig.ModelsConfig, results[i])
-					if err == nil {
-						if results[i].Notes == nil {
-							results[i].Notes = make(map[string]any)
-						}
-						results[i].Notes["predicted_secret_probability"] = analysis.PredictedSecretProbability
-					}
-				} else {
-					logger.Error("Could not apply model to result: %v", err)
-				}
-			} else {
-				results[i].Notes["predicted_secret_probability"] = "fail"
-			}
 		}
 
 		response := &proto.Response{
@@ -312,7 +291,8 @@ func (s *Scanner) listen() {
 
 		if s.analyzeResponses {
 			logger.Info("analyzing response: id=%q", request.ID)
-			if analyzedResponse, err := s.analyst.Analyze(response); err != nil {
+			analyzedResponse, err := s.analyst.Analyze(ctx, response)
+			if err != nil {
 				logger.Error("error analyzing response: %v", err)
 			} else {
 				response = analyzedResponse
@@ -353,12 +333,13 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 			strconv.Itoa(finding.EndColumn),
 			finding.RuleID,
 		),
-		Secret:  finding.Secret,
-		Match:   finding.Match,
-		Context: finding.Line,
-		Entropy: finding.Entropy,
-		Date:    finding.Date,
-		Notes:   map[string]any{},
+		Secret:   finding.Secret,
+		Match:    finding.Match,
+		Context:  finding.Line,
+		Entropy:  finding.Entropy,
+		Date:     finding.Date,
+		Notes:    map[string]string{},
+		Analysis: map[string]any{},
 		Contact: proto.Contact{
 			Name:  finding.Author,
 			Email: finding.Email,

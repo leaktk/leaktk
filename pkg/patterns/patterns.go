@@ -1,9 +1,8 @@
-package scanner
+package patterns
 
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,8 +14,6 @@ import (
 
 	gitleaksconfig "github.com/zricethezav/gitleaks/v8/config"
 
-	"github.com/leaktk/leaktk/pkg/analyst"
-	"github.com/leaktk/leaktk/pkg/analyst/ai"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/scanner/gitleaks"
@@ -29,18 +26,13 @@ type Patterns struct {
 	mutex  sync.Mutex
 
 	// Gitleaks Patterns fields
-	patternsConfig     *config.Patterns // Holds the config settings (URLs, paths, versions)
+	patternsConfig *config.Patterns // Holds the config settings (URLs, paths, versions)
+
 	gitleaksConfigHash [32]byte
-	gitleaksConfig     *gitleaksconfig.Config
+	leaktkConfigHash   [32]byte
 
-	// LeakTK Combined Configuration Field
-	// This now holds the configuration fetched from a single source.
-	combinedConfig *CombinedModelsConfig
-}
-
-type CombinedModelsConfig struct {
-	ModelsConfig *ai.MLModelsConfig `json:"models"`
-	OPA          *analyst.OPAConfig `json:"opa_policy"`
+	gitleaksConfig *gitleaksconfig.Config
+	leaktkConfig   *LeakTKPatterns
 }
 
 // NewPatterns returns a configured instance of Patterns.
@@ -198,80 +190,4 @@ func (c *Patterns) LeakTKFetchURL() (string, error) {
 	return url.JoinPath(
 		c.patternsConfig.Server.URL, "patterns", "leaktk", c.patternsConfig.LeakTK.Version,
 	)
-}
-
-// LeakTK returns the CombinedModelsConfig object, handling fetch/caching/update.
-// This logic is now a direct copy of the Gitleaks logic, using the CombinedModelsConfig struct.
-func (c *Patterns) LeakTK(ctx context.Context) (*CombinedModelsConfig, error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	cfg := c.patternsConfig
-	localPath := cfg.LeakTK.LocalPath
-	modTimeExceeds := c.configModTimeExceeds(localPath, cfg.RefreshAfter)
-
-	if cfg.Autofetch && modTimeExceeds {
-		logger.Info("fetching combined LeakTK models and OPA policy config")
-
-		configURL, err := c.LeakTKFetchURL()
-		if err != nil {
-			return c.combinedConfig, err
-		}
-
-		rawConfig, err := c.fetchConfig(ctx, configURL, cfg.Server.AuthToken)
-		if err != nil {
-			return c.combinedConfig, err
-		}
-
-		// Parse the single file into the combined struct
-		newCombinedConfig, err := c.parseCombinedConfig(rawConfig)
-		if err != nil {
-			logger.Debug("fetched config:\n%s", rawConfig)
-			return c.combinedConfig, fmt.Errorf("could not parse combined config: error=%q", err)
-		}
-		c.combinedConfig = newCombinedConfig
-
-		// Write the single merged JSON file to the Models local path
-		if err := c.updateLocalConfig(localPath, rawConfig); err != nil {
-			return c.combinedConfig, err
-		}
-
-		// NOTE: Add hash update here if needed, similar to Gitleaks
-
-		logger.Info("updated combined models and OPA policy config: path=%q", localPath)
-
-	} else if c.combinedConfig == nil {
-		if c.configModTimeExceeds(localPath, cfg.ExpiredAfter) {
-			return nil, fmt.Errorf(
-				"combined config is expired and autofetch is disabled: config_path=%q",
-				localPath,
-			)
-		}
-
-		rawConfig, err := os.ReadFile(localPath)
-		if err != nil {
-			return nil, err
-		}
-
-		// Parse the single file into the combined struct
-		newCombinedConfig, err := c.parseCombinedConfig(string(rawConfig))
-		if err != nil {
-			logger.Debug("loaded config:\n%s\n", rawConfig)
-			return nil, fmt.Errorf("could not parse combined config: error=%q", err)
-		}
-		c.combinedConfig = newCombinedConfig
-
-		// NOTE: Add hash update here if needed, similar to Gitleaks
-	}
-
-	return c.combinedConfig, nil
-}
-
-// parseCombinedConfig is the only needed custom parser, handling the single combined file.
-func (c *Patterns) parseCombinedConfig(rawConfig string) (*CombinedModelsConfig, error) {
-	var combinedConfig CombinedModelsConfig
-	if err := json.Unmarshal([]byte(rawConfig), &combinedConfig); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal combined configuration: %w", err)
-	}
-	return &combinedConfig, nil
 }

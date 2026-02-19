@@ -3,7 +3,6 @@ package cmd
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/leaktk/leaktk/pkg/analyst"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/id"
@@ -211,32 +209,32 @@ func scanCommand() *cobra.Command {
 	return scanCommand
 }
 
-func runAnalyze(cmd *cobra.Command, args []string) {
-	//flags := cmd.Flags()
-	ctx := context.Background()
+// func runAnalyze(cmd *cobra.Command, args []string) {
+// 	//flags := cmd.Flags()
+// 	ctx := context.Background()
 
-	err := analyst.AnalyzeCommand(ctx, "")
+// 	err := analyst.AnalyzeCommand(ctx, "")
 
-	if err != nil {
-		cmd.PrintErrf("Error during analysis: %v\n", err)
-		os.Exit(1)
-	}
-}
+// 	if err != nil {
+// 		cmd.PrintErrf("Error during analysis: %v\n", err)
+// 		os.Exit(1)
+// 	}
+// }
 
-func analyzeCommand() *cobra.Command {
-	analyzeCommand := &cobra.Command{
-		Use:                   "analyze [flags]",
-		DisableFlagsInUseLine: true,
-		Short:                 "Analyze input data against a Rego policy",
-		Args:                  cobra.NoArgs,
-		Run:                   runAnalyze,
-	}
+// func analyzeCommand() *cobra.Command {
+// 	analyzeCommand := &cobra.Command{
+// 		Use:                   "analyze [flags]",
+// 		DisableFlagsInUseLine: true,
+// 		Short:                 "Analyze input data against a Rego policy",
+// 		Args:                  cobra.NoArgs,
+// 		Run:                   runAnalyze,
+// 	}
 
-	flags := analyzeCommand.Flags()
-	flags.StringP("input", "i", "", "Optional path to the input JSONL file. If empty, reads from stdin.")
+// 	flags := analyzeCommand.Flags()
+// 	flags.StringP("input", "i", "", "Optional path to the input JSONL file. If empty, reads from stdin.")
 
-	return analyzeCommand
-}
+// 	return analyzeCommand
+// }
 
 func readLine(reader *bufio.Reader) ([]byte, error) {
 	var buf bytes.Buffer
@@ -378,7 +376,7 @@ func rootCommand() *cobra.Command {
 	rootCommand.AddCommand(logoutCommand())
 	rootCommand.AddCommand(scanCommand())
 	rootCommand.AddCommand(listenCommand())
-	rootCommand.AddCommand(analyzeCommand())
+	//rootCommand.AddCommand(analyzeCommand())
 	rootCommand.AddCommand(versionCommand())
 
 	return rootCommand
