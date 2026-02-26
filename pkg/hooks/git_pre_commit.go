@@ -31,10 +31,10 @@ COMMIT BLOCKED: POTENTIAL SECRETS DETECTED
 Please remove any sensitive information listed above and try again.
 
 For excluding non-sensitive findings:
-https://github.com/leaktk/leaktk/blob/main/docs/false_positives.md
+https://github.com/leaktk/leaktk/blob/HEAD/docs/false_positives.md
 
 For more information on interpreting these results:
-https://github.com/leaktk/leaktk/blob/main/docs/findings.md
+https://github.com/leaktk/leaktk/blob/HEAD/docs/findings.md
 ==============================================================================
 `
 
