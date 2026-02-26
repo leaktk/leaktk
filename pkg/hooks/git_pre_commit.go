@@ -38,13 +38,13 @@ https://github.com/leaktk/leaktk/blob/HEAD/docs/findings.md
 ==============================================================================
 `
 
-func preCommitRun(cfg *config.Config, hookName string, _ []string) (int, error) {
+func preCommitRun(cfg *config.Config, hookname string, _ []string) (int, error) {
 	var wg sync.WaitGroup
 	var response *proto.Response
 
 	leaktkScanner := scanner.NewScanner(cfg)
 	request := proto.Request{
-		ID:       fmt.Sprintf("%s.%s", hookName, id.ID()),
+		ID:       fmt.Sprintf("%s.%s", hookname, id.ID()),
 		Kind:     proto.GitRepoRequestKind,
 		Resource: ".",
 		Opts: proto.Opts{
