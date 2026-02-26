@@ -8,7 +8,9 @@ import (
 
 	"github.com/leaktk/leaktk/pkg/analyst/ai"
 	"github.com/leaktk/leaktk/pkg/logger"
-	"github.com/open-policy-agent/opa/rego"
+
+	//"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/rego"
 )
 
 type LeakTKPatterns struct {
@@ -51,8 +53,6 @@ func (c *Patterns) LeakTK(ctx context.Context) (*LeakTKPatterns, error) {
 			return c.leaktkConfig, err
 		}
 
-		// NOTE: Add hash update here if needed, similar to Gitleaks
-
 		logger.Info("updated combined models and OPA policy config: path=%q", localPath)
 
 	} else if c.leaktkConfig == nil {
@@ -75,8 +75,6 @@ func (c *Patterns) LeakTK(ctx context.Context) (*LeakTKPatterns, error) {
 			return nil, fmt.Errorf("could not parse combined config: error=%q", err)
 		}
 		c.leaktkConfig = newleaktkConfig
-
-		// NOTE: Add hash update here if needed, similar to Gitleaks
 	}
 
 	return c.leaktkConfig, nil
@@ -104,6 +102,7 @@ func (c *LeakTKPatterns) UnmarshalJSON(data []byte) error {
 	compiled := rego.New(
 		rego.Query("data.analyze.analyzed_response"),
 		rego.Module("analyze.rego", leaktkConfig.Rego),
+		//rego.SetRegoVersion(ast.RegoV1),
 	)
 
 	c.ModelsConfig = leaktkConfig.ModelsConfig

@@ -31,17 +31,6 @@ func NewAnalyst(incomingPatterns *patterns.Patterns) (*Analyst, error) {
 }
 
 func (a *Analyst) Analyze(ctx context.Context, response *proto.Response) (*proto.Response, error) {
-	// Marshal the struct into JSON bytes to serve as OPA input
-	// inputBytes, err := json.Marshal(response)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to marshal response struct for OPA input: %w", err)
-	// }
-
-	// // Unmarshal into a generic type for Rego
-	// var opaInput any
-	// if err := json.Unmarshal(inputBytes, &opaInput); err != nil {
-	// 	return nil, fmt.Errorf("failed to unmarshal JSON into generic type for OPA: %w", err)
-	// }
 
 	// Evaluate the Rego policy
 	query, err := a.patterns.Rego.PrepareForEval(ctx)
@@ -54,43 +43,48 @@ func (a *Analyst) Analyze(ctx context.Context, response *proto.Response) (*proto
 		return nil, fmt.Errorf("could not evaluate query for response ID %s: %w", response.ID, err)
 	}
 
+	rego_results := true
 	if len(results) == 0 || results[0].Expressions == nil || len(results[0].Expressions) == 0 {
 		// If Rego produced no output, return the original response without analysis
+		rego_results = false
 		logger.Info("Analyze: OPA policy produced no analysis for response ID %s", response.ID)
-		return response, nil
 	}
 
-	// Extract the OPA output (the enriched JSON structure)
-	opaOutput := results[0].Expressions[0].Value
-	// Marshal the enriched structure back to JSON bytes
-	outputBytes, err := json.Marshal(opaOutput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal OPA output to JSON: %w", err)
-	}
-
-	// Unmarshal the enriched JSON back into a new Response struct
 	var enrichedResponse proto.Response
-	if err := json.Unmarshal(outputBytes, &enrichedResponse); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal enriched JSON back into Response struct: %w", err)
+
+	if rego_results == true {
+		// Extract the OPA output (the enriched JSON structure)
+		opaOutput := results[0].Expressions[0].Value
+		// Marshal the enriched structure back to JSON bytes
+		outputBytes, err := json.Marshal(opaOutput)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal OPA output to JSON: %w", err)
+		}
+
+		// Unmarshal the enriched JSON back into a new Response struct
+		if err := json.Unmarshal(outputBytes, &enrichedResponse); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal enriched JSON back into Response struct: %w", err)
+		}
+	} else {
+		enrichedResponse = *response
 	}
 
-	analyst := ai.NewAnalyst(a.patterns.ModelsConfig)
+	ai_analyst := ai.NewAnalyst(a.patterns.ModelsConfig)
 
 	for _, result := range enrichedResponse.Results {
-		if analyst != nil {
+		if ai_analyst != nil {
 			model := "LogisticRegression"
-			if err == nil {
-				analysis, err := analyst.Analyze(model, a.patterns.ModelsConfig, result)
-				if err == nil {
-					if result.Analysis == nil {
-						result.Analysis = make(map[string]any)
-					}
-					result.Analysis["predicted_secret_probability"] = analysis.PredictedSecretProbability
-				}
+			analysis, err := ai_analyst.Analyze(model, a.patterns.ModelsConfig, result)
+			if err != nil {
+				logger.Fatal("Could not apply model to result: %v", err)
 			} else {
-				logger.Error("Could not apply model to result: %v", err)
+				if result.Analysis == nil {
+					result.Analysis = make(map[string]any)
+				}
+				result.Analysis["predicted_secret_probability"] = analysis.PredictedSecretProbability
 			}
 		} else {
+			logger.Fatal("analyst is nil")
 			result.Analysis["predicted_secret_probability"] = "fail"
 		}
 	}

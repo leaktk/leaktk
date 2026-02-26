@@ -24,10 +24,6 @@ type MLModelsConfig struct {
 	Dictwords    []string           `json:"dictwords"`
 }
 
-// type MLModelsConfig struct {
-// 	Models []ModelData `json:"models"`
-// }
-
 type AnalysisResult struct {
 	PredictedSecretProbability float64
 }
@@ -98,7 +94,6 @@ func (a *Analyst) Analyze(model string, modelsConfig []MLModelsConfig, result *p
 	return &AnalysisResult{
 		PredictedSecretProbability: predictedProbability,
 	}, nil
-
 }
 
 func runLogisticRegression(f *Features, c *Coefficients) float64 {
