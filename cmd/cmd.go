@@ -229,7 +229,7 @@ func hookCommand() *cobra.Command {
 		Use:       "hook [flags] <hookname> [hookargs]...",
 		Short:     "Hook leaktk into existng workflows",
 		Args:      cobra.MinimumNArgs(1),
-		ValidArgs: hooks.HookNames,
+		ValidArgs: hooks.Names,
 		Run:       runHook,
 	}
 }
@@ -244,11 +244,11 @@ func scanCommand() *cobra.Command {
 	}
 
 	flags := scanCommand.Flags()
-	flags.String("id", id.ID(), "an ID for associating responses to requests")
-	flags.StringP("kind", "k", "GitRepo", "the kind of resource to scan")
-	flags.StringP("options", "o", "{}", "additional request options formatted as JSON")
-	flags.Int("leak-exit-code", 0, "the exit code when leaks are found (default 0)")
-	flags.String("gitleaks-config", "", "the path to a custom gitleaks config")
+	flags.String("id", id.ID(), "Set the ID request ID that will be displayed in the response and logs")
+	flags.StringP("kind", "k", "GitRepo", "Specify the kind of resource being scanned")
+	flags.StringP("options", "o", "{}", "Provide scan specific options formatted as JSON")
+	flags.Int("leak-exit-code", 0, "Exit with this code when leaks are detected (default 0)")
+	flags.String("gitleaks-config", "", "Load a custom gitleaks config")
 
 	return scanCommand
 }
@@ -386,10 +386,11 @@ func rootCommand() *cobra.Command {
 	}
 
 	flags := rootCommand.PersistentFlags()
-	flags.StringP("config", "c", "", "config file path")
-	flags.StringP("format", "f", "", "output format [json, human, csv, toml, yaml] (default \"json\")")
+	flags.StringP("config", "c", "", "Load a custom leaktk config")
+	flags.StringP("format", "f", "", "Change the output format [json, human, csv, toml, yaml] (default \"json\")")
 
 	rootCommand.AddCommand(scanCommand())
+	rootCommand.AddCommand(installCommand())
 	rootCommand.AddCommand(loginCommand())
 	rootCommand.AddCommand(logoutCommand())
 	rootCommand.AddCommand(hookCommand())
