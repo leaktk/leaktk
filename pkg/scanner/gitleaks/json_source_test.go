@@ -8,9 +8,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/betterleaks/betterleaks/sources"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/zricethezav/gitleaks/v8/sources"
 )
 
 func TestJSON(t *testing.T) {

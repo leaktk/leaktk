@@ -18,12 +18,12 @@ import (
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/version"
 
+	"github.com/betterleaks/betterleaks/config"
+	"github.com/betterleaks/betterleaks/sources"
 	"github.com/containers/image/v5/manifest"
 	"github.com/containers/image/v5/pkg/blobinfocache"
 	"github.com/containers/image/v5/transports/alltransports"
 	"github.com/containers/image/v5/types"
-	"github.com/zricethezav/gitleaks/v8/config"
-	"github.com/zricethezav/gitleaks/v8/sources"
 
 	imagespecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 )

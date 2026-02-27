@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/BurntSushi/toml"
-	"github.com/zricethezav/gitleaks/v8/config"
+	"github.com/betterleaks/betterleaks/config"
 )
 
 func ParseConfig(rawConfig string) (cfg *config.Config, err error) {

@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zricethezav/gitleaks/v8/config"
-	"github.com/zricethezav/gitleaks/v8/sources"
+	"github.com/betterleaks/betterleaks/config"
+	"github.com/betterleaks/betterleaks/sources"
 
 	"github.com/leaktk/leaktk/pkg/fs"
 	httpclient "github.com/leaktk/leaktk/pkg/http"

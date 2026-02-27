@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/betterleaks/betterleaks/sources"
 	"github.com/fatih/semgroup"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/zricethezav/gitleaks/v8/sources"
 )
 
 func TestContainerImage(t *testing.T) {

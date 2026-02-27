@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zricethezav/gitleaks/v8/detect"
-	"github.com/zricethezav/gitleaks/v8/report"
+	"github.com/betterleaks/betterleaks/detect"
+	"github.com/betterleaks/betterleaks/report"
 
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
