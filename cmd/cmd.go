@@ -216,9 +216,12 @@ func runHook(cmd *cobra.Command, args []string) {
 		logger.Fatal("invalid hookname: hookname=%q", hookName)
 	}
 
-	if err := hooks.Run(cfg, hookName, args[1:]); err != nil {
+	statusCode, err := hooks.Run(cfg, hookName, args[1:])
+	if err != nil {
 		logger.Fatal("error running hook: %v hookname=%q", err, hookName)
 	}
+
+	os.Exit(statusCode)
 }
 
 func hookCommand() *cobra.Command {
