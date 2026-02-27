@@ -1,4 +1,4 @@
-package gitleaks
+package betterleaks
 
 import (
 	"context"

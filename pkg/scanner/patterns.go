@@ -16,7 +16,7 @@ import (
 
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
-	"github.com/leaktk/leaktk/pkg/scanner/gitleaks"
+	"github.com/leaktk/leaktk/pkg/scanner/betterleaks"
 )
 
 // Patterns acts as an abstraction for fetching different scanner patterns
@@ -113,7 +113,7 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 			return p.gitleaksConfig, err
 		}
 
-		p.gitleaksConfig, err = gitleaks.ParseConfig(rawConfig)
+		p.gitleaksConfig, err = betterleaks.ParseConfig(rawConfig)
 		if err != nil {
 			logger.Debug("fetched config:\n%s", rawConfig)
 
@@ -147,7 +147,7 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 			return p.gitleaksConfig, err
 		}
 
-		p.gitleaksConfig, err = gitleaks.ParseConfig(string(rawConfig))
+		p.gitleaksConfig, err = betterleaks.ParseConfig(string(rawConfig))
 		if err != nil {
 			logger.Debug("loaded config:\n%s\n", rawConfig)
 

@@ -80,7 +80,7 @@ type (
 		Server       PatternServer `toml:"server"`
 	}
 
-	// Gitleaks holds version and config information for the Gitleaks scanner
+	// Gitleaks holds version and config information for the Betterleaks scanner
 	Gitleaks struct {
 		Version    string `toml:"version"`
 		ConfigPath string `toml:"config_path"`

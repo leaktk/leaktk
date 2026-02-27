@@ -1,4 +1,4 @@
-package gitleaks
+package betterleaks
 
 import (
 	"context"
@@ -234,7 +234,7 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 	if _, isSeekReaderAt := reader.(seekReaderAt); !isSeekReaderAt {
 		switch extractor.(type) {
 		case archives.SevenZip, archives.Zip:
-			tmpfile, err := os.CreateTemp("", "gitleaks-archive-")
+			tmpfile, err := os.CreateTemp("", "leaktk-archive-")
 			if err != nil {
 				logger.Error("could not create tmp file for container layer blob: %v digest=%q", err, digest)
 
