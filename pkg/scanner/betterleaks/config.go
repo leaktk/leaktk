@@ -1,11 +1,11 @@
-package gitleaks
+package betterleaks
 
 import (
 	"errors"
 	"fmt"
 
 	"github.com/BurntSushi/toml"
-	"github.com/zricethezav/gitleaks/v8/config"
+	"github.com/betterleaks/betterleaks/config"
 )
 
 func ParseConfig(rawConfig string) (cfg *config.Config, err error) {
@@ -13,7 +13,7 @@ func ParseConfig(rawConfig string) (cfg *config.Config, err error) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("gitleaks config is invalid: %v", r)
+			err = fmt.Errorf("config is invalid: %v", r)
 		}
 	}()
 

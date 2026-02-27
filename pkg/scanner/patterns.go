@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	gitleaksconfig "github.com/zricethezav/gitleaks/v8/config"
+	betterleaksconfig "github.com/betterleaks/betterleaks/config"
 
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
-	"github.com/leaktk/leaktk/pkg/scanner/gitleaks"
+	"github.com/leaktk/leaktk/pkg/scanner/betterleaks"
 )
 
 // Patterns acts as an abstraction for fetching different scanner patterns
@@ -25,7 +25,7 @@ type Patterns struct {
 	client             *http.Client
 	config             *config.Patterns
 	gitleaksConfigHash [32]byte
-	gitleaksConfig     *gitleaksconfig.Config
+	gitleaksConfig     *betterleaksconfig.Config
 	mutex              sync.Mutex
 }
 
@@ -61,7 +61,7 @@ func (p *Patterns) fetchGitleaksConfig(ctx context.Context) (string, error) {
 		)
 	}
 
-	response, err := p.client.Do(request)
+	response, err := p.client.Do(request) // #nosec G704
 	if err != nil {
 		return "", err
 	}
@@ -101,7 +101,7 @@ func (p *Patterns) gitleaksConfigModTimeExceeds(modTimeLimit int) bool {
 }
 
 // Gitleaks returns a Gitleaks config object if it's able to
-func (p *Patterns) Gitleaks(ctx context.Context) (*gitleaksconfig.Config, error) {
+func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, error) {
 	// Lock since this updates the value of p.gitleaksConfig on the fly
 	// and updates files on the filesystem
 	p.mutex.Lock()
@@ -113,7 +113,7 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*gitleaksconfig.Config, error)
 			return p.gitleaksConfig, err
 		}
 
-		p.gitleaksConfig, err = gitleaks.ParseConfig(rawConfig)
+		p.gitleaksConfig, err = betterleaks.ParseConfig(rawConfig)
 		if err != nil {
 			logger.Debug("fetched config:\n%s", rawConfig)
 
@@ -147,7 +147,7 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*gitleaksconfig.Config, error)
 			return p.gitleaksConfig, err
 		}
 
-		p.gitleaksConfig, err = gitleaks.ParseConfig(string(rawConfig))
+		p.gitleaksConfig, err = betterleaks.ParseConfig(string(rawConfig))
 		if err != nil {
 			logger.Debug("loaded config:\n%s\n", rawConfig)
 

@@ -1,10 +1,11 @@
 module github.com/leaktk/leaktk
 
-go 1.24.5
+go 1.24.11
 
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/adrg/xdg v0.5.3
+	github.com/betterleaks/betterleaks v1.0.1
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/containers/image/v5 v5.36.2
 	github.com/fatih/semgroup v1.3.0
@@ -13,7 +14,6 @@ require (
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
-	github.com/zricethezav/gitleaks/v8 v8.29.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -45,6 +45,7 @@ require (
 	github.com/cyphar/filepath-securejoin v0.5.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/distribution/reference v0.6.0 // indirect
+	github.com/dlclark/regexp2 v1.10.0 // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker v28.3.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
@@ -97,6 +98,8 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pkoukk/tiktoken-go v0.1.8 // indirect
+	github.com/pkoukk/tiktoken-go-loader v0.0.2 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
@@ -115,7 +118,7 @@ require (
 	github.com/tetratelabs/wazero v1.9.0 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	github.com/vbatts/tar-split v0.12.1 // indirect
-	github.com/wasilibs/go-re2 v1.9.0 // indirect
+	github.com/wasilibs/go-re2 v1.10.0 // indirect
 	github.com/wasilibs/wazero-helpers v0.0.0-20240620070341-3dff1577cd52 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect

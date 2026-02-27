@@ -80,7 +80,7 @@ type (
 		Server       PatternServer `toml:"server"`
 	}
 
-	// Gitleaks holds version and config information for the Gitleaks scanner
+	// Gitleaks holds version and config information for the Betterleaks scanner
 	Gitleaks struct {
 		Version    string `toml:"version"`
 		ConfigPath string `toml:"config_path"`
@@ -88,7 +88,7 @@ type (
 
 	// PatternServer provides pattern server configuration settings for the scanner
 	PatternServer struct {
-		AuthToken string `toml:"auth_token"`
+		AuthToken string `toml:"auth_token"` // #nosec G117
 		URL       string `toml:"url"`
 	}
 )

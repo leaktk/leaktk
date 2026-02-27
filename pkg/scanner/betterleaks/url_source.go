@@ -1,4 +1,4 @@
-package gitleaks
+package betterleaks
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/zricethezav/gitleaks/v8/config"
-	"github.com/zricethezav/gitleaks/v8/sources"
+	"github.com/betterleaks/betterleaks/config"
+	"github.com/betterleaks/betterleaks/sources"
 
 	httpclient "github.com/leaktk/leaktk/pkg/http"
 	"github.com/leaktk/leaktk/pkg/logger"
@@ -33,7 +33,7 @@ func (s *URL) Fragments(ctx context.Context, yield sources.FragmentsFunc) error 
 	if err != nil {
 		return fmt.Errorf("error creating HTTP GET request: %w", err)
 	}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704
 	if err != nil {
 		return fmt.Errorf("HTTP GET error: %w", err)
 	}
