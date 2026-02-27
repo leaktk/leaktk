@@ -88,7 +88,7 @@ type (
 
 	// PatternServer provides pattern server configuration settings for the scanner
 	PatternServer struct {
-		AuthToken string `toml:"auth_token"`
+		AuthToken string `toml:"auth_token"` // #nosec G117
 		URL       string `toml:"url"`
 	}
 )

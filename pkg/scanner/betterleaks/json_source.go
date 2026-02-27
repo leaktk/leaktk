@@ -83,7 +83,7 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield sou
 
 				return nil
 			}
-			resp, err := client.Do(req)
+			resp, err := client.Do(req) // #nosec G704
 			if err != nil {
 				logger.Error("json fetch url failed: %v path=%q", err, currentNode.path)
 

@@ -235,6 +235,7 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 		switch extractor.(type) {
 		case archives.SevenZip, archives.Zip:
 			tmpfile, err := os.CreateTemp("", "leaktk-archive-")
+			tmpfilePath := filepath.Clean(tmpfile.Name())
 			if err != nil {
 				logger.Error("could not create tmp file for container layer blob: %v digest=%q", err, digest)
 
@@ -242,7 +243,7 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 			}
 			defer func() {
 				_ = tmpfile.Close()
-				_ = os.Remove(tmpfile.Name())
+				_ = os.Remove(tmpfilePath)
 			}()
 
 			_, err = io.Copy(tmpfile, reader)

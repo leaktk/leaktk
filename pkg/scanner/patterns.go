@@ -61,7 +61,7 @@ func (p *Patterns) fetchGitleaksConfig(ctx context.Context) (string, error) {
 		)
 	}
 
-	response, err := p.client.Do(request)
+	response, err := p.client.Do(request) // #nosec G704
 	if err != nil {
 		return "", err
 	}

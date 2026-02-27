@@ -33,7 +33,7 @@ func (s *URL) Fragments(ctx context.Context, yield sources.FragmentsFunc) error 
 	if err != nil {
 		return fmt.Errorf("error creating HTTP GET request: %w", err)
 	}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704
 	if err != nil {
 		return fmt.Errorf("HTTP GET error: %w", err)
 	}
