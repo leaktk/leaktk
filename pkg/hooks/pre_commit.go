@@ -38,7 +38,7 @@ https://github.com/leaktk/leaktk/blob/main/docs/findings.md
 ==============================================================================
 `
 
-func preCommitRun(cfg *config.Config, hookName string, _ []string) error {
+func preCommitRun(cfg *config.Config, hookName string, _ []string) (int, error) {
 	var wg sync.WaitGroup
 	var response *proto.Response
 
@@ -76,15 +76,15 @@ func preCommitRun(cfg *config.Config, hookName string, _ []string) error {
 		preCommitDisplayResults(response.Results)
 	}
 
-	// Exit with non-zero code if the response had an error or if leaks were found
+	// Return non-zero status code if the response had an error or if leaks were found
 	if response.Error != nil {
-		logger.Fatal("response contains error: %w", response.Error)
+		return 1, fmt.Errorf("response contains error: %w", response.Error)
 	}
 	if leaksFound {
-		os.Exit(1)
+		return 1, nil
 	}
 
-	return nil
+	return 0, nil
 }
 
 func preCommitResultEncodings(result *proto.Result) string {

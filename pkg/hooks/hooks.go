@@ -12,11 +12,11 @@ var HookNames = []string{
 }
 
 // Run executes the provided hook with its arguments
-func Run(cfg *config.Config, hookName string, args []string) error {
+func Run(cfg *config.Config, hookName string, args []string) (int, error) {
 	switch hookName {
 	case "git.pre-commit":
 		return preCommitRun(cfg, hookName, args)
 	default:
-		return fmt.Errorf("invalid hookname: hookname=%q", hookName)
+		return 1, fmt.Errorf("invalid hookname: hookname=%q", hookName)
 	}
 }
