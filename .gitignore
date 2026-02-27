@@ -17,3 +17,6 @@ leaktk
 go.work
 # Added by goreleaser init:
 dist/
+
+# Editor files
+*.swp
