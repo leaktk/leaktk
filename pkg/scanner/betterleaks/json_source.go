@@ -1,4 +1,4 @@
-package gitleaks
+package betterleaks
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zricethezav/gitleaks/v8/config"
-	"github.com/zricethezav/gitleaks/v8/sources"
+	"github.com/betterleaks/betterleaks/config"
+	"github.com/betterleaks/betterleaks/sources"
 
 	"github.com/leaktk/leaktk/pkg/fs"
 	httpclient "github.com/leaktk/leaktk/pkg/http"
@@ -83,7 +83,7 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield sou
 
 				return nil
 			}
-			resp, err := client.Do(req)
+			resp, err := client.Do(req) // #nosec G704
 			if err != nil {
 				logger.Error("json fetch url failed: %v path=%q", err, currentNode.path)
 

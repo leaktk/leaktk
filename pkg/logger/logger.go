@@ -6,17 +6,17 @@ import (
 	"log"
 	"time"
 
+	bllog "github.com/betterleaks/betterleaks/logging"
 	"github.com/rs/zerolog"
 	zlog "github.com/rs/zerolog/log"
-	glog "github.com/zricethezav/gitleaks/v8/logging"
 )
 
 func init() {
-	// Disable logging by default to make sure that gitleaks can't produce logs
+	// Disable logging by default to make sure that betterleaks can't produce logs
 	// without being specifically configured
-	glog.Logger.Level(zerolog.Disabled)
+	bllog.Logger.Level(zerolog.Disabled)
 	// Provide a custom handler to map to this logging framework
-	glog.Logger = zlog.Output(zerologMapper{})
+	bllog.Logger = zlog.Output(zerologMapper{})
 }
 
 // zerologMapper helps translate logs from subsystems that use zerolog
@@ -38,17 +38,17 @@ func (m zerologMapper) Write(data []byte) (int, error) {
 
 	switch event.Level {
 	case "info":
-		Info("gitleaks: %s", event.Message)
+		Info("betterleaks: %s", event.Message)
 	case "warn":
-		Warning("gitleaks: %s", event.Message)
+		Warning("betterleaks: %s", event.Message)
 	case "error":
-		Error("gitleaks: %s", event.Message)
+		Error("betterleaks: %s", event.Message)
 	case "fatal":
-		Critical("gitleaks: %s", event.Message)
+		Critical("betterleaks: %s", event.Message)
 	case "panic":
-		Critical("gitleaks: %s", event.Message)
+		Critical("betterleaks: %s", event.Message)
 	default:
-		Debug("gitleaks: %s", event.Message)
+		Debug("betterleaks: %s", event.Message)
 	}
 
 	return len(data), nil
@@ -164,19 +164,19 @@ func SetLoggerLevel(levelName string) error {
 	switch levelName {
 	case "DEBUG":
 		currentLogLevel = DEBUG
-		glog.Logger.Level(zerolog.DebugLevel)
+		bllog.Logger.Level(zerolog.DebugLevel)
 	case "INFO":
 		currentLogLevel = INFO
-		glog.Logger.Level(zerolog.InfoLevel)
+		bllog.Logger.Level(zerolog.InfoLevel)
 	case "WARNING":
 		currentLogLevel = WARNING
-		glog.Logger.Level(zerolog.WarnLevel)
+		bllog.Logger.Level(zerolog.WarnLevel)
 	case "ERROR":
 		currentLogLevel = ERROR
-		glog.Logger.Level(zerolog.ErrorLevel)
+		bllog.Logger.Level(zerolog.ErrorLevel)
 	case "CRITICAL":
 		currentLogLevel = CRITICAL
-		glog.Logger.Level(zerolog.FatalLevel)
+		bllog.Logger.Level(zerolog.FatalLevel)
 	default:
 		return fmt.Errorf("invalid log level: level=%q", levelName)
 	}

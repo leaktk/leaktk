@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zricethezav/gitleaks/v8/detect"
-	"github.com/zricethezav/gitleaks/v8/report"
+	"github.com/betterleaks/betterleaks/detect"
+	"github.com/betterleaks/betterleaks/report"
 
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
@@ -19,7 +19,7 @@ import (
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/queue"
-	"github.com/leaktk/leaktk/pkg/scanner/gitleaks"
+	"github.com/leaktk/leaktk/pkg/scanner/betterleaks"
 
 	httpclient "github.com/leaktk/leaktk/pkg/http"
 )
@@ -111,10 +111,10 @@ func (s *Scanner) listen() {
 
 		cfg, err := s.patterns.Gitleaks(ctx)
 		if err != nil {
-			logger.Critical("scan failed: could load gitleaks config: %v id=%q", err, request.ID)
+			logger.Critical("scan failed: could load scanner config: %v id=%q", err, request.ID)
 			s.respondWithError(request, &proto.Error{
 				Code:    configErrorCode,
-				Message: "could not load gitleaks config",
+				Message: "could not load scanner config",
 				Data:    request,
 			})
 
@@ -196,7 +196,7 @@ func (s *Scanner) listen() {
 			}
 
 			loadSourceConfig(detector, sourcePath)
-			findings, err = gitleaks.ScanGit(ctx, detector, gitDir, gitleaks.GitScanOpts{
+			findings, err = betterleaks.ScanGit(ctx, detector, gitDir, betterleaks.GitScanOpts{
 				Branch:   request.Opts.Branch,
 				Depth:    scanDepth(request.Opts.Depth, s.maxScanDepth),
 				Since:    request.Opts.Since,
@@ -204,15 +204,15 @@ func (s *Scanner) listen() {
 				Unstaged: request.Opts.Unstaged,
 			})
 		case proto.URLRequestKind:
-			findings, err = gitleaks.ScanURL(ctx, detector, request.Resource, gitleaks.URLScanOpts{
+			findings, err = betterleaks.ScanURL(ctx, detector, request.Resource, betterleaks.URLScanOpts{
 				FetchURLPatterns: splitFetchURLPatterns(request.Opts.FetchURLs),
 			})
 		case proto.JSONDataRequestKind:
-			findings, err = gitleaks.ScanJSON(ctx, detector, request.Resource, gitleaks.JSONScanOpts{
+			findings, err = betterleaks.ScanJSON(ctx, detector, request.Resource, betterleaks.JSONScanOpts{
 				FetchURLPatterns: splitFetchURLPatterns(request.Opts.FetchURLs),
 			})
 		case proto.TextRequestKind:
-			findings, err = gitleaks.ScanReader(ctx, detector, strings.NewReader(request.Resource))
+			findings, err = betterleaks.ScanReader(ctx, detector, strings.NewReader(request.Resource))
 		case proto.FilesRequestKind:
 			if !s.allowLocal {
 				logger.Critical("scan failed: local scans not allowed: id=%q", request.ID)
@@ -225,9 +225,9 @@ func (s *Scanner) listen() {
 				return
 			}
 			loadSourceConfig(detector, request.Resource)
-			findings, err = gitleaks.ScanFiles(ctx, detector, request.Resource)
+			findings, err = betterleaks.ScanFiles(ctx, detector, request.Resource)
 		case proto.ContainerImageRequestKind:
-			findings, err = gitleaks.ScanContainerImage(ctx, detector, request.Resource, gitleaks.ContainerImageScanOpts{
+			findings, err = betterleaks.ScanContainerImage(ctx, detector, request.Resource, betterleaks.ContainerImageScanOpts{
 				Arch:  request.Opts.Arch,
 				Depth: scanDepth(request.Opts.Depth, s.maxScanDepth),
 				Since: request.Opts.Since,
@@ -386,7 +386,7 @@ func loadSourceConfig(detector *detect.Detector, sourcePath string) {
 	rawAdditionalConfig, err := os.ReadFile(additionalConfigPath) // #nosec G304
 	if err == nil && len(rawAdditionalConfig) > 0 {
 		logger.Debug("applying additional config: path=%q", additionalConfigPath)
-		additionalConfig, err := gitleaks.ParseConfig(string(rawAdditionalConfig))
+		additionalConfig, err := betterleaks.ParseConfig(string(rawAdditionalConfig))
 		if err != nil {
 			logger.Error("could not parse additional config: %s", err)
 		} else {

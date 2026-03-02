@@ -1,4 +1,4 @@
-package gitleaks
+package betterleaks
 
 import (
 	"context"
@@ -8,9 +8,9 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/betterleaks/betterleaks/sources"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/zricethezav/gitleaks/v8/sources"
 )
 
 func TestURL(t *testing.T) {

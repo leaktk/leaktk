@@ -1,4 +1,4 @@
-package gitleaks
+package betterleaks
 
 import (
 	"context"
@@ -18,12 +18,12 @@ import (
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/version"
 
+	"github.com/betterleaks/betterleaks/config"
+	"github.com/betterleaks/betterleaks/sources"
 	"github.com/containers/image/v5/manifest"
 	"github.com/containers/image/v5/pkg/blobinfocache"
 	"github.com/containers/image/v5/transports/alltransports"
 	"github.com/containers/image/v5/types"
-	"github.com/zricethezav/gitleaks/v8/config"
-	"github.com/zricethezav/gitleaks/v8/sources"
 
 	imagespecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -234,7 +234,8 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 	if _, isSeekReaderAt := reader.(seekReaderAt); !isSeekReaderAt {
 		switch extractor.(type) {
 		case archives.SevenZip, archives.Zip:
-			tmpfile, err := os.CreateTemp("", "gitleaks-archive-")
+			tmpfile, err := os.CreateTemp("", "leaktk-archive-")
+			tmpfilePath := filepath.Clean(tmpfile.Name())
 			if err != nil {
 				logger.Error("could not create tmp file for container layer blob: %v digest=%q", err, digest)
 
@@ -242,7 +243,7 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 			}
 			defer func() {
 				_ = tmpfile.Close()
-				_ = os.Remove(tmpfile.Name())
+				_ = os.Remove(tmpfilePath)
 			}()
 
 			_, err = io.Copy(tmpfile, reader)

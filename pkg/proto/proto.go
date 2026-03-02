@@ -145,7 +145,7 @@ const (
 type Result struct {
 	ID       string            `json:"id"       toml:"id"       yaml:"id"`
 	Kind     string            `json:"kind"     toml:"kind"     yaml:"kind"`
-	Secret   string            `json:"secret"   toml:"secret"   yaml:"secret"`
+	Secret   string            `json:"secret"   toml:"secret"   yaml:"secret"` // #nosec G117
 	Match    string            `json:"match"    toml:"match"    yaml:"match"`
 	Context  string            `json:"context"  toml:"context"  yaml:"context"`
 	Entropy  float32           `json:"entropy"  toml:"entropy"  yaml:"entropy"`
