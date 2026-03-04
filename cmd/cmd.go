@@ -93,7 +93,7 @@ func runScan(cmd *cobra.Command, args []string) {
 	// Providing a gitleaks-config via command line arguments takes
 	// precedence over gitleaks config set in the leaktk config file
 	if len(gitleaksConfig) != 0 {
-		cfg.Scanner.Patterns.Gitleaks.ConfigPath = gitleaksConfig
+		cfg.Scanner.Patterns.Gitleaks.LocalPath = gitleaksConfig
 		logger.Debug("using provided gitleaks config: path=%s", gitleaksConfig)
 
 		// Providing a config automatically disables pattern autofetch
@@ -225,6 +225,33 @@ func scanCommand() *cobra.Command {
 
 	return scanCommand
 }
+
+// func runAnalyze(cmd *cobra.Command, args []string) {
+// 	//flags := cmd.Flags()
+// 	ctx := context.Background()
+
+// 	err := analyst.AnalyzeCommand(ctx, "")
+
+// 	if err != nil {
+// 		cmd.PrintErrf("Error during analysis: %v\n", err)
+// 		os.Exit(1)
+// 	}
+// }
+
+// func analyzeCommand() *cobra.Command {
+// 	analyzeCommand := &cobra.Command{
+// 		Use:                   "analyze [flags]",
+// 		DisableFlagsInUseLine: true,
+// 		Short:                 "Analyze input data against a Rego policy",
+// 		Args:                  cobra.NoArgs,
+// 		Run:                   runAnalyze,
+// 	}
+
+// 	flags := analyzeCommand.Flags()
+// 	flags.StringP("input", "i", "", "Optional path to the input JSONL file. If empty, reads from stdin.")
+
+// 	return analyzeCommand
+// }
 
 func readLine(reader *bufio.Reader) ([]byte, error) {
 	var buf bytes.Buffer
@@ -366,6 +393,7 @@ func rootCommand() *cobra.Command {
 	rootCommand.AddCommand(logoutCommand())
 	rootCommand.AddCommand(scanCommand())
 	rootCommand.AddCommand(listenCommand())
+	//rootCommand.AddCommand(analyzeCommand())
 	rootCommand.AddCommand(versionCommand())
 
 	return rootCommand

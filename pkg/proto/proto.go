@@ -154,6 +154,7 @@ type Result struct {
 	Contact  Contact           `json:"contact"  toml:"contact"  yaml:"contact"`
 	Location Location          `json:"location" toml:"location" yaml:"location"`
 	Notes    map[string]string `json:"notes"    toml:"notes"    yaml:"notes"`
+	Analysis map[string]any    `json:"analysis" toml:"analysis" yaml:"analysis"`
 }
 
 // Rule that triggered the result
