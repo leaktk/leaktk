@@ -100,8 +100,8 @@ func (c *LeakTKPatterns) UnmarshalJSON(data []byte) error {
 	}
 
 	compiled := rego.New(
-		rego.Query("data.analyze.analyzed_response"),
-		rego.Module("analyze.rego", leaktkConfig.Rego),
+		rego.Query("data.leaktk.analyst.analyzed_response"),
+		rego.Module("leaktk.analyst.rego", leaktkConfig.Rego),
 		//rego.SetRegoVersion(ast.RegoV1),
 	)
 
