@@ -41,9 +41,12 @@ func setupPatterns(t *testing.T, patternsCfg *config.Patterns, client *http.Clie
 		patternsCfg.LeakTK.LocalPath = filepath.Join(tmpDir, "patterns", "leaktk", patternsCfg.LeakTK.Version)
 	}
 
-	// Clean up any local files to ensure fetching occurs
+	// Clean up any local files to ensure fetching occurs (ignore error if doesn't exist)
 	if len(patternsCfg.Gitleaks.LocalPath) > 0 {
-		require.NoError(t, os.Remove(patternsCfg.Gitleaks.LocalPath))
+		_ = os.Remove(patternsCfg.Gitleaks.LocalPath)
+	}
+	if len(patternsCfg.LeakTK.LocalPath) > 0 {
+		_ = os.Remove(patternsCfg.LeakTK.LocalPath)
 	}
 
 	return NewPatterns(patternsCfg, client)
@@ -107,7 +110,7 @@ func TestPatternsGitleaks(t *testing.T) {
 
 		_, err := p.Gitleaks(ctx)
 		require.Error(t, err)
-		// The error will be the one returned by fetchConfig/Gitleaks for bad status
+		// The error will be the one returned by fetchPatterns/Gitleaks for bad status
 		assert.Contains(t, err.Error(), "unexpected status code")
 	})
 
@@ -154,14 +157,14 @@ func TestGitleaksConfigModTimeExceeds(t *testing.T) {
 		cfg.Scanner.Patterns.Gitleaks.LocalPath = tempFilePath
 
 		patterns := &Patterns{
-			patternsConfig: &cfg.Scanner.Patterns,
+			config: &cfg.Scanner.Patterns,
 		}
 
 		// Test with a modTimeLimit of 5 seconds
-		assert.True(t, patterns.configModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
+		assert.True(t, patterns.fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
 
 		// Test with a modTimeLimit of 15 seconds
-		assert.False(t, patterns.configModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
+		assert.False(t, patterns.fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
 	})
 
 	t.Run("FileDoesNotExist", func(t *testing.T) {
@@ -170,12 +173,12 @@ func TestGitleaksConfigModTimeExceeds(t *testing.T) {
 
 		// Create a Patterns instance with a non-existent file path
 		patterns := &Patterns{
-			patternsConfig: &cfg.Scanner.Patterns,
+			config: &cfg.Scanner.Patterns,
 		}
 
 		// Test with any modTimeLimit
-		assert.True(t, patterns.configModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
-		assert.True(t, patterns.configModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
+		assert.True(t, patterns.fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
+		assert.True(t, patterns.fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
 	})
 
 	t.Run("FileExistsButErrorOnStat", func(t *testing.T) {
@@ -184,11 +187,11 @@ func TestGitleaksConfigModTimeExceeds(t *testing.T) {
 		cfg.Scanner.Patterns.Gitleaks.LocalPath = "/dev/zero"
 
 		patterns := &Patterns{
-			patternsConfig: &cfg.Scanner.Patterns,
+			config: &cfg.Scanner.Patterns,
 		}
 
 		// Test with any modTimeLimit
-		assert.True(t, patterns.configModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
-		assert.True(t, patterns.configModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
+		assert.True(t, patterns.fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
+		assert.True(t, patterns.fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
 	})
 }

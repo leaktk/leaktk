@@ -2,15 +2,13 @@ package patterns
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/leaktk/leaktk/pkg/analyst/ai"
 	"github.com/leaktk/leaktk/pkg/logger"
 
-	//"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/rego"
 )
 
@@ -19,94 +17,94 @@ type LeakTKPatterns struct {
 	Rego         *rego.Rego          `json:"opa_policy"`
 }
 
+// LeakTKConfigHash returns the sha256 hash for the current leaktk config.
+func (c *Patterns) LeakTKConfigHash() string {
+	return fmt.Sprintf("%x", c.leaktkPatternsHash)
+}
+
 // LeakTK returns the LeakTKPatterns object, handling fetch/caching/update.
 func (c *Patterns) LeakTK(ctx context.Context) (*LeakTKPatterns, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	cfg := c.patternsConfig
+	cfg := c.config
 	localPath := cfg.LeakTK.LocalPath
-	modTimeExceeds := c.configModTimeExceeds(localPath, cfg.RefreshAfter)
+	modTimeExceeds := c.fileModTimeExceeds(localPath, cfg.RefreshAfter)
 
 	if cfg.Autofetch && modTimeExceeds {
 		logger.Info("fetching combined LeakTK models and OPA policy config")
 
-		configURL, err := c.LeakTKFetchURL()
+		fetchURL, err := c.fetchURLFor("leaktk", cfg.LeakTK.Version)
 		if err != nil {
-			return c.leaktkConfig, err
+			return c.leaktkPatterns, err
 		}
 
-		rawConfig, err := c.fetchConfig(ctx, configURL, cfg.Server.AuthToken)
+		rawPatterns, hashChanged, err := c.fetchAndUpdate(ctx, fetchURL, localPath, c.leaktkPatternsHash)
 		if err != nil {
-			return c.leaktkConfig, err
+			return c.leaktkPatterns, err
 		}
 
-		// Parse the single file into the combined struct
-		newleaktkConfig, err := c.parseleaktkConfig(rawConfig)
-		if err != nil {
-			logger.Debug("fetched config:\n%s", rawConfig)
-			return c.leaktkConfig, fmt.Errorf("could not parse combined config: error=%q", err)
+		// Only parse and update if hash changed
+		if hashChanged {
+			newConfig, err := c.parseLeakTKConfig(rawPatterns)
+			if err != nil {
+				logger.Debug("fetched config:\n%s", rawPatterns)
+				return c.leaktkPatterns, fmt.Errorf("could not parse combined config: error=%q", err)
+			}
+			c.leaktkPatterns = newConfig
+			c.leaktkPatternsHash = sha256.Sum256([]byte(rawPatterns))
+			logger.Info("updated combined models and OPA policy config: hash=%s", c.LeakTKConfigHash())
 		}
-		c.leaktkConfig = newleaktkConfig
-
-		// Write the single merged JSON file to the Models local path
-		if err := c.updateLocalConfig(localPath, rawConfig); err != nil {
-			return c.leaktkConfig, err
-		}
-
-		logger.Info("updated combined models and OPA policy config: path=%q", localPath)
-
-	} else if c.leaktkConfig == nil {
-		if c.configModTimeExceeds(localPath, cfg.ExpiredAfter) {
+	} else if c.leaktkPatterns == nil {
+		if c.fileModTimeExceeds(localPath, cfg.ExpiredAfter) {
 			return nil, fmt.Errorf(
 				"combined config is expired and autofetch is disabled: config_path=%q",
 				localPath,
 			)
 		}
 
-		rawConfig, err := os.ReadFile(filepath.Clean(localPath))
+		rawPatterns, err := c.loadFromDisk(localPath)
 		if err != nil {
 			return nil, err
 		}
 
-		// Parse the single file into the combined struct
-		newleaktkConfig, err := c.parseleaktkConfig(string(rawConfig))
+		newConfig, err := c.parseLeakTKConfig(rawPatterns)
 		if err != nil {
-			logger.Debug("loaded config:\n%s\n", rawConfig)
+			logger.Debug("loaded config:\n%s\n", rawPatterns)
 			return nil, fmt.Errorf("could not parse combined config: error=%q", err)
 		}
-		c.leaktkConfig = newleaktkConfig
+		c.leaktkPatterns = newConfig
+		c.leaktkPatternsHash = sha256.Sum256([]byte(rawPatterns))
 	}
 
-	return c.leaktkConfig, nil
+	return c.leaktkPatterns, nil
 }
 
-// parseleaktkConfig is the only needed custom parser, handling the single combined file.
-func (c *Patterns) parseleaktkConfig(rawConfig string) (*LeakTKPatterns, error) {
-	var leaktkConfig LeakTKPatterns
-	if err := leaktkConfig.UnmarshalJSON([]byte(rawConfig)); err != nil {
+// parseLeakTKConfig parses the LeakTK patterns config and compiles the Rego policy.
+func (c *Patterns) parseLeakTKConfig(rawPatterns string) (*LeakTKPatterns, error) {
+	var leaktkPatterns LeakTKPatterns
+	if err := leaktkPatterns.UnmarshalJSON([]byte(rawPatterns)); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal combined configuration: %w", err)
 	}
-	return &leaktkConfig, nil
+	return &leaktkPatterns, nil
 }
 
 func (c *LeakTKPatterns) UnmarshalJSON(data []byte) error {
-	var leaktkConfig struct {
+	var leaktkPatterns struct {
 		ModelsConfig []ai.MLModelsConfig `json:"models"`
 		Rego         string              `json:"opa_policy"`
 	}
 
-	if err := json.Unmarshal(data, &leaktkConfig); err != nil {
+	if err := json.Unmarshal(data, &leaktkPatterns); err != nil {
 		return fmt.Errorf("could not unmarshal LeakTK Patterns: %w", err)
 	}
 
 	compiled := rego.New(
 		rego.Query("data.leaktk.analyst.analyzed_response"),
-		rego.Module("leaktk.analyst.rego", leaktkConfig.Rego),
-		//rego.SetRegoVersion(ast.RegoV1),
+		rego.Module("leaktk.analyst.rego", leaktkPatterns.Rego),
 	)
 
-	c.ModelsConfig = leaktkConfig.ModelsConfig
+	c.ModelsConfig = leaktkPatterns.ModelsConfig
 	c.Rego = compiled
 
 	return nil

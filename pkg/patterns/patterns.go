@@ -16,37 +16,35 @@ import (
 
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
-	"github.com/leaktk/leaktk/pkg/scanner/betterleaks"
 )
 
 // Patterns manages fetching, caching, and updating configuration for
 // both gitleaks patterns and LeakTK ML models.
 type Patterns struct {
 	client *http.Client
+	config *config.Patterns
 	mutex  sync.Mutex
 
-	patternsConfig *config.Patterns // Holds the config settings (URLs, paths, versions)
-
 	// Gitleaks Patterns fields
-	gitleaksConfig     *betterleaksconfig.Config
-	gitleaksConfigHash [32]byte
+	gitleaksPatterns     *betterleaksconfig.Config
+	gitleaksPatternsHash [32]byte
 
 	// LeakTK Models fields
-	leaktkConfig     *LeakTKPatterns
-	leaktkConfigHash [32]byte
+	leaktkPatterns     *LeakTKPatterns
+	leaktkPatternsHash [32]byte
 }
 
 // NewPatterns returns a configured instance of Patterns.
 func NewPatterns(patternsCfg *config.Patterns, client *http.Client) *Patterns {
 	return &Patterns{
-		client:         client,
-		patternsConfig: patternsCfg,
+		client: client,
+		config: patternsCfg,
 	}
 }
 
-// configModTimeExceeds returns true if the local configuration file at 'path'
+// fileModTimeExceeds returns true if the local configuration file at 'path'
 // is older than 'modTimeLimit' seconds.
-func (c *Patterns) configModTimeExceeds(path string, modTimeLimit int) bool {
+func (c *Patterns) fileModTimeExceeds(path string, modTimeLimit int) bool {
 	if modTimeLimit == 0 {
 		return false
 	}
@@ -58,21 +56,18 @@ func (c *Patterns) configModTimeExceeds(path string, modTimeLimit int) bool {
 	return true
 }
 
-// fetchConfig fetches the raw config file from the server.
-func (c *Patterns) fetchConfig(ctx context.Context, configURL string, authToken string) (string, error) {
-	logger.Debug("config url: url=%q", configURL)
+// fetchPatterns fetches the raw patterns from the server.
+func (c *Patterns) fetchPatterns(ctx context.Context, patternsURL string, authToken string) (string, error) {
+	logger.Debug("fetching patterns: url=%q", patternsURL)
 
-	request, err := http.NewRequestWithContext(ctx, "GET", configURL, nil)
+	request, err := http.NewRequestWithContext(ctx, "GET", patternsURL, nil)
 	if err != nil {
 		return "", err
 	}
 
 	if len(authToken) > 0 {
 		logger.Debug("setting authorization header")
-		request.Header.Add(
-			"Authorization",
-			"Bearer "+authToken,
-		)
+		request.Header.Add("Authorization", "Bearer "+authToken)
 	}
 
 	response, err := c.client.Do(request) // #nosec G704
@@ -98,98 +93,57 @@ func (c *Patterns) fetchConfig(ctx context.Context, configURL string, authToken 
 	return string(body), nil
 }
 
-// updateLocalConfig writes the raw config content to the specified local file path.
+// updateLocalPatterns writes the raw patterns content to the specified local file path.
 // It creates the directory if it does not exist.
-func (c *Patterns) updateLocalConfig(localPath, rawConfig string) error {
+func (c *Patterns) updateLocalPatterns(localPath, rawPatterns string) error {
 	if err := os.MkdirAll(filepath.Dir(localPath), 0700); err != nil {
-		return fmt.Errorf("could not create config dir: error=%q", err)
+		return fmt.Errorf("could not create patterns dir: %v", err)
 	}
 
-	if err := os.WriteFile(localPath, []byte(rawConfig), 0600); err != nil {
-		return fmt.Errorf("could not write config: path=%q error=%q", localPath, err)
+	if err := os.WriteFile(localPath, []byte(rawPatterns), 0600); err != nil {
+		return fmt.Errorf("could not write patterns: %v path=%q", err, localPath)
 	}
 
 	return nil
 }
 
-func (c *Patterns) gitleaksFetchURL() (string, error) {
+// fetchURLFor constructs the fetch URL for a given provider and version.
+func (c *Patterns) fetchURLFor(provider, version string) (string, error) {
 	return url.JoinPath(
-		c.patternsConfig.Server.URL, "patterns", "gitleaks", c.patternsConfig.Gitleaks.Version,
+		c.config.Server.URL, "patterns", provider, version,
 	)
 }
 
-// Gitleaks returns a Gitleaks config object, fetching/caching/updating as necessary.
-func (c *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	cfg := c.patternsConfig
-	localPath := cfg.Gitleaks.LocalPath
-	modTimeExceeds := c.configModTimeExceeds(localPath, cfg.RefreshAfter)
-
-	if cfg.Autofetch && modTimeExceeds {
-		logger.Info("fetching gitleaks patterns")
-		patternURL, err := c.gitleaksFetchURL()
-		if err != nil {
-			return c.gitleaksConfig, err
-		}
-
-		rawConfig, err := c.fetchConfig(ctx, patternURL, cfg.Server.AuthToken)
-		if err != nil {
-			return c.gitleaksConfig, err
-		}
-
-		newConfig, err := betterleaks.ParseConfig(rawConfig)
-		if err != nil {
-			logger.Debug("fetched config:\n%s", rawConfig)
-			return c.gitleaksConfig, fmt.Errorf("could not parse gitleaks config: error=%q", err)
-		}
-		c.gitleaksConfig = newConfig
-
-		if err := c.updateLocalConfig(localPath, rawConfig); err != nil {
-			return c.gitleaksConfig, err
-		}
-
-		if hash := sha256.Sum256([]byte(rawConfig)); c.gitleaksConfigHash != hash {
-			c.gitleaksConfigHash = hash
-			logger.Info("updated gitleaks patterns: hash=%s", c.GitleaksConfigHash())
-		}
-	} else if c.gitleaksConfig == nil {
-		if c.configModTimeExceeds(localPath, cfg.ExpiredAfter) {
-			return nil, fmt.Errorf(
-				"gitleaks config is expired and autofetch is disabled: config_path=%q",
-				localPath,
-			)
-		}
-
-		rawConfig, err := os.ReadFile(filepath.Clean(localPath))
-		if err != nil {
-			return c.gitleaksConfig, err
-		}
-
-		newConfig, err := betterleaks.ParseConfig(string(rawConfig))
-		if err != nil {
-			logger.Debug("loaded config:\n%s\n", rawConfig)
-			return c.gitleaksConfig, fmt.Errorf("could not parse gitleaks config: error=%q", err)
-		}
-		c.gitleaksConfig = newConfig
-
-		if hash := sha256.Sum256(rawConfig); c.gitleaksConfigHash != hash {
-			c.gitleaksConfigHash = hash
-		}
+// fetchAndUpdate fetches patterns from server, checks hash, and updates if changed.
+// Returns (rawPatterns, hashChanged, error).
+func (c *Patterns) fetchAndUpdate(ctx context.Context, fetchURL, localPath string, currentHash [32]byte) (string, bool, error) {
+	rawPatterns, err := c.fetchPatterns(ctx, fetchURL, c.config.Server.AuthToken)
+	if err != nil {
+		return "", false, err
 	}
 
-	return c.gitleaksConfig, nil
+	// Calculate hash of fetched content
+	newHash := sha256.Sum256([]byte(rawPatterns))
+
+	// Only update if hash changed
+	if newHash == currentHash {
+		logger.Debug("skipping update: patterns hash unchanged")
+		return rawPatterns, false, nil
+	}
+
+	// Hash changed, write to disk
+	if err := c.updateLocalPatterns(localPath, rawPatterns); err != nil {
+		return rawPatterns, false, err
+	}
+
+	return rawPatterns, true, nil
 }
 
-// GitleaksConfigHash returns the sha256 hash for the current gitleaks config.
-func (c *Patterns) GitleaksConfigHash() string {
-	return fmt.Sprintf("%x", c.gitleaksConfigHash)
-}
-
-// LeakTKFetchURL fetches the path of the current leaktk file.
-func (c *Patterns) LeakTKFetchURL() (string, error) {
-	return url.JoinPath(
-		c.patternsConfig.Server.URL, "patterns", "leaktk", c.patternsConfig.LeakTK.Version,
-	)
+// loadFromDisk loads patterns from local file path.
+func (c *Patterns) loadFromDisk(localPath string) (string, error) {
+	rawPatterns, err := os.ReadFile(filepath.Clean(localPath))
+	if err != nil {
+		return "", err
+	}
+	return string(rawPatterns), nil
 }
