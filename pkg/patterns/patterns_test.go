@@ -43,7 +43,7 @@ func setupPatterns(t *testing.T, patternsCfg *config.Patterns, client *http.Clie
 
 	// Clean up any local files to ensure fetching occurs
 	if len(patternsCfg.Gitleaks.LocalPath) > 0 {
-		os.Remove(patternsCfg.Gitleaks.LocalPath)
+		require.NoError(t, os.Remove(patternsCfg.Gitleaks.LocalPath))
 	}
 
 	return NewPatterns(patternsCfg, client)
@@ -105,7 +105,6 @@ func TestPatternsGitleaks(t *testing.T) {
 		client := httpclient.NewClient()
 		p := setupPatterns(t, &cfg.Scanner.Patterns, client)
 
-		// Call the public method
 		_, err := p.Gitleaks(ctx)
 		require.Error(t, err)
 		// The error will be the one returned by fetchConfig/Gitleaks for bad status
@@ -133,7 +132,6 @@ func TestPatternsGitleaks(t *testing.T) {
 		client := httpclient.NewClient()
 		p := setupPatterns(t, &cfg.Scanner.Patterns, client)
 
-		// Call the public method
 		_, err := p.Gitleaks(ctx)
 		require.NoError(t, err)
 	})

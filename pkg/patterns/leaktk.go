@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/leaktk/leaktk/pkg/analyst/ai"
 	"github.com/leaktk/leaktk/pkg/logger"
@@ -63,7 +64,7 @@ func (c *Patterns) LeakTK(ctx context.Context) (*LeakTKPatterns, error) {
 			)
 		}
 
-		rawConfig, err := os.ReadFile(localPath)
+		rawConfig, err := os.ReadFile(filepath.Clean(localPath))
 		if err != nil {
 			return nil, err
 		}
