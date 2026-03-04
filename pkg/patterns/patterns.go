@@ -75,7 +75,7 @@ func (c *Patterns) fetchConfig(ctx context.Context, configURL string, authToken 
 		)
 	}
 
-	response, err := c.client.Do(request)
+	response, err := c.client.Do(request) // #nosec G704
 	if err != nil {
 		return "", err
 	}
@@ -162,7 +162,7 @@ func (c *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 			)
 		}
 
-		rawConfig, err := os.ReadFile(localPath)
+		rawConfig, err := os.ReadFile(filepath.Clean(localPath))
 		if err != nil {
 			return c.gitleaksConfig, err
 		}

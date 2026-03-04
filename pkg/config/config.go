@@ -69,7 +69,7 @@ type (
 		Patterns             Patterns `toml:"patterns"`
 		ScanWorkers          int      `toml:"scan_workers"`
 		Workdir              string   `toml:"workdir"`
-		EnableAnalysis       bool     `yaml:"enable_analysis"` //Experimental
+		EnableAnalysis       bool     `toml:"enable_analysis"` //Experimental
 	}
 
 	// Patterns provides configuration for managing pattern updates

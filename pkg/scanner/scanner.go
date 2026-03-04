@@ -58,9 +58,7 @@ type Scanner struct {
 // NewScanner returns a initialized and listening scanner instance that should
 // be closed when it's no longer needed.
 func NewScanner(cfg *config.Config) *Scanner {
-
 	p := patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient())
-
 	a, err := analyst.NewAnalyst(p)
 	if err != nil {
 		logger.Fatal("could not create analyst: %v", err)
@@ -81,12 +79,7 @@ func NewScanner(cfg *config.Config) *Scanner {
 		analyzeResponses: true,
 	}
 
-	if cfg.Scanner.EnableAnalysis {
-
-	}
-
 	scanner.start()
-
 	return scanner
 }
 
