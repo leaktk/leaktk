@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -62,13 +63,30 @@ func gitHookInstallCommand(hookname string) *cobra.Command {
 }
 
 func runGitHookInstall(cmd *cobra.Command, args []string) {
+	flags := cmd.Flags()
+
+	userTemplateDir, _ := flags.GetBool("user-template-dir")
+	systemTemplateDir, _ := flags.GetBool("system-template-dir")
+	dir, _ := flags.GetString("dir")
+	recursive, _ := flags.GetBool("recursive")
+	force, _ := flags.GetBool("force")
+
+	// Use current directory if no dir specified
+	if dir == "" {
+		var err error
+		dir, err = os.Getwd()
+		if err != nil {
+			logger.Fatal("could not get current directory: %v", err)
+		}
+	}
+
 	opts := installer.GitHookOpts{
-		Name:              cmd.Flags().Name(),
-		UserTemplateDir:   false, // TODO
-		GlobalTemplateDir: false, // TODO
-		Dir:               "",    // TODO
-		Recursive:         false, // TODO
-		Force:             false, // TODO
+		Name:              cmd.Use,
+		UserTemplateDir:   userTemplateDir,
+		GlobalTemplateDir: systemTemplateDir,
+		Dir:               dir,
+		Recursive:         recursive,
+		Force:             force,
 	}
 
 	if err := installer.GitHookInstall(cfg, opts); err != nil {
