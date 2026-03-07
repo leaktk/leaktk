@@ -40,6 +40,15 @@ func PathExists(path string) bool {
 	return info != nil && err == nil
 }
 
+// IsExecutable checks if a file exists and is executable
+func IsExecutable(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.Mode()&0111 != 0
+}
+
 // CleanJoin checks to make sure that the prefix path remains after the join, this is to
 // control for path traversal
 func CleanJoin(prefix string, elem string) (string, error) {
