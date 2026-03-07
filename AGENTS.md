@@ -104,6 +104,7 @@ From CONTRIBUTING.md:
 ## Important Notes
 
 - **Pre-1.0 API**: The CLI input/output format may change between releases
+- **Betterleaks**: This is the project's fork of Gitleaks - references to "gitleaks" in code are being migrated to "betterleaks"
 - **Pattern Server**: Can fetch updated patterns from a remote server (default: GitHub patterns repo)
 - **Listen Mode**: In listen mode, logger format switches to JSON automatically
 - **Local Scans**: Can be disabled via config (`scanner.allow_local = false`) for security
