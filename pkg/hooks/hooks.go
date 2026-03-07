@@ -26,7 +26,7 @@ var Names = []string{
 func Run(cfg *config.Config, hookname string, args []string) (int, error) {
 	switch hookname {
 	case "git.pre-commit":
-		return preCommitRun(cfg, hookname, args)
+		return gitPreCommitRun(cfg, hookname, args)
 	default:
 		return 1, fmt.Errorf("invalid hookname: hookname=%q", hookname)
 	}

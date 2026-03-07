@@ -18,7 +18,7 @@ id = "test-pre-commit"
 regex = '''secret\s*=\s*"secretvalue"'''
 `
 
-func TestPreCommit(t *testing.T) {
+func TestGitPreCommit(t *testing.T) {
 	tempDir := filepath.Clean(t.TempDir())
 
 	cfg := config.DefaultConfig()
@@ -57,9 +57,9 @@ func TestPreCommit(t *testing.T) {
 	require.NoError(t, exec.CommandContext(ctx, "git", "add", nonSecretFilePath).Run()) // #nosec G204
 
 	// Run a scan (should not have findings)
-	statusCode, err := preCommitRun(cfg, "git.pre-commit", []string{})
-	assert.NoError(t, err)
-	assert.Equal(t, statusCode, 0)
+	statusCode, err := gitPreCommitRun(cfg, "git.pre-commit", []string{})
+	require.NoError(t, err)
+	assert.Equal(t, 0, statusCode)
 
 	// Write a secret to the repo
 	secretFilePath := filepath.Join(tempDir, "secret-file")
@@ -73,7 +73,7 @@ func TestPreCommit(t *testing.T) {
 	require.NoError(t, exec.CommandContext(ctx, "git", "add", secretFilePath).Run()) // #nosec G204
 
 	// Run a scan (should have findings)
-	statusCode, err = preCommitRun(cfg, "git.pre-commit", []string{})
-	assert.NoError(t, err)
-	assert.Equal(t, statusCode, 1)
+	statusCode, err = gitPreCommitRun(cfg, "git.pre-commit", []string{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, statusCode)
 }

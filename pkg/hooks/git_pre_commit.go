@@ -13,18 +13,18 @@ import (
 	"github.com/leaktk/leaktk/pkg/scanner"
 )
 
-const preCommitResultsWarningHeader = `
+const gitPreCommitResultsWarningHeader = `
 Findings:
 `
 
-const preCommitResultWarningTemplate = `
+const gitPreCommitResultWarningTemplate = `
 - Description  : %s
   Path         : %s
   Line Number  : %d
   Encoding(s)  : %s
 `
 
-const preCommitResultsWarningFooter = `
+const gitPreCommitResultsWarningFooter = `
 ==============================================================================
 COMMIT BLOCKED: POTENTIAL SECRETS DETECTED
 ------------------------------------------------------------------------------
@@ -38,7 +38,7 @@ https://github.com/leaktk/leaktk/blob/HEAD/docs/findings.md
 ==============================================================================
 `
 
-func preCommitRun(cfg *config.Config, hookname string, _ []string) (int, error) {
+func gitPreCommitRun(cfg *config.Config, hookname string, _ []string) (int, error) {
 	var wg sync.WaitGroup
 	var response *proto.Response
 
@@ -73,7 +73,7 @@ func preCommitRun(cfg *config.Config, hookname string, _ []string) (int, error) 
 	// Display any results if found before doing error handling to show
 	// partial results if they exist
 	if leaksFound {
-		preCommitDisplayResults(response.Results)
+		gitPreCommitDisplayResults(response.Results)
 	}
 
 	// Return non-zero status code if the response had an error or if leaks were found
@@ -87,7 +87,7 @@ func preCommitRun(cfg *config.Config, hookname string, _ []string) (int, error) 
 	return 0, nil
 }
 
-func preCommitResultEncodings(result *proto.Result) string {
+func gitPreCommitResultEncodings(result *proto.Result) string {
 	var encodings strings.Builder
 
 	encodingPrefix := "decoded:"
@@ -107,17 +107,17 @@ func preCommitResultEncodings(result *proto.Result) string {
 	return encodings.String()
 }
 
-func preCommitDisplayResults(results []*proto.Result) {
-	fmt.Fprint(os.Stderr, preCommitResultsWarningHeader)
+func gitPreCommitDisplayResults(results []*proto.Result) {
+	fmt.Fprint(os.Stderr, gitPreCommitResultsWarningHeader)
 	for _, result := range results {
 		fmt.Fprintf(
 			os.Stderr,
-			preCommitResultWarningTemplate,
+			gitPreCommitResultWarningTemplate,
 			result.Rule.Description,
 			result.Location.Path,
 			result.Location.Start.Line,
-			preCommitResultEncodings(result),
+			gitPreCommitResultEncodings(result),
 		)
 	}
-	fmt.Fprint(os.Stderr, preCommitResultsWarningFooter)
+	fmt.Fprint(os.Stderr, gitPreCommitResultsWarningFooter)
 }
