@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/leaktk/leaktk/pkg/analyst/ai"
+	"github.com/leaktk/leaktk/pkg/ai"
 	"github.com/leaktk/leaktk/pkg/logger"
 
 	"github.com/open-policy-agent/opa/v1/rego"
