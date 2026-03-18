@@ -17,10 +17,10 @@ type Analyst struct {
 }
 
 // NewAnalyst initializes the Analyst with patterns.
-func NewAnalyst(p *patterns.Patterns) (*Analyst, error) {
+func NewAnalyst(p *patterns.Patterns) *Analyst {
 	return &Analyst{
 		patterns: p,
-	}, nil
+	}
 }
 
 func (a *Analyst) Analyze(ctx context.Context, response *proto.Response) (*proto.Response, error) {
