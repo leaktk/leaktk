@@ -103,14 +103,11 @@ Key config sections:
 ### Analyst Architecture (pkg/analyst)
 The analyst provides post-scan analysis through OPA Rego policies. It can:
 - **Filter results**: Remove findings based on policy rules
-- **Enrich results**: Add analysis metadata, validation status, ML predictions
-- **Validate results**: Mark findings as valid/invalid via API calls or ML models
+- **Enrich results**: Add analysis metadata, validation status
+- **Validate results**: Mark findings as valid/invalid via API calls
 
 Key components:
 - `analyst.go`: Core Analyst type that orchestrates Rego policy evaluation
-- `ai/`: AI/ML models for secret validation (logistic regression, etc.)
-  - Models are available as data to Rego policies
-  - Rego policies control when and how models are applied
 
 **Integration with Scanner:**
 - Scanner optionally runs analyst after each scan (via `scanner.enable_analysis` config)
