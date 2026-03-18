@@ -3,20 +3,25 @@ package cmd
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/spf13/cobra"
 
+	"github.com/leaktk/leaktk/pkg/analyst"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
+	"github.com/leaktk/leaktk/pkg/http"
 	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/pkg/patterns"
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/scanner"
 	"github.com/leaktk/leaktk/pkg/version"
@@ -27,6 +32,13 @@ var cfg *config.Config
 func initLogger() {
 	if err := logger.SetLoggerLevel("INFO"); err != nil {
 		logger.Warning("could not set log level to INFO")
+	}
+}
+
+func displayResponse(formatter *Formatter, response *proto.Response) {
+	fmt.Println(formatter.Format(response))
+	if response.Error != nil {
+		logger.Fatal("response contains error: %w", response.Error)
 	}
 }
 
@@ -87,7 +99,7 @@ func runScan(cmd *cobra.Command, args []string) {
 
 	gitleaksConfig, err := cmd.Flags().GetString("gitleaks-config")
 	if err != nil {
-		logger.Fatal("invalid gitleaks-config: error=%q", err.Error())
+		logger.Fatal("invalid gitleaks-config: %v", err.Error())
 	}
 
 	// Providing a gitleaks-config via command line arguments takes
@@ -125,10 +137,7 @@ func runScan(cmd *cobra.Command, args []string) {
 		if !leaksFound && len(response.Results) > 0 {
 			leaksFound = true
 		}
-		fmt.Println(formatter.Format(response))
-		if response.Error != nil {
-			logger.Fatal("response contains error: %w", response.Error)
-		}
+		displayResponse(formatter, response)
 		wg.Done()
 	})
 
@@ -226,32 +235,73 @@ func scanCommand() *cobra.Command {
 	return scanCommand
 }
 
-// func runAnalyze(cmd *cobra.Command, args []string) {
-// 	//flags := cmd.Flags()
-// 	ctx := context.Background()
+func analyzeResponses(ctx context.Context, a *analyst.Analyst, f *Formatter, r *bufio.Reader) {
+	for {
+		line, err := readLine(r)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			logger.Error("error reading line: %v", err)
+			continue
+		}
 
-// 	err := analyst.AnalyzeCommand(ctx, "")
+		response := new(proto.Response)
+		if err := json.Unmarshal(line, response); err != nil {
+			logger.Error("error unmarshaling response: %v", err)
+			continue
+		}
 
-// 	if err != nil {
-// 		cmd.PrintErrf("Error during analysis: %v\n", err)
-// 		os.Exit(1)
-// 	}
-// }
+		if analyzedResponse, err := a.Analyze(ctx, response); err != nil {
+			logger.Error("error analyzing response: %v", err)
+		} else {
+			response = analyzedResponse
+		}
 
-// func analyzeCommand() *cobra.Command {
-// 	analyzeCommand := &cobra.Command{
-// 		Use:                   "analyze [flags]",
-// 		DisableFlagsInUseLine: true,
-// 		Short:                 "Analyze input data against a Rego policy",
-// 		Args:                  cobra.NoArgs,
-// 		Run:                   runAnalyze,
-// 	}
+		displayResponse(f, response)
+	}
+}
 
-// 	flags := analyzeCommand.Flags()
-// 	flags.StringP("input", "i", "", "Optional path to the input JSONL file. If empty, reads from stdin.")
+func runAnalyze(cmd *cobra.Command, paths []string) {
+	ctx := cmd.Context()
+	f, err := NewFormatter(cfg.Formatter)
+	if err != nil {
+		logger.Fatal("could not create formatter: %v", err)
+	}
 
-// 	return analyzeCommand
-// }
+	p := patterns.NewPatterns(&cfg.Scanner.Patterns, http.NewClient())
+	a, err := analyst.NewAnalyst(p)
+	if err != nil {
+		logger.Fatal("could not create analyst: %v", err)
+	}
+
+	if len(paths) == 0 {
+		analyzeResponses(ctx, a, f, bufio.NewReader(os.Stdin))
+	} else {
+		for _, path := range paths {
+			r, err := os.Open(filepath.Clean(path))
+			if err != nil {
+				logger.Error("could not open path: %v path=%q", err, path)
+				continue
+			}
+			analyzeResponses(ctx, a, f, bufio.NewReader(r))
+			if err := r.Close(); err != nil {
+				logger.Error("could not close file: %v path=%q", err, path)
+			}
+		}
+	}
+}
+
+func analyzeCommand() *cobra.Command {
+	analyzeCommand := &cobra.Command{
+		Use:                   "analyze [flags] [path...]",
+		DisableFlagsInUseLine: true,
+		Short:                 "Analyze response JSONLs from provided paths (or stdin if no provided paths)",
+		Run:                   runAnalyze,
+	}
+
+	return analyzeCommand
+}
 
 func readLine(reader *bufio.Reader) ([]byte, error) {
 	var buf bytes.Buffer
@@ -393,7 +443,7 @@ func rootCommand() *cobra.Command {
 	rootCommand.AddCommand(logoutCommand())
 	rootCommand.AddCommand(scanCommand())
 	rootCommand.AddCommand(listenCommand())
-	//rootCommand.AddCommand(analyzeCommand())
+	rootCommand.AddCommand(analyzeCommand())
 	rootCommand.AddCommand(versionCommand())
 
 	return rootCommand
