@@ -59,11 +59,6 @@ type Scanner struct {
 // be closed when it's no longer needed.
 func NewScanner(cfg *config.Config) *Scanner {
 	p := patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient())
-	a, err := analyst.NewAnalyst(p)
-	if err != nil {
-		logger.Fatal("could not create analyst: %v", err)
-	}
-
 	scanner := &Scanner{
 		allowLocal:       cfg.Scanner.AllowLocal,
 		scanTimeout:      time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
@@ -75,7 +70,7 @@ func NewScanner(cfg *config.Config) *Scanner {
 		responseQueue:    queue.NewPriorityQueue[*proto.Response](initQueueCapacity, cfg.Scanner.MaxResponseQueueSize),
 		scanQueue:        queue.NewPriorityQueue[*proto.Request](initQueueCapacity, cfg.Scanner.MaxScanQueueSize),
 		scanWorkers:      cfg.Scanner.ScanWorkers,
-		analyst:          a,
+		analyst:          analyst.NewAnalyst(p),
 		analyzeResponses: true,
 	}
 

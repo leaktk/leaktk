@@ -270,10 +270,7 @@ func runAnalyze(cmd *cobra.Command, paths []string) {
 	}
 
 	p := patterns.NewPatterns(&cfg.Scanner.Patterns, http.NewClient())
-	a, err := analyst.NewAnalyst(p)
-	if err != nil {
-		logger.Fatal("could not create analyst: %v", err)
-	}
+	a := analyst.NewAnalyst(p)
 
 	if len(paths) == 0 {
 		analyzeResponses(ctx, a, f, bufio.NewReader(os.Stdin))
