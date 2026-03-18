@@ -9,6 +9,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/containers/image/v5 v5.36.2
 	github.com/fatih/semgroup v1.3.0
+	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/mholt/archives v0.1.5
 	github.com/open-policy-agent/opa v1.14.0
 	github.com/opencontainers/image-spec v1.1.1
@@ -60,7 +61,6 @@ require (
 	github.com/gitleaks/go-gitdiff v0.9.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect

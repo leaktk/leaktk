@@ -253,7 +253,7 @@ func analyzeResponses(ctx context.Context, a *analyst.Analyst, f *Formatter, r *
 		}
 
 		if analyzedResponse, err := a.Analyze(ctx, response); err != nil {
-			logger.Error("error analyzing response: %v", err)
+			logger.Error("error analyzing response: %v response_id=%q", err, response.ID)
 		} else {
 			response = analyzedResponse
 		}

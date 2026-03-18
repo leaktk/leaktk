@@ -12,7 +12,7 @@ import (
 )
 
 type LeakTKPatterns struct {
-	Rego *rego.Rego `json:"opa_policy"`
+	RegoQuery rego.PreparedEvalQuery
 }
 
 // LeakTKConfigHash returns the sha256 hash for the current leaktk config.
@@ -44,7 +44,7 @@ func (c *Patterns) LeakTK(ctx context.Context) (*LeakTKPatterns, error) {
 
 		// Only parse and update if hash changed
 		if hashChanged {
-			newConfig, err := c.parseLeakTKConfig(rawPatterns)
+			newConfig, err := c.parseLeakTKConfig(ctx, rawPatterns)
 			if err != nil {
 				logger.Debug("fetched config:\n%s", rawPatterns)
 				return c.leaktkPatterns, fmt.Errorf("could not parse combined config: error=%q", err)
@@ -66,7 +66,7 @@ func (c *Patterns) LeakTK(ctx context.Context) (*LeakTKPatterns, error) {
 			return nil, err
 		}
 
-		newConfig, err := c.parseLeakTKConfig(rawPatterns)
+		newConfig, err := c.parseLeakTKConfig(ctx, rawPatterns)
 		if err != nil {
 			logger.Debug("loaded config:\n%s\n", rawPatterns)
 			return nil, fmt.Errorf("could not parse combined config: error=%q", err)
@@ -79,29 +79,27 @@ func (c *Patterns) LeakTK(ctx context.Context) (*LeakTKPatterns, error) {
 }
 
 // parseLeakTKConfig parses the LeakTK patterns config and compiles the Rego policy.
-func (c *Patterns) parseLeakTKConfig(rawPatterns string) (*LeakTKPatterns, error) {
-	var leaktkPatterns LeakTKPatterns
-	if err := leaktkPatterns.UnmarshalJSON([]byte(rawPatterns)); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal combined configuration: %w", err)
-	}
-	return &leaktkPatterns, nil
-}
-
-func (c *LeakTKPatterns) UnmarshalJSON(data []byte) error {
-	var leaktkPatterns struct {
+func (c *Patterns) parseLeakTKConfig(ctx context.Context, rawPatterns string) (*LeakTKPatterns, error) {
+	var uncompiledLeakTKPatterns struct {
 		Rego string `json:"opa_policy"`
 	}
 
-	if err := json.Unmarshal(data, &leaktkPatterns); err != nil {
-		return fmt.Errorf("could not unmarshal LeakTK Patterns: %w", err)
+	if err := json.Unmarshal([]byte(rawPatterns), &uncompiledLeakTKPatterns); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal leaktk patterns: %w", err)
 	}
 
-	compiled := rego.New(
+	query, err := rego.New(
 		rego.Query("data.leaktk.analyst.analyzed_response"),
-		rego.Module("leaktk.analyst.rego", leaktkPatterns.Rego),
-	)
+		rego.Module("leaktk.analyst.rego", uncompiledLeakTKPatterns.Rego),
+	).PrepareForEval(ctx)
 
-	c.Rego = compiled
+	if err != nil {
+		return nil, fmt.Errorf("could not compile rego query: %w", err)
+	}
 
-	return nil
+	leaktkPatterns := &LeakTKPatterns{
+		RegoQuery: query,
+	}
+
+	return leaktkPatterns, nil
 }

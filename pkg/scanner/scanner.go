@@ -41,37 +41,37 @@ const (
 
 // Scanner holds the config and state for the scanner processes
 type Scanner struct {
-	allowLocal       bool
-	scanTimeout      time.Duration
-	clonesDir        string
-	maxArchiveDepth  int
-	maxDecodeDepth   int
-	maxScanDepth     int
-	patterns         *patterns.Patterns
-	responseQueue    *queue.PriorityQueue[*proto.Response]
-	scanQueue        *queue.PriorityQueue[*proto.Request]
-	scanWorkers      int
-	analyst          *analyst.Analyst
-	analyzeResponses bool
+	allowLocal      bool
+	scanTimeout     time.Duration
+	clonesDir       string
+	maxArchiveDepth int
+	maxDecodeDepth  int
+	maxScanDepth    int
+	patterns        *patterns.Patterns
+	responseQueue   *queue.PriorityQueue[*proto.Response]
+	scanQueue       *queue.PriorityQueue[*proto.Request]
+	scanWorkers     int
+	analyst         *analyst.Analyst
 }
 
 // NewScanner returns a initialized and listening scanner instance that should
 // be closed when it's no longer needed.
 func NewScanner(cfg *config.Config) *Scanner {
-	p := patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient())
 	scanner := &Scanner{
-		allowLocal:       cfg.Scanner.AllowLocal,
-		scanTimeout:      time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
-		clonesDir:        filepath.Join(cfg.Scanner.Workdir, "clones"),
-		maxArchiveDepth:  cfg.Scanner.MaxArchiveDepth,
-		maxDecodeDepth:   cfg.Scanner.MaxDecodeDepth,
-		maxScanDepth:     cfg.Scanner.MaxScanDepth,
-		patterns:         patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
-		responseQueue:    queue.NewPriorityQueue[*proto.Response](initQueueCapacity, cfg.Scanner.MaxResponseQueueSize),
-		scanQueue:        queue.NewPriorityQueue[*proto.Request](initQueueCapacity, cfg.Scanner.MaxScanQueueSize),
-		scanWorkers:      cfg.Scanner.ScanWorkers,
-		analyst:          analyst.NewAnalyst(p),
-		analyzeResponses: true,
+		allowLocal:      cfg.Scanner.AllowLocal,
+		scanTimeout:     time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
+		clonesDir:       filepath.Join(cfg.Scanner.Workdir, "clones"),
+		maxArchiveDepth: cfg.Scanner.MaxArchiveDepth,
+		maxDecodeDepth:  cfg.Scanner.MaxDecodeDepth,
+		maxScanDepth:    cfg.Scanner.MaxScanDepth,
+		patterns:        patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
+		responseQueue:   queue.NewPriorityQueue[*proto.Response](initQueueCapacity, cfg.Scanner.MaxResponseQueueSize),
+		scanQueue:       queue.NewPriorityQueue[*proto.Request](initQueueCapacity, cfg.Scanner.MaxScanQueueSize),
+		scanWorkers:     cfg.Scanner.ScanWorkers,
+	}
+
+	if cfg.Scanner.EnableAnalysis {
+		scanner.analyst = analyst.NewAnalyst(scanner.patterns)
 	}
 
 	scanner.start()
@@ -276,17 +276,16 @@ func (s *Scanner) listen() {
 			Results:   results,
 		}
 
-		if s.analyzeResponses {
-			logger.Info("analyzing response: id=%q", request.ID)
-			analyzedResponse, err := s.analyst.Analyze(ctx, response)
-			if err != nil {
-				logger.Error("error analyzing response: %v", err)
+		if s.analyst != nil {
+			logger.Info("analyzing response: id=%q response_id=%q", request.ID, response.ID)
+			if analyzedResponse, err := s.analyst.Analyze(ctx, response); err != nil {
+				logger.Error("response analysis failed: %v id=%q response_id=%q", err, request.ID, response.ID)
 			} else {
 				response = analyzedResponse
 			}
 		}
 
-		logger.Info("queueing response: id=%q", request.ID)
+		logger.Info("queueing response: id=%q response_id=%q", request.ID, response.ID)
 		s.responseQueue.Send(&queue.Message[*proto.Response]{
 			Priority: msg.Priority,
 			Value:    response,
@@ -295,12 +294,13 @@ func (s *Scanner) listen() {
 }
 
 func (s *Scanner) respondWithError(request *proto.Request, err *proto.Error) {
-	logger.Info("queueing response: id=%q queue_size=%d", request.ID, s.responseQueue.Size()+1)
-	logger.Error("scan error: %v id=%q", err, request.ID)
+	responseID := id.ID()
+	logger.Info("queueing response: id=%q response_id=%q queue_size=%d", request.ID, responseID, s.responseQueue.Size()+1)
+	logger.Error("scan error: %v id=%q response_id=%q", err, request.ID, responseID)
 	s.responseQueue.Send(&queue.Message[*proto.Response]{
 		Priority: request.Opts.Priority,
 		Value: &proto.Response{
-			ID:        id.ID(),
+			ID:        responseID,
 			Kind:      proto.ScanResultsResponseKind,
 			RequestID: request.ID,
 			Error:     err,
