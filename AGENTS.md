@@ -42,7 +42,12 @@ make clean          # Clean build artifacts (git clean -dfX)
 ### Entry Point & CLI
 - `main.go` → `cmd/cmd.go`: Entry point delegates to cobra-based CLI
 - CLI framework: Uses spf13/cobra for command parsing
-- Commands defined in `cmd/cmd.go`: scan, listen, login, logout, version
+- Commands defined in `cmd/cmd.go`: scan, listen, analyze, login, logout, version
+  - **scan**: Ad-hoc scanning of resources
+  - **listen**: Long-running server mode processing JSONL requests
+  - **analyze**: Re-analyze scan/listen output through Rego policies (post-scan analysis)
+  - **login/logout**: Manage pattern server authentication
+  - **version**: Display version information
 
 ### Scanner Architecture (pkg/scanner)
 The scanner uses a worker pool pattern with priority queues:
@@ -72,6 +77,15 @@ Each Request has:
 
 Responses include Results (array of findings) or Error.
 
+Each Result has:
+- Core fields: `ID`, `Kind`, `Secret`, `Match`, `Context`, `Entropy`, `Date`, `Rule`, `Contact`, `Location`
+- `Notes`: `map[string]string` - Arbitrary key-value metadata about the result
+- `Analysis`: `map[string]any` - Analysis data populated by Rego policies (ML predictions, validation status, etc.)
+- `Valid`: `*bool` - Validation status set by Rego policies:
+  - `nil`: Not yet validated (unknown)
+  - `true`: Confirmed valid secret
+  - `false`: Confirmed false positive
+
 ### Configuration (pkg/config)
 Configuration is loaded from TOML files with this precedence:
 1. `--config` flag path
@@ -85,6 +99,64 @@ Key config sections:
 - `scanner.scan_workers`: Number of concurrent workers
 - `scanner.allow_local`: Whether to allow local filesystem scans
 - `scanner.scan_timeout`: Per-scan timeout in seconds
+
+### Analyst Architecture (pkg/analyst)
+The analyst provides post-scan analysis through OPA Rego policies. It can:
+- **Filter results**: Remove findings based on policy rules
+- **Enrich results**: Add analysis metadata, validation status, ML predictions
+- **Validate results**: Mark findings as valid/invalid via API calls or ML models
+
+Key components:
+- `analyst.go`: Core Analyst type that orchestrates Rego policy evaluation
+- `ai/`: AI/ML models for secret validation (logistic regression, etc.)
+  - Models are available as data to Rego policies
+  - Rego policies control when and how models are applied
+
+**Integration with Scanner:**
+- Scanner optionally runs analyst after each scan (via `scanner.enable_analysis` config)
+- Analyst.Analyze() takes a Response and returns enriched Response
+- Analysis happens in-process before results are queued
+
+**Standalone Analysis:**
+The `leaktk analyze` command re-analyzes scan output:
+```bash
+leaktk scan <resource> | leaktk analyze        # Analyze scan output
+leaktk listen < requests.jsonl | leaktk analyze  # Analyze listen output
+```
+
+This allows updating analysis post-scan when policies or models change.
+
+### Patterns Architecture (pkg/patterns)
+Patterns manages fetching, caching, and updating configurations from a pattern server:
+- **Gitleaks patterns**: Betterleaks/Gitleaks TOML config for secret detection rules
+- **LeakTK patterns**: Combined JSON with ML models + OPA Rego policies
+
+Pattern management features:
+- **Autofetch**: Automatically fetch updated patterns from server
+- **Caching**: Local file cache with configurable expiry/refresh times
+- **Hash-based updates**: Only recompile/reload when server content changes
+- **Versioning**: Patterns versioned independently (e.g., gitleaks/8.27.0, leaktk/1)
+
+Pattern storage: `~/.cache/leaktk/scanner/patterns/{provider}/{version}`
+
+**LeakTK Pattern Format (version 1):**
+Single JSON file containing:
+```json
+{
+  "models": [
+    {
+      "kind": "LogisticRegression",
+      "coefficients": {...},
+      "keywords": [...],
+      "stopwords": [...]
+    }
+  ],
+  "opa_policy": "package leaktk.analyst\n..."
+}
+```
+
+The Rego policy is compiled at load time and made available to the analyst. Policies query with:
+`data.leaktk.analyst.analyzed_response`
 
 ### Git Operations
 - Uses `git` CLI commands directly (not libgit2)
