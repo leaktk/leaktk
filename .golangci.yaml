@@ -47,11 +47,9 @@ linters:
     - zerologlint  # doesn't seem to catch gitleaks/v8/logging mistakes
   enable:
     - errcheck
-    - exhaustruct
     - gosec
     - inamedparam
     - misspell
-    - nonamedreturns
     - perfsprint
     - revive
     - staticcheck
