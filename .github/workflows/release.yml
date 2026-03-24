@@ -1,7 +1,7 @@
 name: Build, sign and upload release artifacts
 
 env:
-  GO_VERSION: '1.24'
+  GO_VERSION: '1.25'
   GO111MODULE: on
 
 on:
@@ -29,25 +29,25 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # pin@v6.2.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # pin@v6.3.0
         with:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # pin@v3
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # pin@v4.0.0
         with:
           registry: quay.io
           username: ${{ vars.QUAY_USER }}
           password: ${{ secrets.QUAY_TOKEN }}
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # pin@v4.0.0
+        uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22 # pin@v4.1.0 
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # pin@v3
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # pin@v4.0.0
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # pin@v6.4.0
+        uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # pin@v7.0.0
         with:
           distribution: goreleaser
           version: "~> v2"

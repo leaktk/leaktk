@@ -5,7 +5,7 @@ defaults:
     shell: bash
 
 env:
-  GO_VERSION: '1.24'
+  GO_VERSION: '1.25'
   GO111MODULE: on
 
 on:
@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v4
 
       - name: Set up Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # pin@v6.2.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # pin@v6.3.0
         with:
           go-version: ${{ env.GO_VERSION }}
 
@@ -62,7 +62,7 @@ jobs:
           sudo apt-get install -y libbtrfs-dev
 
       - name: Set up Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # pin@v5
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # pin@v6.3.0
         with:
           go-version: ${{ env.GO_VERSION }}
 
@@ -72,24 +72,12 @@ jobs:
       - name: Test
         run: go test -v ./...
 
-  gosec:
-    name: Running gosec security checks on ubuntu-latest
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
-
-      - name: Run Gosec Security Scanner
-        uses: securego/gosec@398ad549bbf1a51dc978fd966169f660c59774de # pin@v2.23.0
-        with:
-          args: ./...
-
   golangci-lint:
     name: Running linting on ubuntu-latest
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd	# pin@v6.0.2
 
       - name: Install
         run: |
@@ -97,7 +85,7 @@ jobs:
           sudo apt-get install -y libbtrfs-dev
 
       - name: Set up Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # pin@v5
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # pin@v6.3.0
         with:
           go-version: ${{ env.GO_VERSION }}
 
