@@ -73,21 +73,27 @@ homebrew_casks:
       verified: github.com/leaktk/leaktk
 
 dockers_v2:
-  - images:
+  - dockerfile: "Containerfile"
+    images:
       - "quay.io/leaktk/{{ .ProjectName }}"
     tags:
       - "{{ .Version }}"
-      - "{ .Major }}.{{ .Minor }}"
+      - "{{ .Major }}.{{ .Minor }}"
+      - "{{ .Major }}"
       - "latest"
     labels:
       "org.opencontainers.image.title": "leaktk"
       "org.opencontainers.image.description": "The Leak ToolKit"
-      "org.opencontainers.image.created": "{{.Date}}"
-      "org.opencontainers.image.name": "{{.ProjectName}}"
-      "org.opencontainers.image.revision": "{{.FullCommit}}"
-      "org.opencontainers.image.version": "{{.Version}}"
-      "org.opencontainers.image.source": "{{.GitURL}}"
+      "org.opencontainers.image.created": "{{ .Date }}"
+      "org.opencontainers.image.name": "{{ .ProjectName }}"
+      "org.opencontainers.image.revision": "{{ .FullCommit }}"
+      "org.opencontainers.image.version": "{{ .Version }}"
+      "org.opencontainers.image.source": "{{ .GitURL }}"
       "org.opencontainers.image.licenses": "MIT"
+
+    platforms:
+      - linux/amd64
+      - linux/arm64
 
 docker_signs:
   - cmd: cosign
