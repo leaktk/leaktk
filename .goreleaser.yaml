@@ -77,7 +77,6 @@ homebrew_casks:
 dockers_v2:
   - id: "{{ .ProjectName }}"
     dockerfile: "Containerfile"
-    sbom: false
     ids:
       - "{{ .ProjectName }}"
     images:
