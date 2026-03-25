@@ -1,7 +1,8 @@
 version: 2
 
 builds:
-  - binary: "{{ .ProjectName }}"
+  - id: "{{ .ProjectName }}"
+    binary: "{{ .ProjectName }}"
     env:
       - CGO_ENABLED=0
     goos:
@@ -72,8 +73,13 @@ homebrew_casks:
     url:
       verified: github.com/leaktk/leaktk
 
+# https://goreleaser.com/customization/package/dockers_v2/
 dockers_v2:
-  - dockerfile: "Containerfile"
+  - id: "{{ .ProjectName }}"
+    dockerfile: "Containerfile"
+    sbom: false
+    ids:
+      - "{{ .ProjectName }}"
     images:
       - "quay.io/leaktk/{{ .ProjectName }}"
     tags:
@@ -90,7 +96,6 @@ dockers_v2:
       "org.opencontainers.image.version": "{{ .Version }}"
       "org.opencontainers.image.source": "{{ .GitURL }}"
       "org.opencontainers.image.licenses": "MIT"
-
     platforms:
       - linux/amd64
       - linux/arm64
