@@ -2,11 +2,8 @@ package patterns
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-
-	"github.com/leaktk/leaktk/pkg/logger"
 
 	"github.com/open-policy-agent/opa/v1/rego"
 )
@@ -22,60 +19,15 @@ func (c *Patterns) LeakTKConfigHash() string {
 
 // LeakTK returns the LeakTKPatterns object, handling fetch/caching/update.
 func (c *Patterns) LeakTK(ctx context.Context) (*LeakTKPatterns, error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	cfg := c.config
-	localPath := cfg.LeakTK.LocalPath
-	modTimeExceeds := c.fileModTimeExceeds(localPath, cfg.RefreshAfter)
-
-	if cfg.Autofetch && modTimeExceeds {
-		logger.Info("fetching combined LeakTK models and OPA policy config")
-
-		fetchURL, err := c.fetchURLFor("leaktk", cfg.LeakTK.Version)
-		if err != nil {
-			return c.leaktkPatterns, err
-		}
-
-		rawPatterns, hashChanged, err := c.fetchAndUpdate(ctx, fetchURL, localPath, c.leaktkPatternsHash)
-		if err != nil {
-			return c.leaktkPatterns, err
-		}
-
-		// Only parse and update if hash changed
-		if hashChanged {
-			newConfig, err := c.parseLeakTKConfig(ctx, rawPatterns)
-			if err != nil {
-				logger.Debug("fetched config:\n%s", rawPatterns)
-				return c.leaktkPatterns, fmt.Errorf("could not parse combined config: error=%q", err)
-			}
-			c.leaktkPatterns = newConfig
-			c.leaktkPatternsHash = sha256.Sum256([]byte(rawPatterns))
-			logger.Info("updated combined models and OPA policy config: hash=%s", c.LeakTKConfigHash())
-		}
-	} else if c.leaktkPatterns == nil {
-		if c.fileModTimeExceeds(localPath, cfg.ExpiredAfter) {
-			return nil, fmt.Errorf(
-				"combined config is expired and autofetch is disabled: config_path=%q",
-				localPath,
-			)
-		}
-
-		rawPatterns, err := c.loadFromDisk(localPath)
-		if err != nil {
-			return nil, err
-		}
-
-		newConfig, err := c.parseLeakTKConfig(ctx, rawPatterns)
-		if err != nil {
-			logger.Debug("loaded config:\n%s\n", rawPatterns)
-			return nil, fmt.Errorf("could not parse combined config: error=%q", err)
-		}
-		c.leaktkPatterns = newConfig
-		c.leaktkPatternsHash = sha256.Sum256([]byte(rawPatterns))
-	}
-
-	return c.leaktkPatterns, nil
+	return getOrUpdate(
+		ctx, c,
+		&c.leaktkPatterns,
+		&c.leaktkPatternsHash,
+		"leaktk",
+		c.config.LeakTK.LocalPath,
+		c.config.LeakTK.Version,
+		c.parseLeakTKConfig,
+	)
 }
 
 // parseLeakTKConfig parses the LeakTK patterns config and compiles the Rego policy.

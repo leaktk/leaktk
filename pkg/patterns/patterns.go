@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"time"
 
@@ -146,4 +147,65 @@ func (c *Patterns) loadFromDisk(localPath string) (string, error) {
 		return "", err
 	}
 	return string(rawPatterns), nil
+}
+
+func getOrUpdate[T any](
+	ctx context.Context,
+	c *Patterns,
+	cachedConfig **T,
+	cachedHash *[32]byte,
+	resourceName string,
+	localPath string,
+	version string,
+	parseFunc func(ctx context.Context, raw string) (*T, error),
+) (*T, error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	cfg := c.config
+	modTimeExceeds := c.fileModTimeExceeds(localPath, cfg.RefreshAfter)
+
+	if cfg.Autofetch && modTimeExceeds {
+		logger.Info("fetching %s patterns", resourceName)
+
+		fetchURL, err := c.fetchURLFor(resourceName, version)
+		if err != nil {
+			return *cachedConfig, err
+		}
+
+		rawPatterns, hashChanged, err := c.fetchAndUpdate(ctx, fetchURL, localPath, *cachedHash)
+		if err != nil {
+			return *cachedConfig, err
+		}
+
+		if hashChanged {
+			newConfig, err := parseFunc(ctx, rawPatterns)
+			if err != nil {
+				logger.Debug("fetched config:\n%s", rawPatterns)
+				return *cachedConfig, fmt.Errorf("could not parse %s config: error=%q", resourceName, err)
+			}
+			*cachedConfig = newConfig
+			*cachedHash = sha256.Sum256([]byte(rawPatterns))
+			logger.Info("updated %s patterns", resourceName)
+		}
+	} else if any(cachedConfig) == nil || reflect.ValueOf(cachedConfig).Elem().IsNil() {
+		if c.fileModTimeExceeds(localPath, cfg.ExpiredAfter) {
+			return nil, fmt.Errorf("%s config is expired and autofetch is disabled: path=%q", resourceName, localPath)
+		}
+
+		rawPatterns, err := c.loadFromDisk(localPath)
+		if err != nil {
+			return nil, err
+		}
+
+		newConfig, err := parseFunc(ctx, rawPatterns)
+		if err != nil {
+			logger.Debug("loaded config:\n%s\n", rawPatterns)
+			return nil, fmt.Errorf("could not parse %s config: error=%q", resourceName, err)
+		}
+		*cachedConfig = newConfig
+		*cachedHash = sha256.Sum256([]byte(rawPatterns))
+	}
+
+	return *cachedConfig, nil
 }
