@@ -8,7 +8,9 @@ import (
 
 	"github.com/leaktk/leaktk/pkg/ai"
 	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/pkg/proto"
 
+	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/v1/rego"
 )
 
@@ -99,9 +101,47 @@ func (c *LeakTKPatterns) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("could not unmarshal LeakTK Patterns: %w", err)
 	}
 
+	runModelProvider := func(bctx rego.BuiltinContext, arg1 *ast.Term, arg2 *ast.Term) (*ast.Term, error) {
+		var modelName string
+		var findingRaw interface{}
+
+		if err := ast.As(arg1.Value, &modelName); err != nil {
+			return nil, fmt.Errorf("leaktk.ai.RunModel: invalid first argument: %w", err)
+		}
+		if err := ast.As(arg2.Value, &findingRaw); err != nil {
+			return nil, fmt.Errorf("leaktk.ai.RunModel: invalid second argument: %w", err)
+		}
+
+		findingBytes, err := json.Marshal(findingRaw)
+		if err != nil {
+			return nil, fmt.Errorf("leaktk.ai.RunModel: failed to marshal finding: %w", err)
+		}
+
+		var result proto.Result
+		if err := json.Unmarshal(findingBytes, &result); err != nil {
+			return nil, fmt.Errorf("leaktk.ai.RunModel: failed to parse finding into proto.Result: %w", err)
+		}
+
+		analyst := &ai.Analyst{}
+		analysis, err := analyst.Analyze(modelName, leaktkPatterns.ModelsConfig, &result)
+		if err != nil {
+			return nil, fmt.Errorf("leaktk.ai.RunModel: analysis failed: %w", err)
+		}
+
+		resVal, err := ast.InterfaceToValue(map[string]interface{}{
+			"probability": analysis.PredictedSecretProbability,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("leaktk.ai.RunModel: failed to create return value: %w", err)
+		}
+
+		return ast.NewTerm(resVal), nil
+	}
+
 	compiled := rego.New(
 		rego.Query("data.leaktk.analyst.analyzed_response"),
 		rego.Module("leaktk.analyst.rego", leaktkPatterns.Rego),
+		rego.Function2(ai.RunModelBuiltin, runModelProvider),
 	)
 
 	c.ModelsConfig = leaktkPatterns.ModelsConfig
