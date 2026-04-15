@@ -17,10 +17,9 @@ builds:
 
 notarize:
   macos:
-    - id: leaktk-notarize
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
       ids:
        - "{{ .ProjectName }}"
-      enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
       sign:
         certificate: "{{.Env.MACOS_SIGN_P12}}"
         password: "{{.Env.MACOS_SIGN_PASSWORD}}"
