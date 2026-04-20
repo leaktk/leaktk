@@ -84,7 +84,7 @@ Or to install a specific version:
 
 ```sh
 # Replace vX.Y.Z with the specific tag from https://github.com/leaktk/leaktk/releases
-GOBIN="${HOME}/.local/bin" go install github.com/leaktk/leaktk@vX.Y.X
+CGO_ENABLED=0 GOBIN="${HOME}/.local/bin" go install github.com/leaktk/leaktk@vX.Y.X
 ```
 
 You will want to make sure you have `"${HOME}/.local/bin"` in your `PATH` if it
