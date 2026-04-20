@@ -77,7 +77,7 @@ If you have Go installed (version 1.23.3 or newer is recommended), you can insta
 To install the latest version:
 
 ```sh
-GOBIN="${HOME}/.local/bin" go install github.com/leaktk/leaktk@latest
+CGO_ENABLED=0 GOBIN="${HOME}/.local/bin" go install github.com/leaktk/leaktk@latest
 ```
 
 Or to install a specific version:
