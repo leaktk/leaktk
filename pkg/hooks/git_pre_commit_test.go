@@ -12,7 +12,7 @@ import (
 	"github.com/leaktk/leaktk/pkg/config"
 )
 
-const gitleaksConfig = `
+const betterleaksPreCommitTestConfig = `
 [[rules]]
 id = "test-pre-commit"
 regex = '''secret\s*=\s*"secretvalue"'''
@@ -29,7 +29,7 @@ func TestGitPreCommit(t *testing.T) {
 
 	ctx := t.Context()
 
-	// Chdir into the tempDir
+	// Chdir into the tempDir since the hook is executed from the git dir
 	origWd, err := os.Getwd()
 	require.NoError(t, err)
 	require.NoError(t, os.Chdir(tempDir))
@@ -38,10 +38,10 @@ func TestGitPreCommit(t *testing.T) {
 	// Create a git repo
 	require.NoError(t, exec.CommandContext(ctx, "git", "-C", tempDir, "init").Run()) // #nosec G204
 
-	// Setup the gitleaks config
+	// Setup the betterleaks config
 	file, err := os.Create(cfg.Scanner.Patterns.Gitleaks.ConfigPath)
 	require.NoError(t, err)
-	_, err = file.Write([]byte(gitleaksConfig))
+	_, err = file.Write([]byte(betterleaksPreCommitTestConfig))
 	_ = file.Close()
 	require.NoError(t, err)
 

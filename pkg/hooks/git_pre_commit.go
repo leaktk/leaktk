@@ -2,8 +2,6 @@ package hooks
 
 import (
 	"fmt"
-	"os"
-	"strings"
 	"sync"
 
 	"github.com/leaktk/leaktk/pkg/config"
@@ -12,31 +10,6 @@ import (
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/scanner"
 )
-
-const gitPreCommitResultsWarningHeader = `
-Findings:
-`
-
-const gitPreCommitResultWarningTemplate = `
-- Description  : %s
-  Path         : %s
-  Line Number  : %d
-  Encoding(s)  : %s
-`
-
-const gitPreCommitResultsWarningFooter = `
-==============================================================================
-COMMIT BLOCKED: POTENTIAL SECRETS DETECTED
-------------------------------------------------------------------------------
-Please remove any sensitive information listed above and try again.
-
-For excluding non-sensitive findings:
-https://github.com/leaktk/leaktk/blob/HEAD/docs/false_positives.md
-
-For more information on interpreting these results:
-https://github.com/leaktk/leaktk/blob/HEAD/docs/findings.md
-==============================================================================
-`
 
 func gitPreCommitRun(cfg *config.Config, hookname string, _ []string) (int, error) {
 	var wg sync.WaitGroup
@@ -73,7 +46,7 @@ func gitPreCommitRun(cfg *config.Config, hookname string, _ []string) (int, erro
 	// Display any results if found before doing error handling to show
 	// partial results if they exist
 	if leaksFound {
-		gitPreCommitDisplayResults(response.Results)
+		gitHookDisplayResults(response.Results)
 	}
 
 	// Return non-zero status code if the response had an error or if leaks were found
@@ -85,39 +58,4 @@ func gitPreCommitRun(cfg *config.Config, hookname string, _ []string) (int, erro
 	}
 
 	return 0, nil
-}
-
-func gitPreCommitResultEncodings(result *proto.Result) string {
-	var encodings strings.Builder
-
-	encodingPrefix := "decoded:"
-	encodingPrefixLen := len(encodingPrefix)
-	tags := result.Rule.Tags
-
-	for _, tag := range tags {
-		if strings.HasPrefix(tag, encodingPrefix) {
-			if encodings.Len() > 0 {
-				encodings.WriteString(", ")
-			}
-
-			encodings.WriteString(tag[encodingPrefixLen:])
-		}
-	}
-
-	return encodings.String()
-}
-
-func gitPreCommitDisplayResults(results []*proto.Result) {
-	fmt.Fprint(os.Stderr, gitPreCommitResultsWarningHeader)
-	for _, result := range results {
-		fmt.Fprintf(
-			os.Stderr,
-			gitPreCommitResultWarningTemplate,
-			result.Rule.Description,
-			result.Location.Path,
-			result.Location.Start.Line,
-			gitPreCommitResultEncodings(result),
-		)
-	}
-	fmt.Fprint(os.Stderr, gitPreCommitResultsWarningFooter)
 }

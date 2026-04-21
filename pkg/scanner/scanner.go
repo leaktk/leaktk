@@ -196,12 +196,26 @@ func (s *Scanner) listen() {
 			}
 
 			loadSourceConfig(detector, sourcePath)
+
+			// If there are exclusions, update the revision range to be like:
+			// ^{exclusion} ^{exclusion} {branch}
+			revisionRange := request.Opts.Branch
+			exclusionsLen := len(request.Opts.Exclusions)
+			if exclusionsLen > 0 {
+				items := make([]string, len(request.Opts.Exclusions)+1)
+				for i, item := range request.Opts.Exclusions {
+					items[i] = "^" + item
+				}
+				items[exclusionsLen] = request.Opts.Branch
+				revisionRange = strings.Join(items, " ")
+			}
+
 			findings, err = betterleaks.ScanGit(ctx, detector, gitDir, betterleaks.GitScanOpts{
-				Branch:   request.Opts.Branch,
-				Depth:    scanDepth(request.Opts.Depth, s.maxScanDepth),
-				Since:    request.Opts.Since,
-				Staged:   request.Opts.Staged,
-				Unstaged: request.Opts.Unstaged,
+				RevisionRange: revisionRange,
+				Depth:         scanDepth(request.Opts.Depth, s.maxScanDepth),
+				Since:         request.Opts.Since,
+				Staged:        request.Opts.Staged,
+				Unstaged:      request.Opts.Unstaged,
 			})
 		case proto.URLRequestKind:
 			findings, err = betterleaks.ScanURL(ctx, detector, request.Resource, betterleaks.URLScanOpts{
