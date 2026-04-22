@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/leaktk/leaktk/pkg/proto"
+	"github.com/leaktk/leaktk/pkg/version"
 )
 
 const gitHookResultsWarningHeader = `
@@ -26,10 +27,10 @@ COMMIT BLOCKED: POTENTIAL SECRETS DETECTED
 Please remove any sensitive information listed above and try again.
 
 For excluding non-sensitive findings:
-https://github.com/leaktk/leaktk/blob/HEAD/docs/false_positives.md
+https://github.com/leaktk/leaktk/blob/${GIT_REF}/docs/false_positives.md
 
 For more information on interpreting these results:
-https://github.com/leaktk/leaktk/blob/HEAD/docs/findings.md
+https://github.com/leaktk/leaktk/blob/${GIT_REF}/docs/findings.md
 ==============================================================================
 `
 
@@ -65,5 +66,12 @@ func gitHookDisplayResults(results []*proto.Result) {
 			gitHookResultEncodings(result),
 		)
 	}
-	fmt.Fprint(os.Stderr, gitHookResultsWarningFooter)
+
+	// Get the git ref that this was build for
+	gitRef := version.Commit
+	if len(gitRef) == 0 {
+		gitRef = "HEAD"
+	}
+
+	fmt.Fprint(os.Stderr, strings.Replace(gitHookResultsWarningFooter, "${GIT_REF}", gitRef, -1))
 }
