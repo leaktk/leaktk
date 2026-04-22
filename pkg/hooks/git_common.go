@@ -15,11 +15,11 @@ Findings:
 
 const gitHookResultWarningTemplate = `
 - Description  : %s
+  Commit:      : %s
   Path         : %s
   Line Number  : %d
   Encoding(s)  : %s
 `
-// TODO: Add "Commit" if it exists in the results (Might make this all dynamic for easier additions in the future)
 
 const gitHookResultsWarningFooter = `
 ==============================================================================
@@ -62,6 +62,7 @@ func gitHookDisplayResults(results []*proto.Result) {
 			os.Stderr,
 			gitHookResultWarningTemplate,
 			result.Rule.Description,
+			result.Location.Version,
 			result.Location.Path,
 			result.Location.Start.Line,
 			gitHookResultEncodings(result),
@@ -74,5 +75,5 @@ func gitHookDisplayResults(results []*proto.Result) {
 		gitRef = "HEAD"
 	}
 
-	fmt.Fprint(os.Stderr, strings.Replace(gitHookResultsWarningFooter, "${GIT_REF}", gitRef, -1))
+	fmt.Fprint(os.Stderr, strings.ReplaceAll(gitHookResultsWarningFooter, "${GIT_REF}", gitRef))
 }
