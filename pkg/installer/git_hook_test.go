@@ -68,8 +68,8 @@ func TestGitInstallHookDir(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test installing a hook
-	hookName := "git.pre-commit"
-	err = gitInstallHookDir(hookName, gitDir)
+	hookname := "git.pre-commit"
+	err = gitInstallHookDir(hookname, gitDir)
 	require.NoError(t, err)
 
 	// Verify the hook was created
@@ -100,8 +100,8 @@ func TestGitInstallHookDirInvalidName(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test with invalid hook name (no dot separator)
-	hookName := "invalid-hook-name"
-	err = gitInstallHookDir(hookName, gitDir)
+	hookname := "invalid-hook-name"
+	err = gitInstallHookDir(hookname, gitDir)
 	require.Error(t, err)
 }
 

@@ -210,15 +210,15 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 }
 
 func runHook(cmd *cobra.Command, args []string) {
-	hookName := args[0]
+	hookname := args[0]
 
-	if !slices.Contains(cmd.ValidArgs, hookName) {
-		logger.Fatal("invalid hookname: hookname=%q", hookName)
+	if !slices.Contains(cmd.ValidArgs, hookname) {
+		logger.Fatal("invalid hookname: hookname=%q", hookname)
 	}
 
-	statusCode, err := hooks.Run(cfg, hookName, args[1:])
+	statusCode, err := hooks.Run(cfg, hookname, args[1:])
 	if err != nil {
-		logger.Fatal("error running hook: %v hookname=%q", err, hookName)
+		logger.Fatal("error running hook: %v hookname=%q", err, hookname)
 	}
 
 	os.Exit(statusCode)
