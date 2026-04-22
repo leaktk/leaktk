@@ -72,6 +72,12 @@ func gitPreReceiveRun(cfg *config.Config, hookname string, _ []string) (int, err
 			logger.Fatal("expected line to start with '[0-9a-z]{40} [0-9a-z]{40}': line=%q", line)
 		}
 
+		newID := line[newIDStart:newIDEnd]
+		if bytes.Equal(newID, emptyOID) {
+			logger.Debug("skipping delete-ref line: line=%q", line)
+			continue
+		}
+
 		// Create exclusions list from the oldID if it points to a non-empty object ID
 		var exclusions []string
 		if oldID := line[oldIDStart:oldIDEnd]; !bytes.Equal(oldID, emptyOID) {
@@ -85,7 +91,7 @@ func gitPreReceiveRun(cfg *config.Config, hookname string, _ []string) (int, err
 			Resource: ".",
 			Opts: proto.Opts{
 				Local:      true,
-				Branch:     string(line[newIDStart:newIDEnd]),
+				Branch:     string(newID),
 				Exclusions: exclusions,
 			},
 		})
