@@ -209,8 +209,22 @@ func (s *Scanner) listen() {
 				// Ensure the temp working tree is removed after the scan
 				defer func() {
 					if fs.PathExists(gitRepoInfo.WorkingTreePath) {
-						if err := os.RemoveAll(gitRepoInfo.WorkingTreePath); err != nil {
-							logger.Error("could not remove temp working tree: %v path=%q id=%q", err, gitRepoInfo.WorkingTreePath, request.ID)
+						// First try cleaning up the worktrees the proper way
+						logger.Debug("removing temp git working tree: path=%q", gitRepoInfo.WorkingTreePath)
+						err := gitCommand(ctx, "-C", gitRepoInfo.GitDir, "worktree", "remove", "--force", gitRepoInfo.WorkingTreePath).Run()
+						if err != nil {
+							logger.Error("error removing temp working tree: %v path=%q, id=%q", err, gitRepoInfo.WorkingTreePath, request.ID)
+						}
+
+						// This is a fallback to make real sure we clean up as much as we can
+						if fs.PathExists(gitRepoInfo.WorkingTreePath) {
+							logger.Warning("removing worktree some files manually: path=%q id=%q", gitRepoInfo.WorkingTreePath, request.ID)
+							if err := os.RemoveAll(gitRepoInfo.WorkingTreePath); err != nil {
+								logger.Error("could not remove temp working tree: %v path=%q id=%q", err, gitRepoInfo.WorkingTreePath, request.ID)
+							}
+							if err := gitCommand(ctx, "-C", gitRepoInfo.GitDir, "worktree", "prune").Run(); err != nil {
+								logger.Error("could not prune worktrees: %v path=%q id=%q", err, gitRepoInfo.WorkingTreePath, request.ID)
+							}
 						}
 					}
 				}()
@@ -220,6 +234,7 @@ func (s *Scanner) listen() {
 			if !request.Opts.Local {
 				defer func() {
 					if fs.PathExists(gitRepoInfo.GitDir) {
+						logger.Debug("removing temp git dir: path=%q", gitRepoInfo.GitDir)
 						if err := os.RemoveAll(gitRepoInfo.GitDir); err != nil {
 							logger.Error("could not remove temp gitdir: %v path=%q id=%q", err, gitRepoInfo.GitDir, request.ID)
 						}
@@ -557,7 +572,7 @@ func remoteGitRefExists(ctx context.Context, cloneURL, ref string) bool {
 // deleted after the scan completes. To keep things light, it only checks out
 // the relevant config files and not the rest of the tree's content.
 func tempCheckoutGitSourceConfigFiles(ctx context.Context, gitDir string) (string, error) {
-	worktreePath, err := os.MkdirTemp(gitDir, "leaktk-worktree")
+	worktreePath, err := os.MkdirTemp(gitDir, "leaktk-worktree.")
 	if err != nil {
 		return "", fmt.Errorf("could not create worktree directory: %w", err)
 	}
