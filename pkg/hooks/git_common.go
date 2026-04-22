@@ -19,6 +19,7 @@ const gitHookResultWarningTemplate = `
   Line Number  : %d
   Encoding(s)  : %s
 `
+// TODO: Add "Commit" if it exists in the results (Might make this all dynamic for easier additions in the future)
 
 const gitHookResultsWarningFooter = `
 ==============================================================================
