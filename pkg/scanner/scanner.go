@@ -206,6 +206,9 @@ func (s *Scanner) listen() {
 					logger.Debug("could not set up temp working tree for bare repo: %v id=%q", err, request.ID)
 				}
 
+				/////////////////////////////
+				// TODO: ensure this runs for sure before results are sent instead of here, sometimes the command exits before the cleanup finishes
+				/////////////////////////////
 				// Ensure the temp working tree is removed after the scan
 				defer func() {
 					if fs.PathExists(gitRepoInfo.WorkingTreePath) {
