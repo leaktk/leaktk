@@ -14,6 +14,7 @@ import (
 	"github.com/adrg/xdg"
 
 	"github.com/leaktk/leaktk/pkg/config"
+	"github.com/leaktk/leaktk/pkg/docs"
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/version"
@@ -42,11 +43,6 @@ type GitHookOpts struct {
 	// (one is created at ~/.config/git/template if not already configured)
 	UserTemplateDir bool
 }
-
-// defaultErrorDocsURL is the base URL template for error documentation.
-// %s is replaced with the error code (e.g. "command_not_found").
-// This can be made configurable in the future via config.toml.
-const defaultErrorDocsURL = "https://github.com/leaktk/leaktk/blob/HEAD/docs/errors/%s.md"
 
 // gitPreCommitHookTemplate is the shell script written to .git/hooks/pre-commit.
 // Placeholders in order: createdBy, createdOn, hookname, errorDocURL.
@@ -196,8 +192,7 @@ func gitInstallHookDir(gitHookName, installDirPath string) error {
 
 	createdBy := "leaktk-" + version.Version
 	createdOn := time.Now().UTC().Format(time.RFC3339)
-	errorDocURL := fmt.Sprintf(defaultErrorDocsURL, "command_not_found")
-	script := fmt.Sprintf(gitPreCommitHookTemplate, createdBy, createdOn, gitHookName, errorDocURL)
+	script := fmt.Sprintf(gitPreCommitHookTemplate, createdBy, createdOn, gitHookName, docs.DocURL(docs.CommandNotFoundTopic))
 
 	if err := os.WriteFile(hookPath, []byte(script), 0750); err != nil { // #nosec G306 -- hook script must be executable
 		return fmt.Errorf("could not write hook: path=%q error=%w", hookPath, err)
