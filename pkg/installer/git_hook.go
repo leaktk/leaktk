@@ -28,9 +28,9 @@ type GitHookOpts struct {
 
 	// Path is the directory to search for git repositories to install into
 	Path string
-  
-  // Recursive tells the installer to look git repositories in sub-paths.
-  Recursive bool
+
+	// Recursive tells the installer to look git repositories in sub-paths.
+	Recursive bool
 
 	// Force replaces existing hooks instead of skipping them
 	Force bool
@@ -213,28 +213,29 @@ func gitInstallHookDir(gitHookName, installDirPath string) error {
 func GitHookInstall(cfg *config.Config, opts GitHookOpts) error {
 	ctx := context.Background()
 	var installErrors []error
+	var err error
 
 	if opts.Path != "" {
 		if !fs.PathExists(opts.Path) {
 			return fmt.Errorf("path does not exist: path=%q", opts.Path)
 		}
-    
-    var gitDirs []string
-    
-    if !opgs.Recursive {
-      gitDir, err := gitFindAbsDir(ctx, opts.Path)
-      if err != nil {
-        return fmt.Errorf("could not find git repo: %w path=%q", err, opts.Path)
-      }
-      if len(gitDir) > 0 {
-        gitDirs = append(gitDirs, gitDir)
-      }
-    } else {
-      gitDirs, err := findGitDirs(ctx, opts.Path)
-      if err != nil {
-        return fmt.Errorf("could not find git repos: %w path=%q", err, opts.Path)
-      }
-    }
+
+		var gitDirs []string
+
+		if !opts.Recursive {
+			gitDir, err := gitFindAbsDir(ctx, opts.Path)
+			if err != nil {
+				return fmt.Errorf("could not find git repo: %w path=%q", err, opts.Path)
+			}
+			if len(gitDir) > 0 {
+				gitDirs = append(gitDirs, gitDir)
+			}
+		} else {
+			gitDirs, err = findGitDirs(ctx, opts.Path)
+			if err != nil {
+				return fmt.Errorf("could not find git repos: %w path=%q", err, opts.Path)
+			}
+		}
 
 		if len(gitDirs) == 0 {
 			logger.Warning("no git repositories found: path=%q", opts.Path)

@@ -221,11 +221,12 @@ func TestGitHookInstall(t *testing.T) {
 		assert.True(t, fs.IsExecutable(hookPath))
 	})
 
-	t.Run("installs in all repos under path", func(t *testing.T) {
+	t.Run("installs in all repos under path when recursive is set", func(t *testing.T) {
 		opts := GitHookOpts{
-			Name:  "git.pre-commit",
-			Path:  tmpDir,
-			Force: true,
+			Name:      "git.pre-commit",
+			Force:     true,
+			Path:      tmpDir,
+			Recursive: true,
 		}
 		err := GitHookInstall(cfg, opts)
 		require.NoError(t, err)

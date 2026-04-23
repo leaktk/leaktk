@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -56,8 +55,8 @@ func gitHookInstallCommand(hookname string) *cobra.Command {
 	flags.Bool("user-template-dir", false, fmt.Sprintf("Install the %s hook in your git init.templateDir (one is created if not already defined)", hookname))
 	flags.Bool("system-template-dir", false, fmt.Sprintf("Install the %s hook in /usr/share/git-core/templates", hookname))
 	flags.StringP("path", "p", ".", fmt.Sprintf("Install the %s hook in all git repositories under this path (defaults to current directory)", hookname))
-  flags.BoolP("recursive", "r", false, fmt.Sprintf("Install the %s hook in all git repositories under the selected path", hookname))
-  flags.Bool("force", false, fmt.Sprintf("Replace any existing %s hooks instead of skipping them", hookname))
+	flags.BoolP("recursive", "r", false, fmt.Sprintf("Install the %s hook in all git repositories under the selected path", hookname))
+	flags.Bool("force", false, fmt.Sprintf("Replace any existing %s hooks instead of skipping them", hookname))
 
 	return cmd
 }
@@ -68,9 +67,9 @@ func runGitHookInstall(cmd *cobra.Command, args []string) {
 	userTemplateDir, _ := flags.GetBool("user-template-dir")
 	systemTemplateDir, _ := flags.GetBool("system-template-dir")
 	path, _ := flags.GetString("path")
-  recursive, _ := flags.GetBool("recursive")
+	recursive, _ := flags.GetBool("recursive")
 	force, _ := flags.GetBool("force")
-  
+
 	opts := installer.GitHookOpts{
 		Name:              cmd.Use,
 		UserTemplateDir:   userTemplateDir,
