@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -88,8 +89,15 @@ func TestGitInstallHookDir(t *testing.T) {
 	require.NoError(t, err)
 
 	contentStr := string(content)
-	assert.True(t, strings.HasPrefix(contentStr, "#!/bin/sh\n#"))
+	// Frontmatter must have a space after the #
+	assert.True(t, strings.HasPrefix(contentStr, "#!/bin/sh\n# TemplateID:"), "script must start with shebang and spaced frontmatter")
+	// Must contain the command-v guard
+	assert.Contains(t, contentStr, "if command -v leaktk > /dev/null 2>&1")
 	assert.Contains(t, contentStr, "exec leaktk hook git.pre-commit")
+	// Must contain the error doc link
+	assert.Contains(t, contentStr, "docs/errors/command_not_found")
+	// Must NOT exec unconditionally (the old broken form)
+	assert.NotContains(t, contentStr, "\nexec leaktk")
 }
 
 func TestGitInstallHookDirInvalidName(t *testing.T) {
@@ -105,110 +113,94 @@ func TestGitInstallHookDirInvalidName(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestGitFindRepos(t *testing.T) {
+func TestFindGitDirs(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create a regular git repository
+	// Regular repo
 	repo1 := filepath.Join(tmpDir, "repo1")
 	setupGitRepo(t, repo1, false)
 
-	// Create a bare git repository
+	// Bare repo
 	repo2 := filepath.Join(tmpDir, "repo2.git")
 	setupGitRepo(t, repo2, true)
 
-	// Create a nested git repository
-	nestedDir := filepath.Join(tmpDir, "nested")
-	repo3 := filepath.Join(nestedDir, "repo3")
+	// Nested repo (under a subdirectory)
+	repo3 := filepath.Join(tmpDir, "nested", "repo3")
 	setupGitRepo(t, repo3, false)
 
-	t.Run("find single repo non-recursive", func(t *testing.T) {
-		opts := GitHookOpts{
-			Name:      "git.pre-commit",
-			Dir:       repo1,
-			Recursive: false,
-			Force:     false,
-		}
+	ctx := context.Background()
 
-		repos, err := gitFindRepos(repo1, opts)
+	t.Run("finds all repos recursively", func(t *testing.T) {
+		gitDirs, err := findGitDirs(ctx, tmpDir)
 		require.NoError(t, err)
-		assert.Len(t, repos, 1)
+		assert.Len(t, gitDirs, 3)
 	})
 
-	t.Run("find multiple repos recursive", func(t *testing.T) {
-		opts := GitHookOpts{
-			Name:      "git.pre-commit",
-			Dir:       tmpDir,
-			Recursive: true,
-			Force:     false,
-		}
-
-		repos, err := gitFindRepos(tmpDir, opts)
+	t.Run("finds single repo when pointed at it directly", func(t *testing.T) {
+		gitDirs, err := findGitDirs(ctx, repo1)
 		require.NoError(t, err)
-
-		// Should find repo1, repo2.git, and nested/repo3
-		assert.GreaterOrEqual(t, len(repos), 3)
+		assert.Len(t, gitDirs, 1)
+		assert.Equal(t, filepath.Join(repo1, ".git"), gitDirs[0])
 	})
 
-	t.Run("skip repos with existing hooks when force=false", func(t *testing.T) {
-		// Install a hook in repo1
-		ctx := context.Background()
-		absDir, err := gitFindAbsDir(ctx, repo1)
+	t.Run("finds bare repo", func(t *testing.T) {
+		gitDirs, err := findGitDirs(ctx, repo2)
 		require.NoError(t, err)
-
-		err = gitInstallHookDir("git.pre-commit", absDir)
-		require.NoError(t, err)
-
-		opts := GitHookOpts{
-			Name:      "git.pre-commit",
-			Dir:       tmpDir,
-			Recursive: true,
-			Force:     false,
-		}
-
-		repos, err := gitFindRepos(tmpDir, opts)
-		require.NoError(t, err)
-
-		// Should skip repo1 since it has an executable hook
-		assert.NotContains(t, repos, absDir)
+		assert.Len(t, gitDirs, 1)
+		assert.Equal(t, repo2, gitDirs[0])
 	})
 
-	t.Run("include repos with existing hooks when force=true", func(t *testing.T) {
-		opts := GitHookOpts{
-			Name:      "git.pre-commit",
-			Dir:       tmpDir,
-			Recursive: true,
-			Force:     true,
-		}
-
-		repos, err := gitFindRepos(tmpDir, opts)
+	t.Run("non-git directory returns empty", func(t *testing.T) {
+		emptyDir := filepath.Join(tmpDir, "notarepo")
+		require.NoError(t, os.MkdirAll(emptyDir, 0755)) // #nosec G301
+		gitDirs, err := findGitDirs(ctx, emptyDir)
 		require.NoError(t, err)
+		assert.Empty(t, gitDirs)
+	})
+}
 
-		// Should find all repos including repo1
-		assert.GreaterOrEqual(t, len(repos), 3)
+func TestGitHookInstallUserTemplateDir(t *testing.T) {
+	// Isolate git config so we don't touch the real ~/.gitconfig
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(tmpHome, ".gitconfig"))
+	// Redirect XDG so xdg.ConfigHome picks up our temp dir
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpHome, ".config"))
+
+	cfg := &config.Config{}
+	ctx := context.Background()
+
+	t.Run("creates and configures templateDir when not set", func(t *testing.T) {
+		templateDir, err := gitUserTemplateDir(ctx)
+		require.NoError(t, err)
+		assert.True(t, fs.DirExists(templateDir))
+
+		// git config --global init.templateDir should now be set
+		cmd := exec.CommandContext(ctx, "git", "config", "--global", "init.templateDir") // #nosec G204
+		output, err := cmd.Output()
+		require.NoError(t, err)
+		assert.Equal(t, templateDir, strings.TrimSpace(string(output)))
 	})
 
-	t.Run("non-recursive stops at top level", func(t *testing.T) {
+	t.Run("installs hook into templateDir", func(t *testing.T) {
 		opts := GitHookOpts{
-			Name:      "git.pre-commit",
-			Dir:       tmpDir,
-			Recursive: false,
-			Force:     true,
+			Name:            "git.pre-commit",
+			UserTemplateDir: true,
+			Force:           false,
 		}
-
-		repos, err := gitFindRepos(tmpDir, opts)
+		err := GitHookInstall(cfg, opts)
 		require.NoError(t, err)
 
-		// Should not find nested repo
-		ctx := context.Background()
-		nestedAbsDir, _ := gitFindAbsDir(ctx, repo3)
-		assert.NotContains(t, repos, nestedAbsDir)
+		templateDir, err := gitUserTemplateDir(ctx)
+		require.NoError(t, err)
+		hookPath := filepath.Join(templateDir, "hooks", "pre-commit")
+		assert.True(t, fs.IsExecutable(hookPath))
 	})
 }
 
 func TestGitHookInstall(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create test repositories
 	repo1 := filepath.Join(tmpDir, "repo1")
 	setupGitRepo(t, repo1, false)
 
@@ -219,56 +211,61 @@ func TestGitHookInstall(t *testing.T) {
 
 	t.Run("install in single repo", func(t *testing.T) {
 		opts := GitHookOpts{
-			Name:      "git.pre-commit",
-			Dir:       repo1,
-			Recursive: false,
-			Force:     false,
+			Name:  "git.pre-commit",
+			Path:  repo1,
+			Force: false,
 		}
-
 		err := GitHookInstall(cfg, opts)
 		require.NoError(t, err)
-
-		// Verify hook was installed
 		hookPath := filepath.Join(repo1, ".git", "hooks", "pre-commit")
 		assert.True(t, fs.IsExecutable(hookPath))
 	})
 
-	t.Run("install recursively", func(t *testing.T) {
+	t.Run("installs in all repos under path", func(t *testing.T) {
 		opts := GitHookOpts{
-			Name:      "git.pre-commit",
-			Dir:       tmpDir,
-			Recursive: true,
-			Force:     true,
+			Name:  "git.pre-commit",
+			Path:  tmpDir,
+			Force: true,
 		}
-
 		err := GitHookInstall(cfg, opts)
 		require.NoError(t, err)
-
-		// Verify hooks were installed in both repos
 		hook1 := filepath.Join(repo1, ".git", "hooks", "pre-commit")
 		hook2 := filepath.Join(repo2, ".git", "hooks", "pre-commit")
-
 		assert.True(t, fs.IsExecutable(hook1))
 		assert.True(t, fs.IsExecutable(hook2))
 	})
 
-	t.Run("fail with empty dir", func(t *testing.T) {
-		opts := GitHookOpts{
-			Name: "git.pre-commit",
-			Dir:  "",
-		}
-
-		err := GitHookInstall(cfg, opts)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "directory path is required")
+	t.Run("skips existing hook when force=false", func(t *testing.T) {
+		opts := GitHookOpts{Name: "git.pre-commit", Path: repo1, Force: false}
+		require.NoError(t, GitHookInstall(cfg, opts))
+		info, err := os.Stat(filepath.Join(repo1, ".git", "hooks", "pre-commit"))
+		require.NoError(t, err)
+		originalMtime := info.ModTime()
+		// install again — should skip
+		require.NoError(t, GitHookInstall(cfg, opts))
+		info2, err := os.Stat(filepath.Join(repo1, ".git", "hooks", "pre-commit"))
+		require.NoError(t, err)
+		assert.Equal(t, originalMtime, info2.ModTime(), "file should not have been overwritten")
 	})
 
-	t.Run("handle nonexistent directory", func(t *testing.T) {
+	t.Run("overwrites existing hook when force=true", func(t *testing.T) {
+		opts := GitHookOpts{Name: "git.pre-commit", Path: repo1, Force: true}
+		require.NoError(t, GitHookInstall(cfg, opts))
+		info, err := os.Stat(filepath.Join(repo1, ".git", "hooks", "pre-commit"))
+		require.NoError(t, err)
+		originalMtime := info.ModTime()
+		time.Sleep(10 * time.Millisecond)
+		require.NoError(t, GitHookInstall(cfg, opts))
+		info2, err := os.Stat(filepath.Join(repo1, ".git", "hooks", "pre-commit"))
+		require.NoError(t, err)
+		assert.NotEqual(t, originalMtime, info2.ModTime(), "file should have been overwritten")
+	})
+
+	t.Run("returns error for nonexistent path", func(t *testing.T) {
 		opts := GitHookOpts{
 			Name: "git.pre-commit",
-			Dir:  filepath.Join(tmpDir, "nonexistent"),
+			Path: filepath.Join(tmpDir, "nonexistent"),
 		}
-
 		err := GitHookInstall(cfg, opts)
 		require.Error(t, err)
 	})
