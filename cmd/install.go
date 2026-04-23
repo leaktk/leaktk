@@ -55,9 +55,9 @@ func gitHookInstallCommand(hookname string) *cobra.Command {
 	flags := cmd.Flags()
 	flags.Bool("user-template-dir", false, fmt.Sprintf("Install the %s hook in your git init.templateDir (one is created if not already defined)", hookname))
 	flags.Bool("system-template-dir", false, fmt.Sprintf("Install the %s hook in /usr/share/git-core/templates", hookname))
-	flags.StringP("dir", "d", "", fmt.Sprintf("Install the %s hook in the git repository at this path", hookname))
-	flags.BoolP("recursive", "r", false, fmt.Sprintf("Install the %s hook in all git repositories under --dir=<path>", hookname))
-	flags.Bool("force", false, fmt.Sprintf("Replace any existing %s hooks instead of skipping them", hookname))
+	flags.StringP("path", "p", ".", fmt.Sprintf("Install the %s hook in all git repositories under this path (defaults to current directory)", hookname))
+  flags.BoolP("recursive", "r", false, fmt.Sprintf("Install the %s hook in all git repositories under the selected path", hookname))
+  flags.Bool("force", false, fmt.Sprintf("Replace any existing %s hooks instead of skipping them", hookname))
 
 	return cmd
 }
@@ -67,24 +67,15 @@ func runGitHookInstall(cmd *cobra.Command, args []string) {
 
 	userTemplateDir, _ := flags.GetBool("user-template-dir")
 	systemTemplateDir, _ := flags.GetBool("system-template-dir")
-	dir, _ := flags.GetString("dir")
-	recursive, _ := flags.GetBool("recursive")
+	path, _ := flags.GetString("path")
+  recursive, _ := flags.GetBool("recursive")
 	force, _ := flags.GetBool("force")
-
-	// Use current directory if no dir specified
-	if dir == "" {
-		var err error
-		dir, err = os.Getwd()
-		if err != nil {
-			logger.Fatal("could not get current directory: %v", err)
-		}
-	}
-
+  
 	opts := installer.GitHookOpts{
 		Name:              cmd.Use,
 		UserTemplateDir:   userTemplateDir,
-		GlobalTemplateDir: systemTemplateDir,
-		Dir:               dir,
+		SystemTemplateDir: systemTemplateDir,
+		Path:              path,
 		Recursive:         recursive,
 		Force:             force,
 	}
