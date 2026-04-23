@@ -1,9 +1,7 @@
 package scanner
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +11,8 @@ import (
 
 	"github.com/betterleaks/betterleaks/detect"
 	"github.com/betterleaks/betterleaks/report"
+
+	"github.com/leaktk/leaktk/internal/git"
 
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
@@ -50,17 +50,6 @@ type Scanner struct {
 	responseQueue   *queue.PriorityQueue[*proto.Response]
 	scanQueue       *queue.PriorityQueue[*proto.Request]
 	scanWorkers     int
-}
-
-// GitRepoInfo is a collection of facts about a repo being scanned.
-// See `man 7 gitglossary` for more information about the terms.
-type GitRepoInfo struct {
-	// Whether or not the repo is a bare repo
-	IsBare bool
-	// The path to the actual GIT_DIR folder
-	GitDir string
-	// The working tree for the repo (a temp one is created for bare repos)
-	WorkingTreePath string
 }
 
 // NewScanner returns a initialized and listening scanner instance that should
@@ -146,7 +135,7 @@ func (s *Scanner) listen() {
 		var findings []report.Finding
 		switch request.Kind {
 		case proto.GitRepoRequestKind:
-			var gitRepoInfo GitRepoInfo
+			var gitRepoInfo git.RepoInfo
 
 			if request.Opts.Local {
 				// Make sure local scans are allowed before continuing
@@ -162,7 +151,7 @@ func (s *Scanner) listen() {
 				}
 
 				// Load the gitRepoInfo from the repo
-				gitRepoInfo, err = getGitRepoInfo(ctx, request.Resource)
+				gitRepoInfo, err = git.GetRepoInfo(ctx, request.Resource)
 				if err != nil {
 					logger.Critical("scan failed: could not get git repo info: %v id=%q", err, request.ID)
 					removeTempGitFiles(ctx, request, gitRepoInfo)
@@ -323,7 +312,7 @@ func (s *Scanner) respondWithError(request *proto.Request, err *proto.Error) {
 
 // removeTempGitFiles clears out any temp files or directories that were created for the scan
 // and should be safe to remove after the scan is finished
-func removeTempGitFiles(ctx context.Context, request *proto.Request, gitRepoInfo GitRepoInfo) {
+func removeTempGitFiles(ctx context.Context, request *proto.Request, gitRepoInfo git.RepoInfo) {
 	// Remove temp repo clone if it was a remote scan
 	if !request.Opts.Local && fs.PathExists(gitRepoInfo.GitDir) {
 		logger.Debug("removing temp git dir: path=%q", gitRepoInfo.GitDir)
@@ -334,21 +323,8 @@ func removeTempGitFiles(ctx context.Context, request *proto.Request, gitRepoInfo
 
 	// Remove temp git working tree created for accessing certain files from bare repos
 	if gitRepoInfo.IsBare && fs.PathExists(gitRepoInfo.WorkingTreePath) {
-		// First try cleaning up the worktrees the proper way
-		logger.Debug("removing temp git working tree: path=%q", gitRepoInfo.WorkingTreePath)
-		if err := gitCommand(ctx, "-C", gitRepoInfo.GitDir, "worktree", "remove", "--force", gitRepoInfo.WorkingTreePath).Run(); err != nil {
-			logger.Error("error removing temp working tree: %v path=%q, id=%q", err, gitRepoInfo.WorkingTreePath, request.ID)
-		}
-
-		// This is a fallback to make real sure we clean up as much as we can
-		if fs.PathExists(gitRepoInfo.WorkingTreePath) {
-			logger.Warning("removing some worktree files manually: path=%q id=%q", gitRepoInfo.WorkingTreePath, request.ID)
-			if err := os.RemoveAll(gitRepoInfo.WorkingTreePath); err != nil {
-				logger.Error("could not remove temp working tree: %v path=%q id=%q", err, gitRepoInfo.WorkingTreePath, request.ID)
-			}
-			if err := gitCommand(ctx, "-C", gitRepoInfo.GitDir, "worktree", "prune").Run(); err != nil {
-				logger.Error("could not prune worktrees: %v path=%q id=%q", err, gitRepoInfo.WorkingTreePath, request.ID)
-			}
+		if err := git.RemoveWorkingTree(ctx, gitRepoInfo); err != nil {
+			logger.Error("error removing temp working tree: %v path=%q id=%q", err, gitRepoInfo.WorkingTreePath, request.ID)
 		}
 	}
 }
@@ -431,35 +407,6 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 	return result
 }
 
-func getGitRepoInfo(ctx context.Context, path string) (GitRepoInfo, error) {
-	info := GitRepoInfo{}
-	cmd := gitCommand(
-		ctx,
-		"-C",
-		path,
-		"rev-parse",
-		// The order of these flags affects the field order below
-		"--absolute-git-dir",
-		"--is-bare-repository",
-	) // #nosec G204
-
-	logger.Debug("executing: %s", cmd)
-	rawInfo, err := cmd.Output()
-	if err != nil {
-		return info, err
-	}
-
-	fields := bytes.Fields(rawInfo)
-	if len(fields) != 2 {
-		return info, errors.New("could not load git repo info")
-	}
-
-	// Load the field data from above
-	info.GitDir = string(fields[0])
-	info.IsBare = bytes.Equal(fields[1], []byte("true"))
-	return info, nil
-}
-
 func loadSourceConfig(detector *detect.Detector, sourcePath string) {
 	if !fs.DirExists(sourcePath) {
 		logger.Debug("skipping additional config: source path does not exist: path=%q", sourcePath)
@@ -497,9 +444,9 @@ func loadSourceConfig(detector *detect.Detector, sourcePath string) {
 	}
 }
 
-func (s *Scanner) cloneGitRepo(ctx context.Context, cloneURL string, opts proto.Opts) (GitRepoInfo, error) {
+func (s *Scanner) cloneGitRepo(ctx context.Context, cloneURL string, opts proto.Opts) (git.RepoInfo, error) {
 	cloneArgs := []string{"clone"}
-	gitRepoInfo := GitRepoInfo{}
+	gitRepoInfo := git.RepoInfo{}
 
 	if len(opts.Proxy) > 0 {
 		cloneArgs = append(cloneArgs, "--config")
@@ -509,7 +456,7 @@ func (s *Scanner) cloneGitRepo(ctx context.Context, cloneURL string, opts proto.
 	// The --[no-]single-branch flags are still needed with mirror due to how
 	// things like --depth and --shallow-since behave
 	if len(opts.Branch) > 0 {
-		if !remoteGitRefExists(ctx, cloneURL, opts.Branch) {
+		if !git.RemoteRefExists(ctx, cloneURL, opts.Branch) {
 			return gitRepoInfo, fmt.Errorf("remote ref does not exist: ref=%q", opts.Branch)
 		}
 		gitRepoInfo.IsBare = true
@@ -545,7 +492,7 @@ func (s *Scanner) cloneGitRepo(ctx context.Context, cloneURL string, opts proto.
 	// Include the clone URL
 	gitDir := filepath.Join(s.clonesDir, id.ID())
 	cloneArgs = append(cloneArgs, cloneURL, gitDir)
-	gitClone := gitCommand(ctx, cloneArgs...)
+	gitClone := git.CommandContext(ctx, cloneArgs...)
 	gitRepoInfo.GitDir = gitDir
 
 	logger.Debug("executing: %s", gitClone)
@@ -560,12 +507,6 @@ func (s *Scanner) cloneGitRepo(ctx context.Context, cloneURL string, opts proto.
 	return gitRepoInfo, nil
 }
 
-func remoteGitRefExists(ctx context.Context, cloneURL, ref string) bool {
-	cmd := gitCommand(ctx, "ls-remote", "--exit-code", "--quiet", cloneURL, ref) // #nosec G204
-	logger.Debug("executing: %s", cmd)
-	return cmd.Run() == nil
-}
-
 // tempCheckoutGitSourceConfigFiles is used for bare clones that don't already
 // have working trees. The scanner currently expects certain files to exist
 // on the file system for loading additional repo configuration. This creates
@@ -577,14 +518,14 @@ func tempCheckoutGitSourceConfigFiles(ctx context.Context, gitDir string) (strin
 	if err != nil {
 		return "", fmt.Errorf("could not create worktree directory: %w", err)
 	}
-	cmd := gitCommand(ctx, "-C", gitDir, "worktree", "add", "--no-checkout", worktreePath) // #nosec G204
+	cmd := git.CommandContext(ctx, "-C", gitDir, "worktree", "add", "--no-checkout", worktreePath) // #nosec G204
 
 	logger.Debug("executing: %s", cmd)
 	if err := cmd.Run(); err != nil {
 		return worktreePath, fmt.Errorf("could not create worktree: %w cmd=%q", err, cmd)
 	}
 
-	cmd = gitCommand(ctx, "-C", worktreePath, "checkout", "-f", "HEAD", "--", ".gitleaks*") // #nosec G204
+	cmd = git.CommandContext(ctx, "-C", worktreePath, "checkout", "-f", "HEAD", "--", ".gitleaks*") // #nosec G204
 	logger.Debug("executing: %s", cmd)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return worktreePath, fmt.Errorf("could not checkout gitleaks files: %w cmd=%q output=%q", err, cmd, string(output))
