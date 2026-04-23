@@ -165,12 +165,12 @@ func (s *Scanner) listen() {
 				gitRepoInfo, err = getGitRepoInfo(ctx, request.Resource)
 				if err != nil {
 					logger.Critical("scan failed: could not get git repo info: %v id=%q", err, request.ID)
+					removeTempGitFiles(ctx, request, gitRepoInfo)
 					s.respondWithError(request, &proto.Error{
 						Code:    sourceErrorCode,
 						Message: "could not get git repo info",
 						Data:    request,
 					})
-
 					return
 				}
 			} else {
@@ -179,6 +179,7 @@ func (s *Scanner) listen() {
 				if err != nil {
 					select {
 					case <-ctx.Done():
+						removeTempGitFiles(ctx, request, gitRepoInfo)
 						s.respondWithError(request, &proto.Error{
 							Code:    cloneErrorCode,
 							Message: "clone operation timed out",
@@ -186,6 +187,7 @@ func (s *Scanner) listen() {
 						})
 					default:
 						logger.Critical("scan failed: could not clone git repo: %v id=%q", err, request.ID)
+						removeTempGitFiles(ctx, request, gitRepoInfo)
 						s.respondWithError(request, &proto.Error{
 							Code:    cloneErrorCode,
 							Message: "could not clone git repo",
@@ -198,51 +200,12 @@ func (s *Scanner) listen() {
 
 			// Handle setting up a temp worktree for accessing certain files in bare repos
 			if gitRepoInfo.IsBare {
-				// Create temp working tree for bare repos with just the config files included
 				gitRepoInfo.WorkingTreePath, err = tempCheckoutGitSourceConfigFiles(ctx, gitRepoInfo.GitDir)
 				if err != nil {
 					// Only log this as a debug item since it shouldn't result in fewer findings but
 					// may result in more false positives
 					logger.Debug("could not set up temp working tree for bare repo: %v id=%q", err, request.ID)
 				}
-
-				/////////////////////////////
-				// TODO: ensure this runs for sure before results are sent instead of here, sometimes the command exits before the cleanup finishes
-				/////////////////////////////
-				// Ensure the temp working tree is removed after the scan
-				defer func() {
-					if fs.PathExists(gitRepoInfo.WorkingTreePath) {
-						// First try cleaning up the worktrees the proper way
-						logger.Debug("removing temp git working tree: path=%q", gitRepoInfo.WorkingTreePath)
-						err := gitCommand(ctx, "-C", gitRepoInfo.GitDir, "worktree", "remove", "--force", gitRepoInfo.WorkingTreePath).Run()
-						if err != nil {
-							logger.Error("error removing temp working tree: %v path=%q, id=%q", err, gitRepoInfo.WorkingTreePath, request.ID)
-						}
-
-						// This is a fallback to make real sure we clean up as much as we can
-						if fs.PathExists(gitRepoInfo.WorkingTreePath) {
-							logger.Warning("removing worktree some files manually: path=%q id=%q", gitRepoInfo.WorkingTreePath, request.ID)
-							if err := os.RemoveAll(gitRepoInfo.WorkingTreePath); err != nil {
-								logger.Error("could not remove temp working tree: %v path=%q id=%q", err, gitRepoInfo.WorkingTreePath, request.ID)
-							}
-							if err := gitCommand(ctx, "-C", gitRepoInfo.GitDir, "worktree", "prune").Run(); err != nil {
-								logger.Error("could not prune worktrees: %v path=%q id=%q", err, gitRepoInfo.WorkingTreePath, request.ID)
-							}
-						}
-					}
-				}()
-			}
-
-			// Handle removing temp cloned git dir
-			if !request.Opts.Local {
-				defer func() {
-					if fs.PathExists(gitRepoInfo.GitDir) {
-						logger.Debug("removing temp git dir: path=%q", gitRepoInfo.GitDir)
-						if err := os.RemoveAll(gitRepoInfo.GitDir); err != nil {
-							logger.Error("could not remove temp gitdir: %v path=%q id=%q", err, gitRepoInfo.GitDir, request.ID)
-						}
-					}
-				}()
 			}
 
 			// Load the checked out config from the working tree
@@ -268,6 +231,9 @@ func (s *Scanner) listen() {
 				Staged:        request.Opts.Staged,
 				Unstaged:      request.Opts.Unstaged,
 			})
+
+			// Remove temp files as soon as they're no longer needed
+			removeTempGitFiles(ctx, request, gitRepoInfo)
 		case proto.URLRequestKind:
 			findings, err = betterleaks.ScanURL(ctx, detector, request.Resource, betterleaks.URLScanOpts{
 				FetchURLPatterns: splitFetchURLPatterns(request.Opts.FetchURLs),
@@ -353,6 +319,38 @@ func (s *Scanner) respondWithError(request *proto.Request, err *proto.Error) {
 			Error:     err,
 		},
 	})
+}
+
+// removeTempGitFiles clears out any temp files or directories that were created for the scan
+// and should be safe to remove after the scan is finished
+func removeTempGitFiles(ctx context.Context, request *proto.Request, gitRepoInfo GitRepoInfo) {
+	// Remove temp repo clone if it was a remote scan
+	if !request.Opts.Local && fs.PathExists(gitRepoInfo.GitDir) {
+		logger.Debug("removing temp git dir: path=%q", gitRepoInfo.GitDir)
+		if err := os.RemoveAll(gitRepoInfo.GitDir); err != nil {
+			logger.Error("could not remove temp git dir: %v path=%q id=%q", err, gitRepoInfo.GitDir, request.ID)
+		}
+	}
+
+	// Remove temp git working tree created for accessing certain files from bare repos
+	if gitRepoInfo.IsBare && fs.PathExists(gitRepoInfo.WorkingTreePath) {
+		// First try cleaning up the worktrees the proper way
+		logger.Debug("removing temp git working tree: path=%q", gitRepoInfo.WorkingTreePath)
+		if err := gitCommand(ctx, "-C", gitRepoInfo.GitDir, "worktree", "remove", "--force", gitRepoInfo.WorkingTreePath).Run(); err != nil {
+			logger.Error("error removing temp working tree: %v path=%q, id=%q", err, gitRepoInfo.WorkingTreePath, request.ID)
+		}
+
+		// This is a fallback to make real sure we clean up as much as we can
+		if fs.PathExists(gitRepoInfo.WorkingTreePath) {
+			logger.Warning("removing some worktree files manually: path=%q id=%q", gitRepoInfo.WorkingTreePath, request.ID)
+			if err := os.RemoveAll(gitRepoInfo.WorkingTreePath); err != nil {
+				logger.Error("could not remove temp working tree: %v path=%q id=%q", err, gitRepoInfo.WorkingTreePath, request.ID)
+			}
+			if err := gitCommand(ctx, "-C", gitRepoInfo.GitDir, "worktree", "prune").Run(); err != nil {
+				logger.Error("could not prune worktrees: %v path=%q id=%q", err, gitRepoInfo.WorkingTreePath, request.ID)
+			}
+		}
+	}
 }
 
 func findingToResult(request *proto.Request, finding *report.Finding) *proto.Result {
