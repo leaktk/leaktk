@@ -23,7 +23,7 @@ const gitPreReceiveMaxLineLimit = 4096
 
 var emptyOID = []byte("0000000000000000000000000000000000000000")
 
-func gitPreReceiveRun(cfg *config.Config, hookname string, _ []string) (int, error) {
+func gitPreReceiveRun(cfg *config.Config, hook Hook, _ []string) (int, error) {
 	var resultsMutex sync.Mutex
 	var results []*proto.Result
 	var wg sync.WaitGroup
@@ -86,7 +86,7 @@ func gitPreReceiveRun(cfg *config.Config, hookname string, _ []string) (int, err
 
 		wg.Add(1)
 		leaktkScanner.Send(&proto.Request{
-			ID:       fmt.Sprintf("%s.%s", hookname, id.ID()),
+			ID:       fmt.Sprintf("%s.%s", hook.Name(), id.ID()),
 			Kind:     proto.GitRepoRequestKind,
 			Resource: ".",
 			Opts: proto.Opts{

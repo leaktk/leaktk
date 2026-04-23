@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/logger"
@@ -80,5 +81,20 @@ func RemoveWorkingTree(ctx context.Context, repoInfo RepoInfo) error {
 		}
 	}
 
+	return nil
+}
+
+func GetGlobalConfigPath(ctx context.Context, name string) (string, error) {
+	output, err := CommandContext(ctx, "config", "get", "--type=path", name)
+	if err != nil {
+		err = fmt.Errof("could not get git config path: %w name=%q", err, name)
+	}
+	return strings.TrimSpace(output), err
+}
+
+func SetGlobalConfigString(ctx context.Context, name, value string) (string, error) {
+	if err := RunContext(ctx, "config", "set", "--type=path", name, value); err != nil {
+		return fmt.Errof("could not set git config path: %w name=%q value=%q", err, name, value)
+	}
 	return nil
 }

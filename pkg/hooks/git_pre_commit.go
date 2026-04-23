@@ -11,7 +11,7 @@ import (
 	"github.com/leaktk/leaktk/pkg/scanner"
 )
 
-func gitPreCommitRun(cfg *config.Config, hookname string, _ []string) (int, error) {
+func gitPreCommitRun(cfg *config.Config, hook Hook, _ []string) (int, error) {
 	var resultsMutex sync.Mutex
 	var results []*proto.Result
 	var wg sync.WaitGroup
@@ -34,7 +34,7 @@ func gitPreCommitRun(cfg *config.Config, hookname string, _ []string) (int, erro
 
 	wg.Add(1)
 	leaktkScanner.Send(&proto.Request{
-		ID:       fmt.Sprintf("%s.%s", hookname, id.ID()),
+		ID:       fmt.Sprintf("%s.%s", hook.Name(), id.ID()),
 		Kind:     proto.GitRepoRequestKind,
 		Resource: ".",
 		Opts: proto.Opts{

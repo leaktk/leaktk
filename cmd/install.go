@@ -64,7 +64,7 @@ func gitHookInstallCommand(hookname string) *cobra.Command {
 func runGitHookInstall(cmd *cobra.Command, args []string) {
 	flags := cmd.Flags()
 
-	userTemplateDir, _ := flags.GetBool("user-template-dir")
+	userTemplateDir := 
 	systemTemplateDir, _ := flags.GetBool("system-template-dir")
 	path, _ := flags.GetString("path")
 	recursive, _ := flags.GetBool("recursive")
@@ -72,14 +72,14 @@ func runGitHookInstall(cmd *cobra.Command, args []string) {
 
 	opts := installer.GitHookOpts{
 		Name:              cmd.Use,
-		UserTemplateDir:   userTemplateDir,
+		UserTemplateDir:   mustGetBool(flags, "user-template-dir"),
 		SystemTemplateDir: systemTemplateDir,
 		Path:              path,
 		Recursive:         recursive,
 		Force:             force,
 	}
 
-	if err := installer.GitHookInstall(cfg, opts); err != nil {
+	if err := installer.GitHookInstall(cmd.Context(), cfg, opts); err != nil {
 		logger.Fatal("could not install git hook: %v hookname=%q", err, opts.Name)
 	}
 }
