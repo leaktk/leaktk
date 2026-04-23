@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -27,16 +26,10 @@ func hookInstallCommand() *cobra.Command {
 		Short: "Install and configure hooks",
 		Run:   runHelp,
 	}
-	for _, hookname := range hooks.Names {
-		hookkind, _, found := strings.Cut(hookname, ".")
-		if !found {
-			// All hooknames must have <kind>.<event>
-			logger.Fatal("invalid hookname detected: hookname=%q", hookname)
-		}
-
-		switch hookkind {
-		case "git":
-			cmd.AddCommand(gitHookInstallCommand(hookname))
+	for _, hook := range hooks.Hooks {
+		switch hookkind := hook.Kind(); hookkind {
+		case hooks.GitHookKind:
+			cmd.AddCommand(gitHookInstallCommand(hook))
 		default:
 			logger.Fatal("hookkind not supported by installer: hookkind=%q", hookkind)
 		}
@@ -44,42 +37,33 @@ func hookInstallCommand() *cobra.Command {
 	return cmd
 }
 
-func gitHookInstallCommand(hookname string) *cobra.Command {
+func gitHookInstallCommand(hook hooks.Hook) *cobra.Command {
+	hookname := hook.Name()
 	cmd := &cobra.Command{
 		Use:   hookname,
 		Short: "Install and configure " + hookname,
 		Run:   runGitHookInstall,
 	}
-
 	flags := cmd.Flags()
 	flags.Bool("user-template-dir", false, fmt.Sprintf("Install the %s hook in your git init.templateDir (one is created if not already defined)", hookname))
 	flags.Bool("system-template-dir", false, fmt.Sprintf("Install the %s hook in /usr/share/git-core/templates", hookname))
 	flags.StringP("path", "p", ".", fmt.Sprintf("Install the %s hook in all git repositories under this path (defaults to current directory)", hookname))
 	flags.BoolP("recursive", "r", false, fmt.Sprintf("Install the %s hook in all git repositories under the selected path", hookname))
 	flags.Bool("force", false, fmt.Sprintf("Replace any existing %s hooks instead of skipping them", hookname))
-
 	return cmd
 }
 
 func runGitHookInstall(cmd *cobra.Command, args []string) {
 	flags := cmd.Flags()
-
-	userTemplateDir, _ := flags.GetBool("user-template-dir")
-	systemTemplateDir, _ := flags.GetBool("system-template-dir")
-	path, _ := flags.GetString("path")
-	recursive, _ := flags.GetBool("recursive")
-	force, _ := flags.GetBool("force")
-
 	opts := installer.GitHookOpts{
-		Name:              cmd.Use,
-		UserTemplateDir:   userTemplateDir,
-		SystemTemplateDir: systemTemplateDir,
-		Path:              path,
-		Recursive:         recursive,
-		Force:             force,
+		Hook:              hooks.Hook(cmd.Use),
+		UserTemplateDir:   mustGetBool(flags, "user-template-dir"),
+		SystemTemplateDir: mustGetBool(flags, "system-template-dir"),
+		Path:              mustGetString(flags, "path"),
+		Recursive:         mustGetBool(flags, "recursive"),
+		Force:             mustGetBool(flags, "force"),
 	}
-
-	if err := installer.GitHookInstall(cfg, opts); err != nil {
-		logger.Fatal("could not install git hook: %v hookname=%q", err, opts.Name)
+	if err := installer.GitHookInstall(cmd.Context(), cfg, opts); err != nil {
+		logger.Fatal("could not install git hook: %v hookname=%q", err, opts.Hook.Name())
 	}
 }

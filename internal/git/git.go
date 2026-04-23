@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/logger"
@@ -80,5 +81,24 @@ func RemoveWorkingTree(ctx context.Context, repoInfo RepoInfo) error {
 		}
 	}
 
+	return nil
+}
+
+// GetGlobalConfigPath gets a value from the global config and applies a --type=path flag
+// to handle normalizing it
+func GetGlobalConfigPath(ctx context.Context, name string) (string, error) {
+	output, err := CommandContext(ctx, "config", "get", "--type=path", name).Output()
+	if err != nil {
+		err = fmt.Errorf("could not get git config value: %w name=%q", err, name)
+	}
+	return strings.TrimSpace(string(output)), err
+}
+
+// SetGlobalConfigPath sets a value in the global config and applies a --type=path flag
+// to handle normalizing it
+func SetGlobalConfigPath(ctx context.Context, name, value string) error {
+	if err := RunContext(ctx, "config", "set", "--type=path", name, value); err != nil {
+		return fmt.Errorf("could not set git config value: %w name=%q value=%q", err, name, value)
+	}
 	return nil
 }

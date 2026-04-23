@@ -5,17 +5,20 @@ import (
 	"errors"
 	"fmt"
 	iofs "io/fs"
+	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/adrg/xdg"
 
+	"github.com/leaktk/leaktk/internal/git"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/docs"
 	"github.com/leaktk/leaktk/pkg/fs"
+	"github.com/leaktk/leaktk/pkg/hooks"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/version"
 )
@@ -24,29 +27,23 @@ const systemGitTemplateDir = "/usr/share/git-core/templates"
 
 // GitHookOpts contains flags and options to pass to the git hook installer
 type GitHookOpts struct {
-	// Name is the hookname to install (e.g. "git.pre-commit")
-	Name string
-
+	// Hook is the hook to install (e.g. hooks.Hook("git.pre-commit"))
+	Hook hooks.Hook
 	// Path is the directory to search for git repositories to install into
 	Path string
-
 	// Recursive tells the installer to look git repositories in sub-paths.
 	Recursive bool
-
 	// Force replaces existing hooks instead of skipping them
 	Force bool
-
 	// SystemTemplateDir installs the hook in /usr/share/git-core/templates
 	SystemTemplateDir bool
-
 	// UserTemplateDir installs the hook in the user's git init.templateDir
 	// (one is created at ~/.config/git/template if not already configured)
 	UserTemplateDir bool
 }
 
 // gitPreCommitHookTemplate is the shell script written to .git/hooks/pre-commit.
-// Placeholders in order: createdBy, createdOn, hookname, errorDocURL.
-// TemplateID must stay the same across leaktk versions as long as this
+// TemplateID SHOULD stay the same across leaktk versions as long as this
 // script's content does not change, so repos can be audited by template version.
 const gitPreCommitHookTemplate = `#!/bin/sh
 # TemplateID: f2998aee-4684-4c46-b724-7c8e37e6020c
@@ -62,214 +59,171 @@ else
 fi
 `
 
-// gitFindAbsDir returns the absolute git directory path for a given path
-// It wraps the git rev-parse --absolute-git-dir command
-func gitFindAbsDir(ctx context.Context, path string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "-C", path, "rev-parse", "--absolute-git-dir") // #nosec G204
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(output)), nil
-}
-
-// hookScriptName extracts the script filename from a full hookname.
-// e.g. "git.pre-commit" -> "pre-commit"
-func hookScriptName(hookname string) string {
-	_, name, _ := strings.Cut(hookname, ".")
-	return name
-}
-
 // findGitDirs returns the absolute git directory path for every git repository
-// found at or under rootDir. It always recurses. It skips .git directory
-// internals and bare repo internals to avoid double-counting.
-func findGitDirs(ctx context.Context, rootDir string) ([]string, error) {
-	var gitDirs []string
+// found at or under the root path
+func findGitDirs(ctx context.Context, root string) ([]string, error) {
+	// Use a set in case multiple worktrees point to the same git dir
+	gitDirSet := make(map[string]bool)
 
-	err := filepath.WalkDir(rootDir, func(path string, d iofs.DirEntry, err error) error {
+	err := filepath.WalkDir(root, func(path string, d iofs.DirEntry, err error) error {
 		if err != nil {
-			logger.Warning("skipping path: %v path=%q", err, path)
+			logger.Error("could not access path: %v path=%q", err, path)
 			return nil
 		}
 
-		if !d.IsDir() {
+		// Ignore anything that isn't a .git file or directory
+		if !strings.HasSuffix(d.Name(), ".git") {
+			logger.Trace("skipping path without .git suffix: path=%q", path)
 			return nil
 		}
 
-		// Don't recurse inside .git directories
-		if d.Name() == ".git" {
-			return filepath.SkipDir
-		}
-
-		// Working tree: directory contains a .git entry (dir for normal repos,
-		// file for submodules/worktrees)
-		gitEntry := filepath.Join(path, ".git")
-		if fs.PathExists(gitEntry) {
-			absDir, err := gitFindAbsDir(ctx, path)
-			if err != nil {
-				logger.Warning("skipping repo: %v path=%q", err, path)
-				return nil
-			}
-			gitDirs = append(gitDirs, absDir)
+		repoInfo, err := git.GetRepoInfo(ctx, path)
+		if err != nil {
+			logger.Error("could not get repo info: %v path=%q", err, path)
 			return nil
 		}
 
-		// Bare repo: directory name ends in .git (e.g. repo.git) and git
-		// recognises it as a git directory
-		if strings.HasSuffix(d.Name(), ".git") {
-			absDir, err := gitFindAbsDir(ctx, path)
-			if err == nil {
-				gitDirs = append(gitDirs, absDir)
-				return filepath.SkipDir // don't descend into bare repo internals
-			}
+		// Add the new dir to the gitDirSet
+		if !gitDirSet[repoInfo.GitDir] {
+			gitDirSet[repoInfo.GitDir] = true
 		}
-
 		return nil
 	})
 
-	return gitDirs, err
+	return slices.Sorted(maps.Keys(gitDirSet)), err
 }
 
 // gitUserTemplateDir returns the path to the user's git init.templateDir.
 // If init.templateDir is not configured, it creates a default directory at
 // $XDG_CONFIG_HOME/git/template and sets init.templateDir to that path.
 func gitUserTemplateDir(ctx context.Context) (string, error) {
-	// Try reading the current value
-	cmd := exec.CommandContext(ctx, "git", "config", "--global", "init.templateDir") // #nosec G204
-	if output, err := cmd.Output(); err == nil {
-		dir := strings.TrimSpace(string(output))
-		if dir != "" {
-			return filepath.Clean(expandTilde(dir)), nil
-		}
-	}
-
-	// Not configured — create a default and set it.
-	// Reload picks up any runtime changes to XDG_CONFIG_HOME (e.g. in tests).
-	xdg.Reload()
-	defaultDir := filepath.Join(xdg.ConfigHome, "git", "template")
-	if err := os.MkdirAll(defaultDir, 0700); err != nil {
-		return "", fmt.Errorf("could not create template dir: %w path=%q", err, defaultDir)
-	}
-
-	setCmd := exec.CommandContext(ctx, "git", "config", "--global", "init.templateDir", defaultDir) // #nosec G204
-	if err := setCmd.Run(); err != nil {
-		return "", fmt.Errorf("could not set init.templateDir: %w", err)
-	}
-
-	logger.Info("configured git init.templateDir: path=%q", defaultDir)
-	return defaultDir, nil
-}
-
-// expandTilde replaces a leading ~ with the current user's home directory.
-func expandTilde(path string) string {
-	if path != "~" && !strings.HasPrefix(path, "~/") {
-		return path
-	}
-	home, err := os.UserHomeDir()
+	// NOTE: GetGlobalConfigPath handles ~ expansion for paths in git configs
+	templateDir, err := git.GetGlobalConfigPath(ctx, "init.templateDir")
 	if err != nil {
-		return path
+		return "", fmt.Errorf("could not look up user template dir: %w", err)
 	}
-	if path == "~" {
-		return home
+
+	if len(templateDir) > 1 {
+		return templateDir, nil
 	}
-	return filepath.Join(home, path[2:])
+
+	templateDir = filepath.Join(xdg.ConfigHome, "git", "template")
+	if err := os.MkdirAll(templateDir, 0700); err != nil {
+		return "", fmt.Errorf("could not create user git template dir: %w path=%q", err, templateDir)
+	}
+
+	if err := git.SetGlobalConfigPath(ctx, "init.templateDir", templateDir); err != nil {
+		return "", fmt.Errorf("could not set user git template dir: %w path=%q", err, templateDir)
+	}
+
+	logger.Info("configured user git template dir: path=%q", templateDir)
+	return templateDir, nil
 }
 
-// gitInstallHookDir installs a git hook script into installDirPath (the .git directory).
-// gitHookName is the full hook name e.g. "git.pre-commit".
-func gitInstallHookDir(gitHookName, installDirPath string) error {
-	_, scriptName, found := strings.Cut(gitHookName, ".")
-	if !found {
-		return fmt.Errorf("invalid git hook name: hookname=%q", gitHookName)
+// gitHookInstall installs a git hook script into installDir (the .git directory).
+func gitHookInstall(hook hooks.Hook, installDir string, force bool) error {
+	hooksDir := filepath.Join(installDir, "hooks")
+	hookPath := filepath.Join(hooksDir, hook.Event())
+
+	if fs.IsExecutable(hookPath) && !force {
+		logger.Info("skipping existing hook: force install not enabled: path=%q force_install=%v", hookPath, force)
+		return nil
 	}
 
-	hooksDir := filepath.Join(installDirPath, "hooks")
-	hookPath := filepath.Join(hooksDir, scriptName)
-
-	if err := os.MkdirAll(hooksDir, 0755); err != nil { // #nosec G301 -- git hooks directory standard permissions
-		return fmt.Errorf("could not create hooks dir: path=%q error=%w", hooksDir, err)
+	if err := os.MkdirAll(hooksDir, 0700); err != nil {
+		return fmt.Errorf("could not create hooks dir: %w path=%q", err, hooksDir)
 	}
 
 	createdBy := "leaktk-" + version.Version
 	createdOn := time.Now().UTC().Format(time.RFC3339)
-	script := fmt.Sprintf(gitPreCommitHookTemplate, createdBy, createdOn, gitHookName, docs.DocURL(docs.CommandNotFoundTopic))
+	script := fmt.Sprintf(
+		gitPreCommitHookTemplate,
+		createdBy,
+		createdOn,
+		hook.Name(),
+		docs.DocURL(docs.CommandNotFoundTopic),
+	)
 
 	if err := os.WriteFile(hookPath, []byte(script), 0750); err != nil { // #nosec G306 -- hook script must be executable
-		return fmt.Errorf("could not write hook: path=%q error=%w", hookPath, err)
+		return fmt.Errorf("could not write hook: %w path=%q", err, hookPath)
 	}
-
-	logger.Info("installed hook: path=%q", hookPath)
+	logger.Info("installed hook: hook=%q path=%q", hook.Name(), hookPath)
 	return nil
 }
 
 // GitHookInstall installs git hooks according to opts.
 // It installs in all git repos found under opts.Path, and optionally in the
 // user's git init.templateDir and/or the system git template directory.
-func GitHookInstall(cfg *config.Config, opts GitHookOpts) error {
-	ctx := context.Background()
-	var installErrors []error
+func GitHookInstall(ctx context.Context, cfg *config.Config, opts GitHookOpts) error {
 	var err error
+	var gitDirs []string
+
+	hookname := opts.Hook.Name()
+	hadErrors := false
 
 	if opts.Path != "" {
 		if !fs.PathExists(opts.Path) {
 			return fmt.Errorf("path does not exist: path=%q", opts.Path)
 		}
 
-		var gitDirs []string
-
 		if !opts.Recursive {
-			gitDir, err := gitFindAbsDir(ctx, opts.Path)
+			repoInfo, err := git.GetRepoInfo(ctx, opts.Path)
 			if err != nil {
-				return fmt.Errorf("could not find git repo: %w path=%q", err, opts.Path)
+				return fmt.Errorf("could not find git repo: %w hookname=%q path=%q", err, hookname, opts.Path)
 			}
-			if len(gitDir) > 0 {
-				gitDirs = append(gitDirs, gitDir)
+			if len(repoInfo.GitDir) > 0 {
+				gitDirs = append(gitDirs, repoInfo.GitDir)
 			}
 		} else {
 			gitDirs, err = findGitDirs(ctx, opts.Path)
 			if err != nil {
-				return fmt.Errorf("could not find git repos: %w path=%q", err, opts.Path)
+				return fmt.Errorf("could not find git repos: %w hookname=%q path=%q", err, hookname, opts.Path)
 			}
 		}
 
 		if len(gitDirs) == 0 {
-			logger.Warning("no git repositories found: path=%q", opts.Path)
+			logger.Warning("no git repositories found: hookname=%q path=%q", hookname, opts.Path)
 		}
 
 		for _, gitDir := range gitDirs {
-			hookPath := filepath.Join(gitDir, "hooks", hookScriptName(opts.Name))
-			if fs.IsExecutable(hookPath) && !opts.Force {
-				logger.Info("skipping existing hook: path=%q", hookPath)
-				continue
-			}
-			if err := gitInstallHookDir(opts.Name, gitDir); err != nil {
-				installErrors = append(installErrors, err)
+			logger.Info("installing hook: hookname=%q path=%q", hookname, gitDir)
+			if err := gitHookInstall(opts.Hook, gitDir, opts.Force); err != nil {
+				logger.Info("could not install hook: %v hookname=%q path=%q", err, hookname, gitDir)
+				hadErrors = true
 			}
 		}
 	}
 
 	if opts.UserTemplateDir {
-		templateDir, err := gitUserTemplateDir(ctx)
+		userGitTemplateDir, err := gitUserTemplateDir(ctx)
 		if err != nil {
-			installErrors = append(installErrors, fmt.Errorf("could not resolve user template dir: %w", err))
+			logger.Error("could not resolve user template dir: %v hookname=%s", err, hookname)
+			hadErrors = true
 		} else {
-			hookPath := filepath.Join(templateDir, "hooks", hookScriptName(opts.Name))
-			if fs.IsExecutable(hookPath) && !opts.Force {
-				logger.Info("skipping existing hook in user template dir: path=%q", hookPath)
-			} else if err := gitInstallHookDir(opts.Name, templateDir); err != nil {
-				installErrors = append(installErrors, err)
+			logger.Info("installing hook in user git template dir: hookname=%q path=%q", hookname, userGitTemplateDir)
+			if err := gitHookInstall(opts.Hook, userGitTemplateDir, opts.Force); err != nil {
+				logger.Info(
+					"could not install hook in user git template dir: %v hookname=%q path=%q",
+					err, hookname, userGitTemplateDir,
+				)
+				hadErrors = true
 			}
 		}
 	}
 
 	if opts.SystemTemplateDir {
-		hookPath := filepath.Join(systemGitTemplateDir, "hooks", hookScriptName(opts.Name))
-		if fs.IsExecutable(hookPath) && !opts.Force {
-			logger.Info("skipping existing hook in system template dir: path=%q", hookPath)
-		} else if err := gitInstallHookDir(opts.Name, systemGitTemplateDir); err != nil {
-			installErrors = append(installErrors, err)
+		logger.Info("installing hook in system git template dir: hookname=%q path=%q", hookname, systemGitTemplateDir)
+		if err := gitHookInstall(opts.Hook, systemGitTemplateDir, opts.Force); err != nil {
+			logger.Info(
+				"could not install hook in ystem git template dir: %v hookname=%q path=%q",
+				err, hookname, systemGitTemplateDir,
+			)
+			hadErrors = true
 		}
 	}
 
-	return errors.Join(installErrors...)
+	if hadErrors {
+		return errors.New("errors detected during install")
+	}
+	return nil
 }

@@ -2,35 +2,74 @@ package hooks
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/leaktk/leaktk/pkg/config"
+	"github.com/leaktk/leaktk/pkg/logger"
 )
 
-// Names defines the list of hooks suported in this module
-// all names follow this format:
+// Hook is a wrapper around a hookname to abstract parsing it
+// consistently. All hooknames must follow this format:
 // ```ebnf
-// hookname = hookkind "." hookaction
+// hookname = hookkind "." hookevent
 //
 // # All hook kinds must be accounted for in the cmd/install.go file
 // hookkind = "git"
 //
-// # hookaction values depend on the actions supported by
+// # hookevent values depend on the events supported by
 // # the hookkind
-// hookaction = /a-z(?:[a-z0-9\-]+)?[a-z0-9]?/
+// hookevent = /a-z(?:[a-z0-9\-]+)?[a-z0-9]?/
 // ```
-var Names = []string{
-	"git.pre-commit",
-	"git.pre-receive",
+type HookKind string
+type Hook string
+
+const (
+	GitHookKind = HookKind("git")
+)
+
+const (
+	GitPreCommitHook  = Hook(GitHookKind + ".pre-commit")
+	GitPreReceiveHook = Hook(GitHookKind + ".pre-receive")
+)
+
+// Hooks defines all the hooks suported
+var Hooks = []Hook{
+	GitPreCommitHook,
+	GitPreReceiveHook,
+}
+
+// Name returns the full name of the hook
+func (h Hook) Name() string {
+	return string(h)
+}
+
+// Kind returns the kind of hook (e.g. git, claude, gcs, etc..)
+func (h Hook) Kind() HookKind {
+	kind, _, found := strings.Cut(h.Name(), ".")
+	if !found {
+		logger.Fatal("invalid hookname format: hookname=%q", h.Name())
+	}
+	return HookKind(kind)
+}
+
+// Event returns name of the event/phase of a process that this hook alters
+// (e.g. pre-commit, pre-receive, user-prompt-submit, etc...)
+func (h Hook) Event() string {
+	_, event, found := strings.Cut(h.Name(), ".")
+	if !found {
+		logger.Fatal("invalid hookname format: hookname=%q", h.Name())
+	}
+	return event
 }
 
 // Run executes the provided hook with its arguments
-func Run(cfg *config.Config, hookname string, args []string) (int, error) {
-	switch hookname {
-	case "git.pre-receive":
-		return gitPreReceiveRun(cfg, hookname, args)
-	case "git.pre-commit":
-		return gitPreCommitRun(cfg, hookname, args)
+func Run(cfg *config.Config, hook Hook, args []string) (int, error) {
+	switch hook {
+	case GitPreReceiveHook:
+		return gitPreReceiveRun(cfg, hook, args)
+	case GitPreCommitHook:
+		return gitPreCommitRun(cfg, hook, args)
 	default:
-		return 1, fmt.Errorf("invalid hookname: hookname=%q", hookname)
+		return 1, fmt.Errorf("invalid hookname: hookname=%q", hook.Name())
 	}
 }

@@ -211,12 +211,13 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 
 func runHook(cmd *cobra.Command, args []string) {
 	hookname := args[0]
+	hook := hooks.Hook(hookname)
 
 	if !slices.Contains(cmd.ValidArgs, hookname) {
 		logger.Fatal("invalid hookname: hookname=%q", hookname)
 	}
 
-	statusCode, err := hooks.Run(cfg, hookname, args[1:])
+	statusCode, err := hooks.Run(cfg, hook, args[1:])
 	if err != nil {
 		logger.Fatal("error running hook: %v hookname=%q", err, hookname)
 	}
@@ -225,11 +226,16 @@ func runHook(cmd *cobra.Command, args []string) {
 }
 
 func hookCommand() *cobra.Command {
+	validArgs := make([]string, len(hooks.Hooks))
+	for i, hook := range hooks.Hooks {
+		validArgs[i] = hook.Name()
+	}
+
 	return &cobra.Command{
 		Use:       "hook [flags] <hookname> [hookargs]...",
 		Short:     "Hook leaktk into existng workflows",
 		Args:      cobra.MinimumNArgs(1),
-		ValidArgs: hooks.Names,
+		ValidArgs: validArgs,
 		Run:       runHook,
 	}
 }
