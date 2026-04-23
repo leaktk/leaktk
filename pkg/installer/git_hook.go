@@ -28,6 +28,9 @@ type GitHookOpts struct {
 
 	// Path is the directory to search for git repositories to install into
 	Path string
+  
+  // Recursive tells the installer to look git repositories in sub-paths.
+  Recursive bool
 
 	// Force replaces existing hooks instead of skipping them
 	Force bool
@@ -76,8 +79,8 @@ func gitFindAbsDir(ctx context.Context, path string) (string, error) {
 
 // hookScriptName extracts the script filename from a full hookname.
 // e.g. "git.pre-commit" -> "pre-commit"
-func hookScriptName(hookName string) string {
-	_, name, _ := strings.Cut(hookName, ".")
+func hookScriptName(hookname string) string {
+	_, name, _ := strings.Cut(hookname, ".")
 	return name
 }
 
@@ -89,7 +92,7 @@ func findGitDirs(ctx context.Context, rootDir string) ([]string, error) {
 
 	err := filepath.WalkDir(rootDir, func(path string, d iofs.DirEntry, err error) error {
 		if err != nil {
-			logger.Warning("skipping path: path=%q error=%v", path, err)
+			logger.Warning("skipping path: %v path=%q", err, path)
 			return nil
 		}
 
@@ -108,7 +111,7 @@ func findGitDirs(ctx context.Context, rootDir string) ([]string, error) {
 		if fs.PathExists(gitEntry) {
 			absDir, err := gitFindAbsDir(ctx, path)
 			if err != nil {
-				logger.Warning("skipping repo: path=%q error=%v", path, err)
+				logger.Warning("skipping repo: %v path=%q", err, path)
 				return nil
 			}
 			gitDirs = append(gitDirs, absDir)
@@ -149,12 +152,12 @@ func gitUserTemplateDir(ctx context.Context) (string, error) {
 	xdg.Reload()
 	defaultDir := filepath.Join(xdg.ConfigHome, "git", "template")
 	if err := os.MkdirAll(defaultDir, 0700); err != nil {
-		return "", fmt.Errorf("could not create template dir: path=%q error=%w", defaultDir, err)
+		return "", fmt.Errorf("could not create template dir: %w path=%q", err, defaultDir)
 	}
 
 	setCmd := exec.CommandContext(ctx, "git", "config", "--global", "init.templateDir", defaultDir) // #nosec G204
 	if err := setCmd.Run(); err != nil {
-		return "", fmt.Errorf("could not set init.templateDir: error=%w", err)
+		return "", fmt.Errorf("could not set init.templateDir: %w", err)
 	}
 
 	logger.Info("configured git init.templateDir: path=%q", defaultDir)
@@ -215,11 +218,23 @@ func GitHookInstall(cfg *config.Config, opts GitHookOpts) error {
 		if !fs.PathExists(opts.Path) {
 			return fmt.Errorf("path does not exist: path=%q", opts.Path)
 		}
-
-		gitDirs, err := findGitDirs(ctx, opts.Path)
-		if err != nil {
-			return fmt.Errorf("could not find git repos: path=%q error=%w", opts.Path, err)
-		}
+    
+    var gitDirs []string
+    
+    if !opgs.Recursive {
+      gitDir, err := gitFindAbsDir(ctx, opts.Path)
+      if err != nil {
+        return fmt.Errorf("could not find git repo: %w path=%q", err, opts.Path)
+      }
+      if len(gitDir) > 0 {
+        gitDirs = append(gitDirs, gitDir)
+      }
+    } else {
+      gitDirs, err := findGitDirs(ctx, opts.Path)
+      if err != nil {
+        return fmt.Errorf("could not find git repos: %w path=%q", err, opts.Path)
+      }
+    }
 
 		if len(gitDirs) == 0 {
 			logger.Warning("no git repositories found: path=%q", opts.Path)

@@ -89,7 +89,7 @@ func runScan(cmd *cobra.Command, args []string) {
 
 	gitleaksConfig, err := cmd.Flags().GetString("gitleaks-config")
 	if err != nil {
-		logger.Fatal("invalid gitleaks-config: error=%q", err.Error())
+		logger.Fatal("invalid gitleaks-config: %v", err.Error())
 	}
 
 	// Providing a gitleaks-config via command line arguments takes
@@ -165,7 +165,7 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 		if fs.FileExists(requestResource[1:]) {
 			data, err := os.ReadFile(requestResource[1:])
 			if err != nil {
-				return nil, fmt.Errorf("could not read resource: path=%q error=%q", requestResource[1:], err)
+				return nil, fmt.Errorf("could not read resource: %v path=%q", err, requestResource[1:])
 			}
 
 			requestResource = string(data)
@@ -176,7 +176,7 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 
 	rawOpts, err := flags.GetString("options")
 	if err != nil {
-		return nil, fmt.Errorf("there was an issue with the options flag: error=%q", err)
+		return nil, fmt.Errorf("there was an issue with the options flag: %v", err)
 	}
 
 	// Convert kind string to enum
@@ -189,7 +189,7 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 	var opts proto.Opts
 	if rawOpts != "{}" && len(rawOpts) > 0 {
 		if err := json.Unmarshal([]byte(rawOpts), &opts); err != nil {
-			return nil, fmt.Errorf("could not parse options: error=%q", err)
+			return nil, fmt.Errorf("could not parse options: %v", err)
 		}
 	}
 
@@ -210,15 +210,15 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 }
 
 func runHook(cmd *cobra.Command, args []string) {
-	hookName := args[0]
+	hookname := args[0]
 
-	if !slices.Contains(cmd.ValidArgs, hookName) {
-		logger.Fatal("invalid hookname: hookname=%q", hookName)
+	if !slices.Contains(cmd.ValidArgs, hookname) {
+		logger.Fatal("invalid hookname: hookname=%q", hookname)
 	}
 
-	statusCode, err := hooks.Run(cfg, hookName, args[1:])
+	statusCode, err := hooks.Run(cfg, hookname, args[1:])
 	if err != nil {
-		logger.Fatal("error running hook: %v hookname=%q", err, hookName)
+		logger.Fatal("error running hook: %v hookname=%q", err, hookname)
 	}
 
 	os.Exit(statusCode)
@@ -287,7 +287,7 @@ func runListen(cmd *cobra.Command, args []string) {
 				break
 			}
 
-			logger.Error("error reading from stdin: error=%q", err)
+			logger.Error("error reading from stdin: %v", err)
 
 			continue
 		}
@@ -296,7 +296,7 @@ func runListen(cmd *cobra.Command, args []string) {
 		err = json.Unmarshal(line, &request)
 
 		if err != nil {
-			logger.Error("could not unmarshal request: error=%q", err)
+			logger.Error("could not unmarshal request: %v", err)
 
 			continue
 		}

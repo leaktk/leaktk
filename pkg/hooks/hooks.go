@@ -20,11 +20,14 @@ import (
 // ```
 var Names = []string{
 	"git.pre-commit",
+	"git.pre-receive",
 }
 
 // Run executes the provided hook with its arguments
 func Run(cfg *config.Config, hookname string, args []string) (int, error) {
 	switch hookname {
+	case "git.pre-receive":
+		return gitPreReceiveRun(cfg, hookname, args)
 	case "git.pre-commit":
 		return gitPreCommitRun(cfg, hookname, args)
 	default:
