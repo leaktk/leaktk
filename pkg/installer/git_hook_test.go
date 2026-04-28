@@ -28,6 +28,15 @@ func setupGitRepo(t *testing.T, repoPath string, bare bool) {
 	}
 }
 
+func cleanPath(t *testing.T, path string) string {
+	var err error
+	path, err = filepath.Abs(path)
+	require.NoError(t, err)
+	path, err = filepath.EvalSymlinks(path)
+	require.NoError(t, err)
+	return path
+}
+
 func TestGitInstallHook(t *testing.T) {
 	t.Run("gitCreateHookScript", func(t *testing.T) {
 		tempDir := t.TempDir()
@@ -90,14 +99,14 @@ func TestGitInstallHook(t *testing.T) {
 			gitDirs, err := findGitDirs(ctx, repo1Dir)
 			require.NoError(t, err)
 			assert.Len(t, gitDirs, 1)
-			assert.Equal(t, filepath.Join(repo1Dir, ".git"), gitDirs[0])
+			assert.Equal(t, cleanPath(t, filepath.Join(repo1Dir, ".git")), cleanPath(t, gitDirs[0]))
 		})
 
 		t.Run("finds bare repo", func(t *testing.T) {
 			gitDirs, err := findGitDirs(ctx, repo2Dir)
 			require.NoError(t, err)
 			assert.Len(t, gitDirs, 1)
-			assert.Equal(t, repo2Dir, gitDirs[0])
+			assert.Equal(t, cleanPath(t, repo2Dir), cleanPath(t, gitDirs[0]))
 		})
 
 		t.Run("non-git directory returns empty", func(t *testing.T) {

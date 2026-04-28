@@ -101,6 +101,8 @@ func gitPreReceiveRun(cfg *config.Config, hook Hook, _ []string) (int, error) {
 	if len(results) > 0 {
 		gitHookDisplayResults(results)
 		return 1, nil
+	} else {
+		logger.Info("no secrets detected")
 	}
 
 	return 0, nil
