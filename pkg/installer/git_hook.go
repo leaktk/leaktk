@@ -212,7 +212,7 @@ func GitHookInstall(ctx context.Context, cfg *config.Config, opts GitHookOpts) e
 	if opts.SystemTemplateDir {
 		if err := gitHookInstall(opts.Hook, systemGitTemplateDir, opts.Force); err != nil {
 			logger.Info(
-				"could not install hook in ystem git template dir: %v hookname=%q path=%q",
+				"could not install hook in system git template dir: %v hookname=%q path=%q",
 				err, hookname, systemGitTemplateDir,
 			)
 			hadErrors = true
