@@ -186,7 +186,6 @@ func GitHookInstall(ctx context.Context, cfg *config.Config, opts GitHookOpts) e
 		}
 
 		for _, gitDir := range gitDirs {
-			logger.Info("installing hook: hookname=%q path=%q", hookname, gitDir)
 			if err := gitHookInstall(opts.Hook, gitDir, opts.Force); err != nil {
 				logger.Info("could not install hook: %v hookname=%q path=%q", err, hookname, gitDir)
 				hadErrors = true
@@ -200,7 +199,6 @@ func GitHookInstall(ctx context.Context, cfg *config.Config, opts GitHookOpts) e
 			logger.Error("could not resolve user template dir: %v hookname=%s", err, hookname)
 			hadErrors = true
 		} else {
-			logger.Info("installing hook in user git template dir: hookname=%q path=%q", hookname, userGitTemplateDir)
 			if err := gitHookInstall(opts.Hook, userGitTemplateDir, opts.Force); err != nil {
 				logger.Info(
 					"could not install hook in user git template dir: %v hookname=%q path=%q",
@@ -212,7 +210,6 @@ func GitHookInstall(ctx context.Context, cfg *config.Config, opts GitHookOpts) e
 	}
 
 	if opts.SystemTemplateDir {
-		logger.Info("installing hook in system git template dir: hookname=%q path=%q", hookname, systemGitTemplateDir)
 		if err := gitHookInstall(opts.Hook, systemGitTemplateDir, opts.Force); err != nil {
 			logger.Info(
 				"could not install hook in ystem git template dir: %v hookname=%q path=%q",
