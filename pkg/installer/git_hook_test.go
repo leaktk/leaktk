@@ -35,7 +35,7 @@ func TestGitInstallHook(t *testing.T) {
 
 		// Test installing a hook
 		hook := hooks.GitPreCommitHook
-		require.NoError(t, gitHookInstall(hook, tempDir, false))
+		require.NoError(t, gitHookInstall(hook, tempDir, false, 0750))
 
 		// Verify the hook was created
 		hookPath := filepath.Join(tempDir, "hooks", "pre-commit")
