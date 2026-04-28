@@ -47,8 +47,8 @@ func gitHookInstallCommand(hook hooks.Hook) *cobra.Command {
 	flags := cmd.Flags()
 	flags.Bool("user-template-dir", false, fmt.Sprintf("Install the %s hook in your git init.templateDir (one is created if not already defined)", hookname))
 	flags.Bool("system-template-dir", false, fmt.Sprintf("Install the %s hook in /usr/share/git-core/templates", hookname))
-	flags.StringP("path", "p", ".", fmt.Sprintf("Install the %s hook in all git repositories under this path (defaults to current directory)", hookname))
-	flags.BoolP("recursive", "r", false, fmt.Sprintf("Install the %s hook in all git repositories under the selected path", hookname))
+	flags.String("path", "", fmt.Sprintf("Install the %s hook in all git repositories under this path", hookname))
+	flags.Bool("recursive", false, fmt.Sprintf("Install the %s hook in all git repositories under the selected path", hookname))
 	flags.Bool("force", false, fmt.Sprintf("Replace any existing %s hooks instead of skipping them", hookname))
 	return cmd
 }
@@ -63,6 +63,11 @@ func runGitHookInstall(cmd *cobra.Command, args []string) {
 		Recursive:         mustGetBool(flags, "recursive"),
 		Force:             mustGetBool(flags, "force"),
 	}
+
+	if len(opts.Path) == 0 && !opts.UserTemplateDir && !opts.SystemTemplateDir {
+		logger.Fatal("install requires at least one of: --path, --user-template-dir, --system-template-dir")
+	}
+
 	if err := installer.GitHookInstall(cmd.Context(), cfg, opts); err != nil {
 		logger.Fatal("could not install git hook: %v hookname=%q", err, opts.Hook.Name())
 	}

@@ -67,7 +67,7 @@ func findGitDirs(ctx context.Context, root string) ([]string, error) {
 
 	err := filepath.WalkDir(root, func(path string, d iofs.DirEntry, err error) error {
 		if err != nil {
-			logger.Error("could not access path: %v path=%q", err, path)
+			logger.Debug("could not access path: %v path=%q", err, path)
 			return nil
 		}
 
@@ -79,7 +79,7 @@ func findGitDirs(ctx context.Context, root string) ([]string, error) {
 
 		repoInfo, err := git.GetRepoInfo(ctx, path)
 		if err != nil {
-			logger.Error("could not get repo info: %v path=%q", err, path)
+			logger.Debug("could not get repo info: %v path=%q", err, path)
 			return nil
 		}
 
