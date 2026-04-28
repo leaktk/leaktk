@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
@@ -86,19 +87,55 @@ func RemoveWorkingTree(ctx context.Context, repoInfo RepoInfo) error {
 
 // GetGlobalConfigPath gets a value from the global config and applies a --type=path flag
 // to handle normalizing it
-func GetGlobalConfigPath(ctx context.Context, name string) (string, error) {
-	output, err := CommandContext(ctx, "config", "get", "--type=path", name).Output()
-	if err != nil {
-		err = fmt.Errorf("could not get git config value: %w name=%q", err, name)
+func GetGlobalConfigPath(ctx context.Context, name string) string {
+	// Handle undoing the override for this operation
+	if os.Getenv("GIT_CONFIG_GLOBAL") == config.GitConfigGlobalOverride {
+		if err := os.Unsetenv("GIT_CONFIG_GLOBAL"); err != nil {
+			logger.Fatal("Unable to properly configure git env: %v", err)
+		}
 	}
-	return strings.TrimSpace(string(output)), err
+
+	logger.Debug("getting global config value: name=%q", name)
+	cmd := CommandContext(ctx, "config", "--global", "--type=path", name)
+
+	logger.Debug("executing: %s", cmd)
+	output, err := cmd.Output()
+	if err != nil {
+		// if the value isn't set properly or at all, treat it like it's not set at all
+		logger.Debug("existing value not found: %v name=%q", err, name)
+		if err := os.Setenv("GIT_CONFIG_GLOBAL", config.GitConfigGlobalOverride); err != nil {
+			logger.Fatal("Unable to properly configure git env: %v", err)
+		}
+
+		return ""
+	}
+
+	if err := os.Setenv("GIT_CONFIG_GLOBAL", config.GitConfigGlobalOverride); err != nil {
+		logger.Fatal("Unable to properly configure git env: %v", err)
+	}
+	return strings.TrimSpace(string(output))
 }
 
 // SetGlobalConfigPath sets a value in the global config and applies a --type=path flag
 // to handle normalizing it
 func SetGlobalConfigPath(ctx context.Context, name, value string) error {
-	if err := RunContext(ctx, "config", "set", "--type=path", name, value); err != nil {
+	// Handle undoing the override for this operation
+	if os.Getenv("GIT_CONFIG_GLOBAL") == config.GitConfigGlobalOverride {
+		if err := os.Unsetenv("GIT_CONFIG_GLOBAL"); err != nil {
+			logger.Fatal("Unable to properly configure git env: %v", err)
+		}
+	}
+
+	logger.Debug("setting global config value: name=%q value=%q", name, value)
+	if err := RunContext(ctx, "config", "--global", "--type=path", name, value); err != nil {
+		if err := os.Setenv("GIT_CONFIG_GLOBAL", config.GitConfigGlobalOverride); err != nil {
+			logger.Fatal("Unable to properly configure git env: %v", err)
+		}
 		return fmt.Errorf("could not set git config value: %w name=%q value=%q", err, name, value)
+	}
+
+	if err := os.Setenv("GIT_CONFIG_GLOBAL", config.GitConfigGlobalOverride); err != nil {
+		logger.Fatal("Unable to properly configure git env: %v", err)
 	}
 	return nil
 }

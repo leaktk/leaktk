@@ -98,11 +98,7 @@ func findGitDirs(ctx context.Context, root string) ([]string, error) {
 // $XDG_CONFIG_HOME/git/template and sets init.templateDir to that path.
 func gitUserTemplateDir(ctx context.Context) (string, error) {
 	// NOTE: GetGlobalConfigPath handles ~ expansion for paths in git configs
-	templateDir, err := git.GetGlobalConfigPath(ctx, "init.templateDir")
-	if err != nil {
-		return "", fmt.Errorf("could not look up user template dir: %w", err)
-	}
-
+	templateDir := git.GetGlobalConfigPath(ctx, "init.templateDir")
 	if len(templateDir) > 1 {
 		return templateDir, nil
 	}

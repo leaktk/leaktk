@@ -14,6 +14,9 @@ import (
 	"github.com/leaktk/leaktk/pkg/version"
 )
 
+// GitConfigGlobalOverride helps normalize things in the scanner
+// it is a variable here so other code can check if it's been set
+const GitConfigGlobalOverride = "/dev/null"
 const nixGlobalConfigDir = "/etc/leaktk"
 
 var localConfigDir string
@@ -23,7 +26,7 @@ func init() {
 
 	// The environment variables for the scan environment
 	env := map[string]string{
-		"GIT_CONFIG_GLOBAL":      "/dev/null",
+		"GIT_CONFIG_GLOBAL":      GitConfigGlobalOverride,
 		"GIT_TERMINAL_PROMPT":    "0",
 		"GIT_NO_REPLACE_OBJECTS": "1",
 		"GIT_CONFIG_NOSYSTEM":    "1",
