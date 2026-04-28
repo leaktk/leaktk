@@ -34,7 +34,7 @@ func gitPreCommitRun(cfg *config.Config, hook Hook, _ []string) (int, error) {
 
 	wg.Add(1)
 	leaktkScanner.Send(&proto.Request{
-		ID:       fmt.Sprintf("%s.%s", hook.Name(), id.ID()),
+		ID:       fmt.Sprintf("leaktk.%s.%s", hook.Name(), id.ID()),
 		Kind:     proto.GitRepoRequestKind,
 		Resource: ".",
 		Opts: proto.Opts{
