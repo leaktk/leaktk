@@ -10,5 +10,5 @@ import (
 // one should be replaced or skipped
 func gitHookExists(path string) bool {
 	// On windows fs.IsExecutable doesn't work as expected
-	return fs.IsFile(path)
+	return fs.FileExists(path)
 }
