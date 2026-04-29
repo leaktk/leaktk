@@ -24,7 +24,7 @@ type Topic string
 const (
 	CommandNotFoundTopic = Topic("errors/command_not_found")
 	FalsePositivesTopic  = Topic("false_positives")
-	FindingsTopic        = Topic("false_positives")
+	FindingsTopic        = Topic("findings")
 )
 
 func DocURL(topic Topic) string {
