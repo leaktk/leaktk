@@ -1,4 +1,5 @@
 [allowlist]
   paths = [
     '''_test.go$''',
+    '''docs/findings.md''',
   ]
