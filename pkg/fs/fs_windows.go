@@ -3,6 +3,7 @@
 package fs
 
 import (
+	"os"
 	"errors"
 )
 
@@ -11,11 +12,11 @@ import (
 const FileLockSupported = false
 
 // LockFile is not implemented for this platform
-func LockFile(f File) (err error) {
+func LockFile(f *os.File) (err error) {
 	return errors.New("file locking currently not supported for windows")
 }
 
 // Unlockfile is not implemented for this platform
-func UnlockFile(f File) error {
+func UnlockFile(f *os.File) error {
 	return errors.New("file locking currently not supported for windows")
 }
