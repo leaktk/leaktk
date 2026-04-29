@@ -128,21 +128,22 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 		// Open the config file, creating it if it doesn't already exist, but don't truncate yet
 		configFile, err := os.OpenFile(p.config.Gitleaks.ConfigPath, os.O_RDWR|os.O_CREATE, 0600)
 		if err != nil {
-			return p.gitleaksConfig, fmt.Errorf("could not write config: %v path=%q ", err, p.config.Gitleaks.ConfigPath)
+			return p.gitleaksConfig, fmt.Errorf("could not open config file: %v path=%q", err, p.config.Gitleaks.ConfigPath)
 		}
 
 		// defer the close and add logging around it since we're adding locks
 		defer func() {
 			if err := configFile.Close(); err != nil {
-				logger.Error("could not close config file: %v path=%s", err, p.config.Gitleaks.ConfigPath)
+				logger.Error("could not close config file: %v path=%q", err, p.config.Gitleaks.ConfigPath)
 				if err := fs.UnlockFile(configFile); err != nil {
-					logger.Error("error releasing config file lock: %v path=%s", err, p.config.Gitleaks.ConfigPath)
+					logger.Error("error releasing config file lock: %v path=%q", err, p.config.Gitleaks.ConfigPath)
 				}
 			}
 		}()
 
 		// Establish a file lock to avoid different instances of the scanner writing to the config
 		if fs.FileLockSupported {
+			logger.Debug("locking config file for writes: path=%q", p.config.Gitleaks.ConfigPath)
 			if err = fs.LockFile(configFile); err != nil {
 				return p.gitleaksConfig, fmt.Errorf("could not establish a file lock: %w path=%s", err, p.config.Gitleaks.ConfigPath)
 			}
