@@ -1,24 +1,60 @@
 #!/bin/sh
 set -eu
 
-export PREFIX="$(mktemp -d)"
+echo '##############################################################################'
 
+echo 'Set up env'
+set -x
+export wordir="$(mktemp -d)"
 bindir="$(mktemp -d)/bin"
-repodir="${PREFIX}/repo"
-trap 'rm -rf "${PREFIX}"' EXIT
-
+repodir="${wordir}/repo"
 export PATH="${bindir}:${PATH}"
+set +x
+
+echo '##############################################################################'
+
+echo 'Defer cleanup'
+set -x
+trap 'rm -rf "${wordir}"' EXIT
+set +x
+
+echo '##############################################################################'
+
+echo 'Install package'
+set -x
 make clean build 
-make install 
+make install PREFIX="${wordir}"
+set +x
+
+echo '##############################################################################'
 
 echo 'Setting up repo dir'
+set -x
 git init "${repodir}"
 git -C "${repodir}" branch -m main 
+set +x
 
-echo 'Installing pre-commit hook'
-"${PREFIX}/bin/leaktk" install hook git.pre-commit --path "${PREFIX}" --force
+echo '##############################################################################'
+
+echo 'Setting up a remote for the repo'
+set -x
+remotedir="${wordir}/origin.git"
+git init --bare "${remotedir}"
+git -C "${repodir}" remote add origin "${remotedir}"
+set +x
+
+echo '##############################################################################'
+
+echo 'Installing hooks'
+set -x
+"${wordir}/bin/leaktk" install hook git.pre-commit --path "${wordir}" --force
+"${wordir}/bin/leaktk" install hook git.pre-receive --path "${wordir}" --force
+set +x
+
+echo '##############################################################################'
 
 echo 'Confirming TemplateID:'
+set -x
 if !  grep -F \
 	'f2998aee-4684-4c46-b724-7c8e37e6020c' \
 	"${repodir}/.git/hooks/pre-commit"
@@ -26,8 +62,12 @@ then
 	echo "could not find template id"
 	exit 1
 fi
+set +x
+
+echo '##############################################################################'
 
 echo 'Trying to commit a secret'
+set -x
 echo 'secret="4bza9wI5Vb71N6Ahaa7IaqcPBrzzVREZSgmo1FnCHDg="' > "${repodir}/test.py"  # notsecret
 git -C "${repodir}" add test.py
 if ! git -C "${repodir}" commit \
@@ -36,8 +76,12 @@ if ! git -C "${repodir}" commit \
 then
 	echo '[PASS] Block a simple secret'
 fi
+set +x
+
+echo '##############################################################################'
 
 echo 'Marking the secret as #notsecret'
+set -x
 echo 'secret="4bza9wI5Vb71N6Ahaa7IaqcPBrzzVREZSgmo1FnCHDg=" # notsecret' >  "${repodir}/test.py"
 if ! git -C "${repodir}" commit \
 	--no-gpg-sign \
@@ -45,8 +89,12 @@ if ! git -C "${repodir}" commit \
 then
 	echo '[PASS] adding #notsecret to unstaged does not make a difference'
 fi
+set +x
+
+echo '##############################################################################'
 
 echo 'Staging the changes with #notsecret set'
+set -x
 git -C "${repodir}" add test.py
 if git -C "${repodir}" commit \
 	--no-gpg-sign \
@@ -54,3 +102,31 @@ if git -C "${repodir}" commit \
 then
 	echo '[PASS] Allow things marked as not secret'
 fi
+set +x
+
+echo '##############################################################################'
+
+echo 'Push whats there so far'
+set -x
+git -C "${repodir}" push -u origin
+set +x
+
+echo '##############################################################################'
+
+echo 'Commit secret'
+set -x
+echo 'secret="4bza9wI5Vb71N6Ahaa7IaqcPBrzzVREZSgmo1FnCHDg="' > "${repodir}/test.py"  # notsecret
+git -C "${repodir}" add test.py
+git -C "${repodir}" commit \
+	--no-gpg-sign \
+	--no-verify \
+	--message='Woot some secret' > /dev/null 2>&1
+
+if ! git -C "${repodir}" push > /dev/null 2>&1
+then
+	echo '[PASS] secrets should be blocked by pre-receive'
+fi
+set +x
+
+echo '##############################################################################'
+echo "DONE"

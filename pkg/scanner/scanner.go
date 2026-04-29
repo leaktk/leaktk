@@ -189,7 +189,7 @@ func (s *Scanner) listen() {
 
 			// Handle setting up a temp worktree for accessing certain files in bare repos
 			if gitRepoInfo.IsBare {
-				gitRepoInfo.WorkingTreePath, err = tempCheckoutGitSourceConfigFiles(ctx, gitRepoInfo.GitDir)
+				gitRepoInfo.WorkingTreePath, err = tempCheckoutGitSourceConfigFiles(ctx, gitRepoInfo.GitDir, request.Opts.Branch)
 				if err != nil {
 					// Only log this as a debug item since it shouldn't result in fewer findings but
 					// may result in more false positives
@@ -323,7 +323,7 @@ func removeTempGitFiles(ctx context.Context, request *proto.Request, gitRepoInfo
 
 	// Remove temp git working tree created for accessing certain files from bare repos
 	if gitRepoInfo.IsBare && fs.PathExists(gitRepoInfo.WorkingTreePath) {
-		if err := git.RemoveWorkingTree(ctx, gitRepoInfo); err != nil {
+		if err := os.RemoveAll(gitRepoInfo.WorkingTreePath); err != nil {
 			logger.Error("error removing temp working tree: %v path=%q id=%q", err, gitRepoInfo.WorkingTreePath, request.ID)
 		}
 	}
@@ -513,24 +513,19 @@ func (s *Scanner) cloneGitRepo(ctx context.Context, cloneURL string, opts proto.
 // a worktree in the repo that's unique to this scan that can be safely
 // deleted after the scan completes. To keep things light, it only checks out
 // the relevant config files and not the rest of the tree's content.
-func tempCheckoutGitSourceConfigFiles(ctx context.Context, gitDir string) (string, error) {
+func tempCheckoutGitSourceConfigFiles(ctx context.Context, gitDir, gitRef string) (string, error) {
 	worktreePath, err := os.MkdirTemp(gitDir, "leaktk-worktree.")
 	if err != nil {
 		return "", fmt.Errorf("could not create worktree directory: %w", err)
 	}
-	cmd := git.CommandContext(ctx, "-C", gitDir, "worktree", "add", "--no-checkout", worktreePath) // #nosec G204
-
-	logger.Debug("executing: %s", cmd)
-	if err := cmd.Run(); err != nil {
-		return worktreePath, fmt.Errorf("could not create worktree: %w cmd=%q", err, cmd)
+	if len(gitRef) == 0 {
+		gitRef = "HEAD"
 	}
-
-	cmd = git.CommandContext(ctx, "-C", worktreePath, "checkout", "-f", "HEAD", "--", ".gitleaks*") // #nosec G204
+	cmd := git.CommandContext(ctx, "-C", gitDir, "--work-tree", worktreePath, "restore", "--source", gitRef, ".gitleaks*")
 	logger.Debug("executing: %s", cmd)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return worktreePath, fmt.Errorf("could not checkout gitleaks files: %w cmd=%q output=%q", err, cmd, string(output))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return worktreePath, fmt.Errorf("could not checkout scanner config files: %w cmd=%q (%s)", err, cmd, string(out))
 	}
-
 	return worktreePath, nil
 }
 

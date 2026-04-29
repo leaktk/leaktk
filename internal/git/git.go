@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/leaktk/leaktk/pkg/config"
-	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
@@ -62,27 +61,6 @@ func RunContext(ctx context.Context, args ...string) error {
 // RemoteRefExists checks if the provided ref exists on the remote repo
 func RemoteRefExists(ctx context.Context, repository, ref string) bool {
 	return RunContext(ctx, "ls-remote", "--exit-code", "--quiet", repository, ref) == nil
-}
-
-func RemoveWorkingTree(ctx context.Context, repoInfo RepoInfo) error {
-	// First try cleaning up the worktrees the proper way
-	logger.Debug("removing temp git working tree: path=%q", repoInfo.WorkingTreePath)
-	if err := RunContext(ctx, "-C", repoInfo.GitDir, "worktree", "remove", "--force", repoInfo.WorkingTreePath); err != nil {
-		logger.Error("issue encountered removing temp git working tree: %v path=%q", err, repoInfo.WorkingTreePath)
-	}
-
-	// This is a fallback to make real sure we clean up as much as we can
-	if fs.PathExists(repoInfo.WorkingTreePath) {
-		logger.Warning("removing some worktree files manually: path=%q", repoInfo.WorkingTreePath)
-		if err := os.RemoveAll(repoInfo.WorkingTreePath); err != nil {
-			return fmt.Errorf("'git worktree remove' failed and could not manually remove temp git working tree: %w", err)
-		}
-		if err := RunContext(ctx, "-C", repoInfo.GitDir, "worktree", "prune"); err != nil {
-			return fmt.Errorf("'git worktree remove' failed and could not prune manually removed temp git working tree: %w", err)
-		}
-	}
-
-	return nil
 }
 
 // GetGlobalConfigPath gets a value from the global config and applies a --type=path flag
