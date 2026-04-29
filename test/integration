@@ -1,0 +1,56 @@
+#!/bin/sh
+set -eu
+
+export PREFIX="$(mktemp -d)"
+
+bindir="$(mktemp -d)/bin"
+repodir="${PREFIX}/repo"
+trap 'rm -rf "${PREFIX}"' EXIT
+
+export PATH="${bindir}:${PATH}"
+make clean build 
+make install 
+
+echo 'Setting up repo dir'
+git init "${repodir}"
+git -C "${repodir}" branch -m main 
+
+echo 'Installing pre-commit hook'
+"${PREFIX}/bin/leaktk" install hook git.pre-commit --path "${PREFIX}" --force
+
+echo 'Confirming TemplateID:'
+if !  grep -F \
+	'f2998aee-4684-4c46-b724-7c8e37e6020c' \
+	"${repodir}/.git/hooks/pre-commit"
+then
+	echo "could not find template id"
+	exit 1
+fi
+
+echo 'Trying to commit a secret'
+echo 'secret="4bza9wI5Vb71N6Ahaa7IaqcPBrzzVREZSgmo1FnCHDg="' > "${repodir}/test.py"  # notsecret
+git -C "${repodir}" add test.py
+if ! git -C "${repodir}" commit \
+	--no-gpg-sign \
+	--message='This should fail' > /dev/null 2>&1
+then
+	echo '[PASS] Block a simple secret'
+fi
+
+echo 'Marking the secret as #notsecret'
+echo 'secret="4bza9wI5Vb71N6Ahaa7IaqcPBrzzVREZSgmo1FnCHDg=" # notsecret' >  "${repodir}/test.py"
+if ! git -C "${repodir}" commit \
+	--no-gpg-sign \
+	--message='This should fail' > /dev/null 2>&1
+then
+	echo '[PASS] adding #notsecret to unstaged does not make a difference'
+fi
+
+echo 'Staging the changes with #notsecret set'
+git -C "${repodir}" add test.py
+if git -C "${repodir}" commit \
+	--no-gpg-sign \
+	--message='This should pass' > /dev/null 2>&1
+then
+	echo '[PASS] Allow things marked as not secret'
+fi
