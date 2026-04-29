@@ -154,7 +154,7 @@ func (s *Scanner) listen() {
 				gitRepoInfo, err = git.GetRepoInfo(ctx, request.Resource)
 				if err != nil {
 					logger.Critical("scan failed: could not get git repo info: %v id=%q", err, request.ID)
-					removeTempGitFiles(ctx, request, gitRepoInfo)
+					removeTempGitFiles(request, gitRepoInfo)
 					s.respondWithError(request, &proto.Error{
 						Code:    sourceErrorCode,
 						Message: "could not get git repo info",
@@ -168,7 +168,7 @@ func (s *Scanner) listen() {
 				if err != nil {
 					select {
 					case <-ctx.Done():
-						removeTempGitFiles(ctx, request, gitRepoInfo)
+						removeTempGitFiles(request, gitRepoInfo)
 						s.respondWithError(request, &proto.Error{
 							Code:    cloneErrorCode,
 							Message: "clone operation timed out",
@@ -176,7 +176,7 @@ func (s *Scanner) listen() {
 						})
 					default:
 						logger.Critical("scan failed: could not clone git repo: %v id=%q", err, request.ID)
-						removeTempGitFiles(ctx, request, gitRepoInfo)
+						removeTempGitFiles(request, gitRepoInfo)
 						s.respondWithError(request, &proto.Error{
 							Code:    cloneErrorCode,
 							Message: "could not clone git repo",
@@ -222,7 +222,7 @@ func (s *Scanner) listen() {
 			})
 
 			// Remove temp files as soon as they're no longer needed
-			removeTempGitFiles(ctx, request, gitRepoInfo)
+			removeTempGitFiles(request, gitRepoInfo)
 		case proto.URLRequestKind:
 			findings, err = betterleaks.ScanURL(ctx, detector, request.Resource, betterleaks.URLScanOpts{
 				FetchURLPatterns: splitFetchURLPatterns(request.Opts.FetchURLs),
@@ -312,7 +312,7 @@ func (s *Scanner) respondWithError(request *proto.Request, err *proto.Error) {
 
 // removeTempGitFiles clears out any temp files or directories that were created for the scan
 // and should be safe to remove after the scan is finished
-func removeTempGitFiles(ctx context.Context, request *proto.Request, gitRepoInfo git.RepoInfo) {
+func removeTempGitFiles(request *proto.Request, gitRepoInfo git.RepoInfo) {
 	// Remove temp repo clone if it was a remote scan
 	if !request.Opts.Local && fs.PathExists(gitRepoInfo.GitDir) {
 		logger.Debug("removing temp git dir: path=%q", gitRepoInfo.GitDir)
