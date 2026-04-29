@@ -5,9 +5,9 @@ echo '##########################################################################
 
 echo 'Set up env'
 set -x
-export wordir="$(mktemp -d)"
+export workdir="$(mktemp -d)"
 bindir="$(mktemp -d)/bin"
-repodir="${wordir}/repo"
+repodir="${workdir}/repo"
 export PATH="${bindir}:${PATH}"
 set +x
 
@@ -15,7 +15,7 @@ echo '##########################################################################
 
 echo 'Defer cleanup'
 set -x
-trap 'rm -rf "${wordir}"' EXIT
+trap 'rm -rf "${workdir}"' EXIT
 set +x
 
 echo '##############################################################################'
@@ -23,7 +23,7 @@ echo '##########################################################################
 echo 'Install package'
 set -x
 make clean build 
-make install PREFIX="${wordir}"
+make install PREFIX="${workdir}"
 set +x
 
 echo '##############################################################################'
@@ -38,7 +38,7 @@ echo '##########################################################################
 
 echo 'Setting up a remote for the repo'
 set -x
-remotedir="${wordir}/origin.git"
+remotedir="${workdir}/origin.git"
 git init --bare "${remotedir}"
 git -C "${repodir}" remote add origin "${remotedir}"
 set +x
@@ -47,8 +47,8 @@ echo '##########################################################################
 
 echo 'Installing hooks'
 set -x
-"${wordir}/bin/leaktk" install hook git.pre-commit --path "${wordir}" --force
-"${wordir}/bin/leaktk" install hook git.pre-receive --path "${wordir}" --force
+"${workdir}/bin/leaktk" install hook git.pre-commit --path "${workdir}" --force
+"${workdir}/bin/leaktk" install hook git.pre-receive --path "${workdir}" --force
 set +x
 
 echo '##############################################################################'
