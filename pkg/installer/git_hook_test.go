@@ -161,11 +161,14 @@ func TestGitInstallHook(t *testing.T) {
 
 		cfg := &config.Config{}
 		opts := GitHookOpts{Hook: hooks.GitPreCommitHook, Path: tempDir, Force: false}
+
+		// First install should add the hook
 		require.NoError(t, GitHookInstall(t.Context(), cfg, opts))
 		info, err := os.Stat(filepath.Join(tempDir, ".git", "hooks", "pre-commit"))
 		require.NoError(t, err)
 		originalMtime := info.ModTime()
-		// install again — should skip
+
+		// Second install should not update the hook because force is not enabled
 		require.NoError(t, GitHookInstall(t.Context(), cfg, opts))
 		info2, err := os.Stat(filepath.Join(tempDir, ".git", "hooks", "pre-commit"))
 		require.NoError(t, err)

@@ -121,7 +121,7 @@ func gitHookInstall(hook hooks.Hook, installDir string, force bool, perm os.File
 	hooksDir := filepath.Join(installDir, "hooks")
 	hookPath := filepath.Join(hooksDir, hook.Event())
 
-	if fs.IsExecutable(hookPath) && !force {
+	if gitHookExists(hookPath) && !force {
 		logger.Info("skipping existing hook: force install not enabled: path=%q force_install=%v", hookPath, force)
 		return nil
 	}
