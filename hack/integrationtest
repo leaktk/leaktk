@@ -6,7 +6,8 @@ echo '##########################################################################
 echo 'Set up env'
 set -x
 export workdir="$(mktemp -d)"
-bindir="$(mktemp -d)/bin"
+export LEAKTK_LOGGER_LEVEL='DEBUG'
+bindir="${workdir}/bin"
 repodir="${workdir}/repo"
 export PATH="${bindir}:${PATH}"
 set +x
@@ -47,8 +48,8 @@ echo '##########################################################################
 
 echo 'Installing hooks'
 set -x
-"${workdir}/bin/leaktk" install hook git.pre-commit --path "${workdir}" --force
-"${workdir}/bin/leaktk" install hook git.pre-receive --path "${workdir}" --force
+"${bindir}/leaktk" install hook git.pre-commit --path "${workdir}" --force
+"${bindir}/leaktk" install hook git.pre-receive --path "${workdir}" --force
 set +x
 
 echo '##############################################################################'
@@ -128,5 +129,16 @@ then
 fi
 set +x
 
+echo '##############################################################################'
+
+echo 'Add a secret and ignore it in the .gitleaks.toml'
+set -x
+openssl genrsa > "${repodir}/key.pem"
+echo -e "[[allowlists]]\npaths=['''^key\.pem\$''']" > "${repodir}/.gitleaks.toml"
+git -C "${repodir}" add key.pem .gitleaks.toml
+git -C "${repodir}" commit \
+	--no-gpg-sign \
+	--message='Should be ignored' > /dev/null 2>&1
+set +x
 echo '##############################################################################'
 echo "DONE"

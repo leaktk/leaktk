@@ -24,7 +24,7 @@ type RepoInfo struct {
 }
 
 func GetRepoInfo(ctx context.Context, path string) (RepoInfo, error) {
-	info := RepoInfo{}
+	info := RepoInfo{WorkingTreePath: path}
 	cmd := CommandContext(
 		ctx,
 		"-C",
@@ -49,6 +49,27 @@ func GetRepoInfo(ctx context.Context, path string) (RepoInfo, error) {
 	// Load the field data from above
 	info.GitDir = string(fields[0])
 	info.IsBare = bytes.Equal(fields[1], []byte("true"))
+
+	// Resolve the working tree to the toplevel path
+	if !info.IsBare {
+		// Running this separate since it's more prone to error out
+		cmd := CommandContext(
+			ctx,
+			"-C",
+			info.WorkingTreePath,
+			"rev-parse",
+			"--show-toplevel",
+		) // #nosec G204
+		logger.Debug("executing: %s", cmd)
+		rawTopLevel, err := cmd.Output()
+		if err == nil {
+			info.WorkingTreePath = string(bytes.TrimSpace(rawTopLevel))
+			logger.Debug("setting working tree to toplevel dir: path=%q", info.WorkingTreePath)
+		} else {
+			logger.Debug("unable to set working tree: %v", err)
+		}
+	}
+
 	return info, nil
 }
 
