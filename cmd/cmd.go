@@ -165,7 +165,7 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 		if fs.FileExists(requestResource[1:]) {
 			data, err := os.ReadFile(requestResource[1:])
 			if err != nil {
-				return nil, fmt.Errorf("could not read resource: %v path=%q", err, requestResource[1:])
+				return nil, fmt.Errorf("could not read resource: %w path=%q", err, requestResource[1:])
 			}
 
 			requestResource = string(data)
@@ -176,7 +176,7 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 
 	rawOpts, err := flags.GetString("options")
 	if err != nil {
-		return nil, fmt.Errorf("there was an issue with the options flag: %v", err)
+		return nil, fmt.Errorf("there was an issue with the options flag: %w", err)
 	}
 
 	// Convert kind string to enum
@@ -189,7 +189,7 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 	var opts proto.Opts
 	if rawOpts != "{}" && len(rawOpts) > 0 {
 		if err := json.Unmarshal([]byte(rawOpts), &opts); err != nil {
-			return nil, fmt.Errorf("could not parse options: %v", err)
+			return nil, fmt.Errorf("could not parse options: %w", err)
 		}
 	}
 
