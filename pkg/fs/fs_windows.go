@@ -3,8 +3,8 @@
 package fs
 
 import (
-	"os"
 	"errors"
+	"os"
 )
 
 // FileLockSupport is set to false on windows because at the moment the file lock use case is mainly
