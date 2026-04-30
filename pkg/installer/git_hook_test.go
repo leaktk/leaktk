@@ -126,7 +126,7 @@ func TestGitInstallHook(t *testing.T) {
 		})
 		require.NoError(t, err)
 		hookPath := filepath.Join(tempDir, ".git", "hooks", "pre-commit")
-		assert.True(t, fs.IsExecutable(hookPath))
+		assert.True(t, gitHookExists(hookPath))
 	})
 
 	t.Run("installs in all repos under path when recursive is set", func(t *testing.T) {
@@ -147,8 +147,8 @@ func TestGitInstallHook(t *testing.T) {
 		require.NoError(t, err)
 		hook1 := filepath.Join(repo1Dir, ".git", "hooks", "pre-commit")
 		hook2 := filepath.Join(repo2Dir, ".git", "hooks", "pre-commit")
-		assert.True(t, fs.IsExecutable(hook1))
-		assert.True(t, fs.IsExecutable(hook2))
+		assert.True(t, gitHookExists(hook1))
+		assert.True(t, gitHookExists(hook2))
 	})
 
 	t.Run("skips existing hook when force=false", func(t *testing.T) {
