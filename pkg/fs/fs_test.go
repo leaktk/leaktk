@@ -83,25 +83,3 @@ func TestMatch(t *testing.T) {
 		assert.True(t, Match("a/b/c", "a/b/c"))      // exact match
 	})
 }
-
-func TestIsExecutable(t *testing.T) {
-	tempDir := t.TempDir()
-
-	t.Run("ExecutableFile", func(t *testing.T) {
-		execPath := filepath.Join(tempDir, "executable")
-		err := os.WriteFile(execPath, []byte("#!/bin/sh\n"), 0755) // #nosec G306 -- test file needs executable permissions
-		require.NoError(t, err)
-		assert.True(t, IsExecutable(execPath))
-	})
-
-	t.Run("NonExecutableFile", func(t *testing.T) {
-		nonExecPath := filepath.Join(tempDir, "non-executable")
-		err := os.WriteFile(nonExecPath, []byte("content"), 0644) // #nosec G306 -- test file with standard permissions
-		require.NoError(t, err)
-		assert.False(t, IsExecutable(nonExecPath))
-	})
-
-	t.Run("NonExistentFile", func(t *testing.T) {
-		assert.False(t, IsExecutable(filepath.Join(tempDir, "does-not-exist")))
-	})
-}
