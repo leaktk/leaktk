@@ -53,7 +53,7 @@ failfast:
 	go test -failfast github.com/leaktk/leaktk ./...
 
 install:
-	install ./leaktk $(DESTDIR)$(PREFIX)/bin/leaktk
+	install -D ./leaktk $(DESTDIR)$(PREFIX)/bin/leaktk
 
 .PHONY: install.completions
 install.completions:

@@ -10,11 +10,11 @@ import (
 )
 
 func TestFileExists(t *testing.T) {
-	tmpDir := t.TempDir()
-	tmpFile := filepath.Join(tmpDir, "file")
+	tempDir := t.TempDir()
+	tmpFile := filepath.Join(tempDir, "file")
 
 	t.Run("DirIsNotAFile", func(t *testing.T) {
-		assert.False(t, FileExists(tmpDir))
+		assert.False(t, FileExists(tempDir))
 	})
 
 	t.Run("FileExists", func(t *testing.T) {
@@ -30,11 +30,11 @@ func TestFileExists(t *testing.T) {
 }
 
 func TestPathExists(t *testing.T) {
-	tmpDir := t.TempDir()
-	tmpFile := filepath.Join(tmpDir, "file")
+	tempDir := t.TempDir()
+	tmpFile := filepath.Join(tempDir, "file")
 
 	t.Run("DirExists", func(t *testing.T) {
-		assert.True(t, PathExists(tmpDir))
+		assert.True(t, PathExists(tempDir))
 	})
 
 	t.Run("FileExists", func(t *testing.T) {
@@ -44,7 +44,7 @@ func TestPathExists(t *testing.T) {
 	})
 
 	t.Run("DirDoesntExist", func(t *testing.T) {
-		noDir := filepath.Join(tmpDir, "foo/bar/baz")
+		noDir := filepath.Join(tempDir, "foo/bar/baz")
 		assert.False(t, PathExists(noDir))
 	})
 
@@ -56,16 +56,16 @@ func TestPathExists(t *testing.T) {
 
 func TestCleanJoin(t *testing.T) {
 	t.Run("CleanJoin", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		err := os.MkdirAll(filepath.Join(tmpDir, "foo"), 0700)
+		tempDir := t.TempDir()
+		err := os.MkdirAll(filepath.Join(tempDir, "foo"), 0700)
 		require.NoError(t, err)
 
 		testPathFail := "../../hello/world"
-		_, err = CleanJoin(tmpDir, testPathFail)
+		_, err = CleanJoin(tempDir, testPathFail)
 		require.Error(t, err)
 
 		testPathPass := "hello/world..zip"
-		_, err = CleanJoin(tmpDir, testPathPass)
+		_, err = CleanJoin(tempDir, testPathPass)
 		require.NoError(t, err)
 	})
 }

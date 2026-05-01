@@ -35,8 +35,8 @@ func TestScanCommandToRequest(t *testing.T) {
 	assert.Equal(t, "https://github.com/leaktk/fake-leaks.git", request.Resource)
 
 	// If resource starts with @ and the thing is a valid path, resource will be loaded from there
-	tmpDir := t.TempDir()
-	dataPath, err := fs.CleanJoin(tmpDir, "data.json")
+	tempDir := t.TempDir()
+	dataPath, err := fs.CleanJoin(tempDir, "data.json")
 	require.NoError(t, err)
 	err = os.WriteFile(dataPath, []byte("{\"some\": \"data\"}"), 0600)
 	require.NoError(t, err)

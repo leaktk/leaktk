@@ -14,6 +14,9 @@ import (
 	"github.com/leaktk/leaktk/pkg/version"
 )
 
+// GitConfigGlobalOverride helps normalize things in the scanner
+// it is a variable here so other code can check if it's been set
+const GitConfigGlobalOverride = "/dev/null"
 const nixGlobalConfigDir = "/etc/leaktk"
 
 var localConfigDir string
@@ -23,16 +26,31 @@ func init() {
 
 	// The environment variables for the scan environment
 	env := map[string]string{
-		"GIT_CONFIG_GLOBAL":      "/dev/null",
+		"GIT_CONFIG_GLOBAL":      GitConfigGlobalOverride,
 		"GIT_TERMINAL_PROMPT":    "0",
 		"GIT_NO_REPLACE_OBJECTS": "1",
 		"GIT_CONFIG_NOSYSTEM":    "1",
 		"GIT_HTTP_USER_AGENT":    version.GlobalUserAgent,
 	}
 
-	for key, value := range env {
-		if err := os.Setenv(key, value); err != nil {
-			logger.Error("could not set %s=%s: %v", key, value, err)
+	for varname, value := range env {
+		if err := os.Setenv(varname, value); err != nil {
+			logger.Fatal("could not set %s=%s: %v", varname, value, err)
+		}
+	}
+
+	unsetEnv := []string{
+		// GIT_INDEX_FILE sets the path to the index file for non-bare
+		// repositories.  It is being unset here because the commands
+		// here are responsible for finding the index file themselves
+		// if needed and can cause unexpected behavior for the sub
+		// commands when used as hooks.
+		"GIT_INDEX_FILE",
+	}
+
+	for _, varname := range unsetEnv {
+		if err := os.Unsetenv(varname); err != nil {
+			logger.Fatal("could not unset %s: %v", varname, err)
 		}
 	}
 }

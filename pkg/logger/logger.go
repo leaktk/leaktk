@@ -63,16 +63,18 @@ type LogFormat int
 const (
 	// NOTSET will log everything
 	NOTSET LogLevel = 0
+	// TRACE will enable these logs and higher
+	TRACE LogLevel = 10
 	// DEBUG will enable these logs and higher
-	DEBUG LogLevel = 10
+	DEBUG LogLevel = 20
 	// INFO will enable these logs and higher
-	INFO LogLevel = 20
+	INFO LogLevel = 30
 	// WARNING will enable these logs and higher
-	WARNING LogLevel = 30
+	WARNING LogLevel = 40
 	// ERROR will enable these logs and higher
-	ERROR LogLevel = 40
+	ERROR LogLevel = 50
 	// CRITICAL will enable these logs and higher
-	CRITICAL LogLevel = 50
+	CRITICAL LogLevel = 60
 )
 
 const (
@@ -87,6 +89,8 @@ func (l LogLevel) String() string {
 	switch l {
 	case NOTSET:
 		return "NOTSET"
+	case TRACE:
+		return "TRACE"
 	case DEBUG:
 		return "DEBUG"
 	case INFO:
@@ -162,6 +166,9 @@ func SetLoggerFormat(logFormat LogFormat) error {
 // SetLoggerLevel takes the string version of the name and sets the current level
 func SetLoggerLevel(levelName string) error {
 	switch levelName {
+	case "TRACE":
+		currentLogLevel = TRACE
+		bllog.Logger.Level(zerolog.TraceLevel)
 	case "DEBUG":
 		currentLogLevel = DEBUG
 		bllog.Logger.Level(zerolog.DebugLevel)
@@ -187,6 +194,21 @@ func SetLoggerLevel(levelName string) error {
 // GetLoggerLevel returns the current logger level
 func GetLoggerLevel() LogLevel {
 	return currentLogLevel
+}
+
+// Trace emits an TRACE level log
+func Trace(msg string, a ...any) *Entry {
+	if currentLogLevel > TRACE {
+		return nil
+	}
+	entry := Entry{
+		Time:     time.Now().UTC().Format(time.RFC3339),
+		Severity: "TRACE",
+		Message:  fmt.Sprintf(msg, a...),
+	}
+	log.Println(entry)
+
+	return &entry
 }
 
 // Debug emits an DEBUG level log

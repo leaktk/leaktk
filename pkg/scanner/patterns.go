@@ -15,6 +15,7 @@ import (
 	betterleaksconfig "github.com/betterleaks/betterleaks/config"
 
 	"github.com/leaktk/leaktk/pkg/config"
+	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/scanner/betterleaks"
 )
@@ -124,9 +125,33 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 			return p.gitleaksConfig, fmt.Errorf("could not create config dir: error=%q", err)
 		}
 
+		// Open the config file, creating it if it doesn't already exist, but don't truncate yet
+		configFile, err := os.OpenFile(p.config.Gitleaks.ConfigPath, os.O_RDWR|os.O_CREATE, 0600)
+		if err != nil {
+			return p.gitleaksConfig, fmt.Errorf("could not open config file: %v path=%q", err, p.config.Gitleaks.ConfigPath)
+		}
+
+		// defer the close and add logging around it since we're adding locks
+		defer func() {
+			if err := configFile.Close(); err != nil {
+				logger.Error("could not close config file: %v path=%q", err, p.config.Gitleaks.ConfigPath)
+				if err := fs.UnlockFile(configFile); err != nil {
+					logger.Error("error releasing config file lock: %v path=%q", err, p.config.Gitleaks.ConfigPath)
+				}
+			}
+		}()
+
+		// Establish a file lock to avoid different instances of the scanner writing to the config
+		if fs.FileLockSupported {
+			logger.Debug("locking config file for writes: path=%q", p.config.Gitleaks.ConfigPath)
+			if err = fs.LockFile(configFile); err != nil {
+				return p.gitleaksConfig, fmt.Errorf("could not establish a file lock: %w path=%s", err, p.config.Gitleaks.ConfigPath)
+			}
+		}
+
 		// only write the config after parsing it, that way we don't break a good
 		// existing config if the server returns an invalid response
-		if err := os.WriteFile(p.config.Gitleaks.ConfigPath, []byte(rawConfig), 0600); err != nil {
+		if _, err := configFile.WriteString(rawConfig); err != nil {
 			return p.gitleaksConfig, fmt.Errorf("could not write config: path=%q error=%q", p.config.Gitleaks.ConfigPath, err)
 		}
 

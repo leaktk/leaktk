@@ -1,8 +1,11 @@
 # Installation
 
-There are several ways to install leaktk.
+The ways to install leaktk are listed below. Also at the end of this guide are
+links to use case specific guides.
 
-## **🍺Homebrew (Mac)**
+## Installation Methods
+
+### **🍺Homebrew (Mac)**
 
 ```
 brew install leaktk/tap/leaktk
@@ -10,7 +13,7 @@ brew install leaktk/tap/leaktk
 
 (Note: We'll get this set up to work on Linux too)
 
-## **💻 Pre-built Binaries**
+### **💻 Pre-built Binaries**
 
 Pre-built binaries for Linux, macOS, and Windows are available on the [GitHub
 Releases page for leaktk/leaktk](https://github.com/leaktk/leaktk/releases).
@@ -24,13 +27,13 @@ Releases page for leaktk/leaktk](https://github.com/leaktk/leaktk/releases).
 5. (Optional) Move the leaktk (or leaktk.exe on Windows) binary to a directory
    in your system's PATH (e.g., /usr/local/bin or C:\\Windows\\System32).
 
-## **📦 Using Docker/Podman (Container Image)**
+### **📦 Using Docker/Podman (Container Image)**
 
 Official container images are hosted on Quay.io.
 
 ```sh
 # Replace TAG with a specific tag from https://quay.io/repository/leaktk/leaktk?tab=tags
-podman pull quay.io/leaktk/leaktk:TAG 
+podman pull quay.io/leaktk/leaktk:TAG
 ```
 
 You can find available tags on [Quay.io for LeakTK](https://quay.io/repository/leaktk/leaktk?tab=tags).
@@ -70,7 +73,7 @@ There are other ways to do it, but the above attemps to address:
 - SELinux context issues from accessing the host files from inside the container without relabeling them: `--security-opt=label=disable`
 - Making the host files accessible inside the container, but not letting the container modify them in any way: `--volume=./fake-leaks:/mnt:ro`
 
-## **🛠️ Build From Source on Linux & macOS**
+### **🛠️ Build From Source on Linux & macOS**
 
 If you have Go installed (version 1.23.3 or newer is recommended), you can install leaktk directly using go install:
 
@@ -89,3 +92,7 @@ CGO_ENABLED=0 GOBIN="${HOME}/.local/bin" go install github.com/leaktk/leaktk@vX.
 
 You will want to make sure you have `"${HOME}/.local/bin"` in your `PATH` if it
 isn't already.
+
+## Use-Case Specific Guides
+
+- [Git hook installation](install_git_hooks.md)

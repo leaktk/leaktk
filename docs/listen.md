@@ -76,6 +76,23 @@ scan if `single_branch` is set to true.
 Note: If both `since` and `depth` are set, `since` will be used for cloning but
 both are still used to filtering commits during the scan.
 
+**exclusions**
+
+A list of commits to exclude from the scan. These would be used by `git log` like:
+
+```sh
+# if the branch was "main" and "c3fb1349fa03741736f34d43b621de757571ee46" was in
+# the exclusions list, the git log command would be similar to:
+git log ^c3fb1349fa03741736f34d43b621de757571ee46 main
+```
+
+* Type: `[]string`
+* Default: excluded
+
+Example `"options":{"exclusions":["c3fb1349fa03741736f34d43b621de757571ee46"]}`
+
+See `<revision-range>` in `man 1 git-log` for more information.
+
 **local**
 
 Scans a local git repo instead of fetching a remote one. When listening
