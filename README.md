@@ -25,13 +25,13 @@ request even if there were errors. More info on the formats are in the
 
 ## Docs by Topic
 
-- [Installation](./docs/install.md)
-- [Scanning](./docs/scan.md)
-- [Configuration](./docs/config.md)
-- [Request/Response Formats for Listen](./listen.md)
-- (Coming Soon) Monitoring Sources
+- [Installation](docs/install.md)
+- [Scanning](docs/scan.md)
+- [Configuration](docs/config.md)
+- [Request/Response Formats for Listen](docs/listen.md)
+- [Git Hooks](docs/hooks.md)
 - (Coming Soon) Analyzing Results
-- (Coming Soon) Git Hook Setup
+- (Coming Soon) Monitoring Sources
 
 ## Project Status
 
