@@ -1,18 +1,107 @@
 # Findings
 
-Simply put: findings are what the scanner found. The end of this document
-includes a few examples of what LeakTK findings can look like.
+Findings are the secrets, credentials, and sensitive data that LeakTK's scanner detects in your code, repositories, or other scanned resources.
+
+This document covers:
+
+- How to interpret and respond to findings
+- Understanding different finding types (true positives, benign positives, false positives)
+- Remediation steps for exposed secrets
+- Example finding formats from different scan modes
+
+See [Findings Examples](#findings-examples) below for sample output formats.
+
 
 ## Responding to Findings
 
-TODO - talk about determining if it's a [false positive](./false_positives.md)
-and rough steps to remediate:
+When LeakTK reports a finding, you need to determine what type of finding it is
+before deciding how to respond. Understanding the distinction between different
+finding types is crucial for effective remediation.
+
+### Understanding Finding Types
+
+**What is a "Secret" in This Context?**
+
+A secret is any piece of sensitive information that, if exposed, could pose a risk
+to an individual or organization. This includes but is not limited to:
+
+- API keys and tokens
+- Database credentials
+- Private keys and certificates
+- OAuth tokens and session identifiers
+- Encryption keys
+- Personal Identifiable Information (PII)
+- Internal URLs or system configurations that reveal architecture
+
+**The sensitivity of a secret is highly contextual.** What's sensitive in one
+environment may not be in another, but err on the side of caution.
+
+**Finding Types:**
+
+1. **True Positive**: A real secret that should not be exposed.
+   - Production credentials
+   - Personal Identifiable Information (PII)
+   - Internal URLs or system configurations that reveal architecture
+   - Valid API keys with active permissions
+   - Real private keys
+   - **Important**: Pre-production credentials (dev, qa, staging, test) are still
+     secrets! They can provide attackers with valuable information about your
+     systems and may have more permissions than intended.
+
+2. **Benign Positive**: A real secret that's intentionally present and acceptable
+   - Revoked or expired credentials kept for historical reference
+   - Test credentials in isolated test environments with no real access
+   - Public API keys that are meant to be public (though these should be clearly
+     marked)
+
+3. **False Positive**: Not actually a secret, just looks like one
+   - Dummy values in examples (e.g., `password: "your-password-here"`)
+   - Random strings that match secret patterns but aren't secrets
+   - Hash values or checksums that look like keys
+   - UUIDs or other identifiers that aren't sensitive
+   - Example secrets in documentation showing proper format
+
+**How to Determine the Finding Type:**
+
+1. **Examine the context**: Where did this appear? Is it in production code,
+   tests, documentation, or examples?
+
+2. **Verify if it's real**: Does this credential actually work? Can you use it
+   to access a system?
+
+3. **Assess the risk**: Even if it's "just" a dev credential, what could an
+   attacker do with it?
+
+4. **Check the intent**: Was this meant to be committed? Is it documented as
+   an example?
+
+**Next Steps Based on Finding Type:**
+
+- **True Positive**: Follow the remediation steps below immediately
+- **Benign Positive**: Consider if it should remain or be better documented;
+  you may want to add it to an ignore list (see [false positives](./false_positives.md))
+- **False Positive**: Add appropriate ignore rules to prevent future noise
+  (see [false positives](./false_positives.md))
 
 ### Before You Begin
 
-TODO - warning about destructive actions
+> **⚠️ WARNING: Destructive Actions Ahead**
+>
+> Redacting sensitive information from any source is a **destructive action** that
+> permanently modifies or removes data. Whether you're rewriting Git history,
+> editing files, or cleaning up container images, these operations cannot be easily
+> undone.
+>
+> **Before proceeding with remediation:**
+> - **Back up the resource locally** before making any changes
+> - Verify your backups are complete and accessible
+> - Test your remediation process on a copy first if possible
+> - Document what you're changing and why
+>
+> If something goes wrong during remediation, having a backup ensures you can
+> recover the original state and try again.
 
-### Steps
+### Remediation Steps
 
 Rough outline (probably want to break this into separate or use expanding sections):
 
