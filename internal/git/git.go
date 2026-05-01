@@ -41,7 +41,7 @@ func GetRepoInfo(ctx context.Context, path string) (RepoInfo, error) {
 		return info, err
 	}
 
-	fields := bytes.Fields(rawInfo)
+	fields := bytes.Split(bytes.TrimSpace(rawInfo), []byte("\n"))
 	if len(fields) != 2 {
 		return info, errors.New("could not load git repo info")
 	}

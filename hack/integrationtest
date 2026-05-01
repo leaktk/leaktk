@@ -140,5 +140,6 @@ git -C "${repodir}" commit \
 	--no-gpg-sign \
 	--message='Should be ignored' > /dev/null 2>&1
 set +x
+
 echo '##############################################################################'
 echo "DONE"
