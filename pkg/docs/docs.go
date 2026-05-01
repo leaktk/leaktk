@@ -1,23 +1,20 @@
 package docs
 
 import (
+	"os"
 	"strings"
-
-	"github.com/leaktk/leaktk/pkg/version"
 )
 
-// BaseDocsURL is the URL that will be used to find docs by topic. It can contain
-// the following variables that will be substituted by the DocURL function:
-//
-// - ${GIT_REF} - the git-ref of the current scanner build to pin to spcific docs
-//
-// This can be overridden if providing custom docs
-var BaseDocsURL = "https://github.com/leaktk/leaktk/blob/${GIT_REF}/docs/"
+// BaseDocsURL is the URL that will be used to find docs by topic.
+// This can be overridden if providing custom docs.
+var BaseDocsURL = "https://github.com/leaktk/leaktk/blob/HEAD/docs/"
 
-// DocsExt is the extension added on to the doc topic by DocURL
-// This can be overridden if providing custom docs
+// DocsExt is the extension added on to the doc topic by DocURL.
+// This can be overridden if providing custom docs.
 var DocsExt = ".md"
 
+// Topic is a topic that can be referenced in the docs.
+// This is used to generate the URL for the topic.
 type Topic string
 
 // A list of topics to referenc
@@ -27,23 +24,21 @@ const (
 	FindingsTopic        = Topic("findings")
 )
 
-func DocURL(topic Topic) string {
-	var b strings.Builder
-	b.WriteString(BaseDocsURL)
-	// Make sure there's a trailing slash
+func init() {
+	// Look up LEAKTK_DOCS_BASE_URL environment variable
+	if base := strings.TrimSpace(os.Getenv("LEAKTK_DOCS_BASE_URL")); base != "" {
+		BaseDocsURL = base
+	}
+	// Look up LEAKTK_DOCS_EXT environment variable
+	if ext := strings.TrimSpace(os.Getenv("LEAKTK_DOCS_EXT")); ext != "" {
+		DocsExt = ext
+	}
+	// Make sure the base URL ends with a slash
 	if BaseDocsURL[len(BaseDocsURL)-1] != '/' {
-		b.WriteByte('/')
+		BaseDocsURL += "/"
 	}
-	b.WriteString(string(topic))
-	b.WriteString(DocsExt)
-	docURL := b.String()
-	if strings.Contains(docURL, "${GIT_REF}") {
-		// Get the git ref that this was build for
-		gitRef := version.Commit
-		if len(gitRef) == 0 {
-			gitRef = "HEAD"
-		}
-		docURL = strings.ReplaceAll(docURL, "${GIT_REF}", gitRef)
-	}
-	return docURL
+}
+
+func DocURL(topic Topic) string {
+	return BaseDocsURL + string(topic) + DocsExt
 }
