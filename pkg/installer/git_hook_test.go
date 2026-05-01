@@ -64,7 +64,7 @@ func TestGitInstallHook(t *testing.T) {
 		assert.Contains(t, contentStr, "if command -v leaktk > /dev/null 2>&1")
 		assert.Contains(t, contentStr, "exec leaktk hook git.pre-commit")
 		// Must contain the error doc link
-		assert.Contains(t, contentStr, "docs/errors/command_not_found")
+		assert.Contains(t, contentStr, "docs/error_command_not_found")
 		// Must NOT exec unconditionally (the old broken form)
 		assert.NotContains(t, contentStr, "\nexec leaktk")
 	})
