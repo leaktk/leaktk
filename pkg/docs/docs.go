@@ -19,7 +19,7 @@ type Topic string
 
 // A list of topics to referenc
 const (
-	CommandNotFoundTopic = Topic("errors/command_not_found")
+	CommandNotFoundTopic = Topic("error_command_not_found")
 	FalsePositivesTopic  = Topic("false_positives")
 	FindingsTopic        = Topic("findings")
 )

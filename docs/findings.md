@@ -79,9 +79,9 @@ environment may not be in another, but err on the side of caution.
 
 - **True Positive**: Follow the remediation steps below immediately
 - **Benign Positive**: Consider if it should remain or be better documented;
-  you may want to add it to an ignore list (see [false positives](./false_positives.md))
+  you may want to add it to an ignore list (see [false positives](false_positives.md))
 - **False Positive**: Add appropriate ignore rules to prevent future noise
-  (see [false positives](./false_positives.md))
+  (see [false positives](false_positives.md))
 
 ### Before You Begin
 

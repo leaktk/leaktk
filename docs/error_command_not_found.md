@@ -12,7 +12,7 @@ available in the shell environment.
    leaktk version
    ```
 
-   If this fails, follow the [installation guide](../install.md).
+   If this fails, follow the [installation guide](install.md).
 
 2. **Ensure the directory it is installed in is in your PATH:**
 

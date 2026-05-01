@@ -95,4 +95,4 @@ isn't already.
 
 ## Use-Case Specific Guides
 
-- [Git hook installation](./install/git_hook.md)
+- [Git hook installation](install_git_hook.md)

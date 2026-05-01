@@ -11,7 +11,7 @@ leaktk's supported [Git hooks](https://git-scm.com/docs/githooks).
 ## Prerequisites
 
 This guide requires that you have the `leaktk` command installed. If you do not already have
-it installed, see the main [installation guide](../install.md).
+it installed, see the main [installation guide](install.md).
 
 ## Steps
 
