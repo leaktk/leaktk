@@ -50,16 +50,17 @@ environment may not be in another, but err on the side of caution.
 
 2. **Benign Positive**: A real secret that's intentionally present and acceptable
    - Revoked or expired credentials kept for historical reference
-   - Test credentials in isolated test environments with no real access
-   - Public API keys that are meant to be public (though these should be clearly
-     marked)
+   - Information stored somewhere where it's allowed to be stored (e.g.
+     Internal URLs in an internal Git repository)
 
 3. **False Positive**: Not actually a secret, just looks like one
    - Dummy values in examples (e.g., `password: "your-password-here"`)
    - Random strings that match secret patterns but aren't secrets
-   - Hash values or checksums that look like keys
-   - UUIDs or other identifiers that aren't sensitive
+   - Hash values or checksums that look like keys but aren't keys
+   - UUIDs or other identifiers that aren't actually sensitive
    - Example secrets in documentation showing proper format
+   - Public API keys that are meant to be public (though these should be clearly
+     marked)
 
 **How to Determine the Finding Type:**
 
@@ -83,9 +84,9 @@ environment may not be in another, but err on the side of caution.
 - **False Positive**: Add appropriate ignore rules to prevent future noise
   (see [false positives](false_positives.md))
 
-### Before You Begin
+### Remediation Steps
 
-> **⚠️ WARNING: Destructive Actions Ahead**
+> **⚠️  WARNING: Destructive Actions Ahead**
 >
 > Redacting sensitive information from any source is a **destructive action** that
 > permanently modifies or removes data. Whether you're rewriting Git history,
@@ -101,23 +102,49 @@ environment may not be in another, but err on the side of caution.
 > If something goes wrong during remediation, having a backup ensures you can
 > recover the original state and try again.
 
-### Remediation Steps
 
 Rough outline (probably want to break this into separate or use expanding sections):
 
-1. If exposed publically:
-   1. Revoke credentials
-   1. Make a backup of the resource containing the leak
+#### Step 1: Alert your Cyber Security Incident Response Team (CSIRT)
 
-1. If git:
-   1. Clone a fresh copy of the repo to work on
-   1. Purge secrets from the history
-   1. If exposed publically:
-      1. If GitHub: Steps to clean up remote
-      1. If GitLab: Steps to clean up the remote
-      1. If different git provider: recommend they read that provider's docs
+> **🗒️ NOTE: This step only applies to exposed company secrets**
 
-1. If not git: TODO
+If the exposed secrets contain company credentials or data, it is important that
+you promptly notify your Cyber Security Incident Response Team (CSIRT).
+
+If you are unsure how, try searching your company's intranet for things like:
+
+- "Report Cybersecurity Concern"
+- "Report Security Incident" 
+
+#### Step 1: Revoke all publically exposed credentials
+
+> **🗒️ NOTE: This step only applies to publically exposed credentials**
+
+It is important that exposed credentials be rotated as soon as possible to
+minimize the risk of abuse. The specific steps for rotating credentials will
+vary depending on what the credentials. 
+
+To find guides for rotating credentials:
+
+- Search "Rotate _Credential Type_"
+- Check out sites like [How to Rotate](https://howtorotate.com/)
+- Ask your CSIRT for help
+
+#### Step 3: Make a local backup 
+
+TODO
+
+#### Step 4: Redact the secrets
+
+> **⚠️  WARNING: This is a destructive action**
+> Make sure you completed the previous backup step before continuing
+
+> **🗒️ NOTE: There may be cases where redaction is not neccessary**
+> In cases where redaction may cause more harm than good work with
+> your CSIRT to determine the right course of action. 
+
+TODO
 
 ## Findings Examples
 
