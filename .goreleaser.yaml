@@ -21,6 +21,7 @@ notarize:
       ids:
        - "{{ .ProjectName }}"
       sign:
+        entitlements: ./entitlements.plist
         certificate: "{{.Env.MACOS_SIGN_P12}}"
         password: "{{.Env.MACOS_SIGN_PASSWORD}}"
       notarize:
