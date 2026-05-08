@@ -14,6 +14,7 @@ import (
 	"github.com/betterleaks/betterleaks/detect"
 	"github.com/betterleaks/betterleaks/report"
 	"github.com/betterleaks/betterleaks/sources"
+	"github.com/betterleaks/betterleaks/sources/scm"
 )
 
 var defaultRemote = &sources.RemoteInfo{}
@@ -22,7 +23,8 @@ var defaultRemote = &sources.RemoteInfo{}
 type GitScanOpts struct {
 	RevisionRange string
 	Depth         int
-	Remote        *sources.RemoteInfo
+	Platform      *scm.Platform	
+	RemoteURL     string
 	Since         string
 	Staged        bool
 	Unstaged      bool
@@ -136,7 +138,8 @@ func ScanGit(ctx context.Context, detector *detect.Detector, gitDir string, opts
 		&sources.Git{
 			Cmd:             gitCmd,
 			Config:          &detector.Config,
-			Remote:          remote,
+			Platform:        platform,
+			RemoteURL:       opts.RemoteURL,
 			Sema:            detector.Sema,
 			MaxArchiveDepth: detector.MaxArchiveDepth,
 		},
