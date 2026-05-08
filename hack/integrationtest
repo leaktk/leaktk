@@ -23,7 +23,7 @@ echo '##########################################################################
 
 echo 'Install package'
 set -x
-make clean build-pipe 
+make clean build
 make install PREFIX="${workdir}"
 set +x
 
@@ -108,8 +108,7 @@ set +x
 echo '##############################################################################'
 
 echo 'Push whats there so far'
-set -x
-git -C "${repodir}" push -u origin
+git -C "${repodir}" push -u origin main
 set +x
 
 echo '##############################################################################'

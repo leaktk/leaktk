@@ -36,10 +36,7 @@ vet:
 lint: vet
 	golangci-lint run
 
-build: import
-	CGO_ENABLED=0 go build $(LDFLAGS)
-
-build-pipe: 
+build:
 	CGO_ENABLED=0 go build $(LDFLAGS)
 
 import:
@@ -48,7 +45,7 @@ import:
 
 format: import
 	go fmt ./...
-	find . -type f \( -name '*.md' -or -name '*.go' \) | xargs sed -i 's/[ \t]*$$//g'
+	find . -type f \( -name '*.md' -or -name '*.go' -or -name Makefile \) | xargs sed -i 's/[ \t]*$$//g'
 
 test: format vet lint
 	go test -race $(MODULE) ./...
