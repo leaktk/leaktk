@@ -21,7 +21,11 @@ Releases page for leaktk/leaktk](https://github.com/leaktk/leaktk/releases).
    (e.g., leaktk\_X.Y.Z\_linux\_amd64.tar.gz,
    leaktk\_X.Y.Z\_windows\_amd64.zip).
 4. Extract the archive.
-5. (For macOS) Run: `/usr/bin/codesign -f -s - PATH_TO_LEAKTK_BIN` (replacing `PATH_TO_LEAKTK_BIN` with the path to the extracted binary file)
+5. (For macOS) You may have to remove the quarantine flag if downloading it using a browser:
+   ```sh
+   # Replace PATH_TO_LEAKTK_BIN with the path to the extracted leaktk binary
+   xattr -d com.apple.quarantine PATH_TO_LEAKTK_BIN
+   ```
 6. (Optional) Move the leaktk (or leaktk.exe on Windows) binary to a directory
    in your system's PATH (e.g., /usr/local/bin or C:\\Windows\\System32).
 
