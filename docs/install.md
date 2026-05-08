@@ -21,7 +21,12 @@ Releases page for leaktk/leaktk](https://github.com/leaktk/leaktk/releases).
    (e.g., leaktk\_X.Y.Z\_linux\_amd64.tar.gz,
    leaktk\_X.Y.Z\_windows\_amd64.zip).
 4. Extract the archive.
-5. (Optional) Move the leaktk (or leaktk.exe on Windows) binary to a directory
+5. (For macOS) You may have to remove the quarantine flag if downloading it using a browser:
+   ```sh
+   # Replace PATH_TO_LEAKTK_BIN with the path to the extracted leaktk binary
+   xattr -d com.apple.quarantine PATH_TO_LEAKTK_BIN
+   ```
+6. (Optional) Move the leaktk (or leaktk.exe on Windows) binary to a directory
    in your system's PATH (e.g., /usr/local/bin or C:\\Windows\\System32).
 
 ## **📦 Using Docker/Podman (Container Image)**
@@ -30,7 +35,7 @@ Official container images are hosted on Quay.io.
 
 ```sh
 # Replace TAG with a specific tag from https://quay.io/repository/leaktk/leaktk?tab=tags
-podman pull quay.io/leaktk/leaktk:TAG 
+podman pull quay.io/leaktk/leaktk:TAG
 ```
 
 You can find available tags on [Quay.io for LeakTK](https://quay.io/repository/leaktk/leaktk?tab=tags).

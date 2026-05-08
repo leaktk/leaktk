@@ -15,19 +15,6 @@ builds:
     ldflags:
       - -X github.com/leaktk/{{ .ProjectName }}/pkg/version.Version={{ .Version }} -X github.com/leaktk/{{ .ProjectName }}/pkg/version.Commit={{ .FullCommit }}
 
-notarize:
-  macos:
-    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
-      ids:
-       - "{{ .ProjectName }}"
-      sign:
-        certificate: "{{.Env.MACOS_SIGN_P12}}"
-        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
-      notarize:
-        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
-        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
-        key: "{{.Env.MACOS_NOTARY_KEY}}"
-
 archives:
   - formats: tar.xz
     name_template: >-
@@ -74,6 +61,12 @@ homebrew_casks:
       fish: "completions/fish/leaktk.fish"
     url:
       verified: github.com/leaktk/leaktk
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/leaktk"]
+          end
 
 # https://goreleaser.com/customization/package/dockers_v2/
 dockers_v2:
