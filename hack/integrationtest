@@ -23,7 +23,7 @@ echo '##########################################################################
 
 echo 'Install package'
 set -x
-make clean build 
+make clean build-pipe 
 make install PREFIX="${workdir}"
 set +x
 

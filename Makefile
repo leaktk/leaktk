@@ -39,6 +39,9 @@ lint: vet
 build: import
 	CGO_ENABLED=0 go build $(LDFLAGS)
 
+build-pipe: 
+	CGO_ENABLED=0 go build $(LDFLAGS)
+
 import:
 	goimports -local $(MODULE) -l -w .
 	go mod tidy
