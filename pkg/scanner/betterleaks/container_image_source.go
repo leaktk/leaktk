@@ -49,7 +49,6 @@ type seekReaderAt interface {
 }
 
 func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsFunc) error {
-
 	sysCtx := &types.SystemContext{
 		DockerRegistryUserAgent: version.GlobalUserAgent,
 	}
@@ -200,13 +199,11 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 		format, stream, err := archives.Identify(ctx, "", blobReader)
 		if err == nil && format != nil {
 			if extractor, ok := format.(archives.Extractor); ok {
-				if err := s.extractorFragments(ctx, extractor, digest, stream, enrichedYield); err != nil {
-					return err
-				}
+				s.extractorFragments(ctx, extractor, digest, stream, enrichedYield)
+				continue
 			} else if decompressor, ok := format.(archives.Decompressor); ok {
-				if err := s.decompressorFragments(ctx, decompressor, digest, stream, enrichedYield); err != nil {
-					return err
-				}
+				s.decompressorFragments(ctx, decompressor, digest, stream, enrichedYield)
+				continue
 			}
 		}
 
@@ -230,7 +227,7 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 	return nil
 }
 
-func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archives.Extractor, digest string, reader io.Reader, yield sources.FragmentsFunc) error {
+func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archives.Extractor, digest string, reader io.Reader, yield sources.FragmentsFunc) {
 	if _, isSeekReaderAt := reader.(seekReaderAt); !isSeekReaderAt {
 		switch extractor.(type) {
 		case archives.SevenZip, archives.Zip:
@@ -238,8 +235,7 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 			tmpfilePath := filepath.Clean(tmpfile.Name())
 			if err != nil {
 				logger.Error("could not create tmp file for container layer blob: %v digest=%q", err, digest)
-
-				return nil
+				return
 			}
 			defer func() {
 				_ = tmpfile.Close()
@@ -249,30 +245,27 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 			_, err = io.Copy(tmpfile, reader)
 			if err != nil {
 				logger.Error("could not copy container layer blob: %v digest=%q", err, digest)
-
-				return nil
+				return
 			}
 
 			reader = tmpfile
 		}
 	}
 
-	return extractor.Extract(ctx, reader, func(_ context.Context, d archives.FileInfo) error {
-		if d.IsDir() {
+	err := extractor.Extract(ctx, reader, func(_ context.Context, d archives.FileInfo) error {
+		path := filepath.Clean(d.NameInArchive)
+		if !d.Mode().IsRegular() {
+			logger.Trace("skipping non-regular file: path=%q digest=%q", path, digest)
 			return nil
 		}
-
-		path := filepath.Clean(d.NameInArchive)
 		if s.Config != nil && shouldSkipPath(s.Config, path) {
 			logger.Debug("skipping file: global allowlist: path=%q digest=%q", path, digest)
-
 			return nil
 		}
 
 		innerReader, err := d.Open()
 		if err != nil {
 			logger.Error("could not open container layer blob inner file: %v path=%q digest=%q", err, path, digest)
-
 			return nil
 		}
 
@@ -282,20 +275,26 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 			MaxArchiveDepth: s.MaxArchiveDepth - 1,
 		}
 
-		err = file.Fragments(ctx, yield)
-		if closeErr := innerReader.Close(); closeErr != nil {
-			logger.Debug("error closing inner reader: %v path=%q digest=%q", closeErr, path, digest)
+		if err := file.Fragments(ctx, yield); err != nil {
+			logger.Error("error generating file fragments: %v path=%q digest=%q", err, path, digest)
 		}
-		return err
+		if err := innerReader.Close(); err != nil {
+			logger.Debug("error closing inner reader: %v path=%q digest=%q", err, path, digest)
+		}
+
+		return nil
 	})
+
+	if err != nil {
+		logger.Error("error generating file fragments: %v path=%q digest=%q", err, filepath.Join(s.path, "layers", digest), digest)
+	}
 }
 
-func (s *ContainerImage) decompressorFragments(ctx context.Context, decompressor archives.Decompressor, digest string, reader io.Reader, yield sources.FragmentsFunc) error {
+func (s *ContainerImage) decompressorFragments(ctx context.Context, decompressor archives.Decompressor, digest string, reader io.Reader, yield sources.FragmentsFunc) {
 	innerReader, err := decompressor.OpenReader(reader)
 	if err != nil {
 		logger.Error("could not read compressed container layer blob: %v digest=%q", err, digest)
-
-		return nil
+		return
 	}
 
 	file := &sources.File{
@@ -304,7 +303,9 @@ func (s *ContainerImage) decompressorFragments(ctx context.Context, decompressor
 		Path:            filepath.Join(s.path, "layers", digest),
 	}
 
-	return file.Fragments(ctx, yield)
+	if err := file.Fragments(ctx, yield); err != nil {
+		logger.Error("error generating file fragments: %v path=%q digest=%q", err, file.Path, digest)
+	}
 }
 
 func yieldWithCommitInfo(commitInfo sources.CommitInfo, yield sources.FragmentsFunc) sources.FragmentsFunc {
@@ -353,7 +354,6 @@ func (s *ContainerImage) commitInfoFromConfig(image *imagespecv1.Image) sources.
 func shouldSkipPath(cfg *config.Config, path string) bool {
 	if cfg == nil {
 		logger.Debug("not skipping path because config is nil: path=%q", path)
-
 		return false
 	}
 
