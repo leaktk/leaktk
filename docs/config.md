@@ -56,7 +56,7 @@ scan_workers = 1
 max_scan_queue_size = 1
 # How many items the response queue can hold in it before it blocks (0 default means non-blocking)
 max_response_queue_size = 1
-# The full path to where the scanner should store files, clone repos, etc
+# The full path to where the scanner should store files, cloned repositories, etc
 # for better performance mount a tmpfs at this location
 # workdir = "/tmp/leaktk/scanner" # This defaults to ${XDG_CACHE_HOME}/leaktk/scanner
 # Allow local scans on listen

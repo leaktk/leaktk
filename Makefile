@@ -45,6 +45,7 @@ import:
 
 format: import
 	go fmt ./...
+	find . -type f \( -name '*.md' -or -name '*.go' \) | xargs sed -i 's/[ \t]*$$//g'
 
 test: format vet lint
 	go test -race $(MODULE) ./...
@@ -53,7 +54,7 @@ failfast:
 	go test -failfast github.com/leaktk/leaktk ./...
 
 install:
-	install ./leaktk $(DESTDIR)$(PREFIX)/bin/leaktk
+	install -D ./leaktk $(DESTDIR)$(PREFIX)/bin/leaktk
 
 .PHONY: install.completions
 install.completions:

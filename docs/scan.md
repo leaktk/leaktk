@@ -29,6 +29,6 @@ were errors during the scan.
 
 For most scans `leaktk scan [--kind=<kind>] <resource>` is enough, but more
 information about the supported kinds of resources and specific options for
-each resource can be found in the docs for [listen mode](./listen.md). The
+each resource can be found in the docs for [listen mode](listen.md). The
 options listed in that doc can be provided with the `--options` flag and
 should be formated as a JSON string.
