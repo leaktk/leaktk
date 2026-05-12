@@ -45,7 +45,7 @@ import:
 
 format: import
 	go fmt ./...
-	find . -type f \( -name '*.md' -or -name '*.go' -or -name Makefile -or -path './hack/*' \) | xargs sed -i 's/[ \t]*$$//g'
+	find . -type f \( -name '*.md' -or -name '*.go' -or -name '*.yaml' -or -name Makefile -or -path './hack/*' \) | xargs sed -i 's/[ \t]*$$//g'
 
 test: format vet lint
 	go test -race $(MODULE) ./...
