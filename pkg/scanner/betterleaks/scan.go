@@ -20,12 +20,12 @@ var defaultRemote = &sources.RemoteInfo{}
 
 // GitScanOpts configures ScanGit
 type GitScanOpts struct {
-	Branch   string
-	Depth    int
-	Remote   *sources.RemoteInfo
-	Since    string
-	Staged   bool
-	Unstaged bool
+	RevisionRange string
+	Depth         int
+	Remote        *sources.RemoteInfo
+	Since         string
+	Staged        bool
+	Unstaged      bool
 }
 
 // ContainerImageScanOpts configures ScanContainerImage
@@ -181,8 +181,8 @@ func newGitCmd(ctx context.Context, gitDir string, opts GitScanOpts) (gitCmd *so
 		logOpts = append(logOpts, strconv.Itoa(opts.Depth))
 	}
 
-	if len(opts.Branch) > 0 {
-		logOpts = append(logOpts, opts.Branch)
+	if len(opts.RevisionRange) > 0 {
+		logOpts = append(logOpts, opts.RevisionRange)
 	} else {
 		logOpts = append(logOpts, "--all")
 	}

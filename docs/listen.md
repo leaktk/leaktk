@@ -54,20 +54,20 @@ Local:
 
 The `options` above are not required and some combined (e.g. `depth` and `since`)
 may cause issues. Refer to the details below to better understand the options
-and [git's docs](https://git-scm.com/) for knowing what can be combined.
+and [Git's docs](https://git-scm.com/) for knowing what can be combined.
 
 #### Request Options
 
 **branch**
 
-Sets `--branch` and `--single-branch` during git clone.
+Sets `--branch` and `--single-branch` during a `git clone`.
 
 * Type: `string`
 * Default: excluded
 
 **depth**
 
-Sets `--depth` during a git clone and can limit the commits during a local
+Sets `--depth` during a `git clone` and can limit the commits during a local
 scan if `single_branch` is set to true.
 
 * Type: `int`
@@ -76,9 +76,26 @@ scan if `single_branch` is set to true.
 Note: If both `since` and `depth` are set, `since` will be used for cloning but
 both are still used to filtering commits during the scan.
 
+**exclusions**
+
+A list of commits to exclude from the scan. These would be used by `git log` like:
+
+```sh
+# if the branch was "main" and "c3fb1349fa03741736f34d43b621de757571ee46" was in
+# the exclusions list, the `git log` command would be similar to:
+git log ^c3fb1349fa03741736f34d43b621de757571ee46 main
+```
+
+* Type: `[]string`
+* Default: excluded
+
+Example `"options":{"exclusions":["c3fb1349fa03741736f34d43b621de757571ee46"]}`
+
+See `<revision-range>` in `man 1 git-log` for more information.
+
 **local**
 
-Scans a local git repo instead of fetching a remote one. When listening
+Scans a local Git repository instead of fetching a remote one. When listening
 for jsonl requests this must be explicitly set. When running single scans
 it's inferred by the resource.
 
@@ -99,7 +116,7 @@ both are still used to filtering commits during the scan.
 **staged**
 
 Only scan staged changes. This takes priority over `unstaged` and is ignored
-for non-local repos.
+for non-local repositories.
 
 * Type: `bool`
 * Default: `false`
@@ -122,7 +139,7 @@ Sets the request priority. Higher priority items will be scanned first.
 **unstaged**
 
 Scan current changes rather than the history. `staged` takes priority over this
-and is ignored for non-local repos.
+and is ignored for non-local repositories.
 
 * Type: `bool`
 * Default: `false`

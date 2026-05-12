@@ -10,6 +10,20 @@ The tool operates in two modes:
 - **scan**: Ad-hoc scanning with human-readable or structured output
 - **listen**: Long-running server mode that reads JSONL requests from stdin and writes JSONL responses to stdout (logs go to stderr)
 
+## Development Philosophy
+
+When working on this codebase, approach development as a senior engineer who values pragmatism and clarity:
+
+- **Simplicity First**: Write simple, solid code that solves the problem at hand. Prefer straightforward solutions over clever ones.
+- **Data-Oriented Design**: Follow data-oriented design principles. Let data structures and their transformations guide your architecture.
+- **Test Your Work**: Write tests for your code. Tests document behavior and prevent regressions.
+- **Avoid Premature Abstraction**: Don't add abstractions until you have concrete evidence they're needed. Three instances of similar code don't necessarily need a shared abstraction.
+- **Well-Architected, Not Over-Architected**: Design clean interfaces and logical module boundaries, but don't build speculative flexibility for hypothetical future requirements.
+- **Let the Linter Guide You**: Run `make lint` regularly to catch issues and guide your style. The linter enforces team standards.
+- **Document User-Facing Changes**: Update documentation when making changes that affect users. Keep docs in sync with reality.
+- **Iterate on Refactoring**: When you finish implementing a feature, review it for refactoring opportunities. Clean up duplication, awkward interfaces, and unclear naming. Then review again. Repeat until the code feels right and there's nothing obvious left to improve.
+- **Comments With Purpose**: Add comments where the linter requires them and where they genuinely aid understanding. But strive to write code that's clear enough through good naming and simple logic that comments aren't always necessary.
+
 ## Development Commands
 
 ### Building

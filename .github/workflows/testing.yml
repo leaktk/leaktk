@@ -72,6 +72,11 @@ jobs:
       - name: Test
         run: go test -v ./...
 
+      - name: Intgration test - Linux only
+        if: startsWith(runner.os, 'Linux')
+        run: |
+          bash ./hack/integrationtest
+
   golangci-lint:
     name: Running linting on ubuntu-latest
     runs-on: ubuntu-latest

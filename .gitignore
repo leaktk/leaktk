@@ -1,8 +1,6 @@
 # Binaries for programs and plugins
-leaktk
-!completions/bash/leaktk
+/leaktk
 *.exe
-*.exe~
 *.dll
 *.so
 *.dylib
@@ -15,5 +13,10 @@ leaktk
 
 # Go workspace file
 go.work
+
 # Added by goreleaser init:
 dist/
+
+# Editor files
+*~
+*.swp
