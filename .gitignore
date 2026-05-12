@@ -6,6 +6,7 @@ leaktk
 *.dll
 *.so
 *.dylib
+__debug_bin*
 
 # Editor files
 *.swp
