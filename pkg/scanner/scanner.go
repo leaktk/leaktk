@@ -102,6 +102,18 @@ func (s *Scanner) listen() {
 		request := msg.Value
 		logger.Info("starting scan: id=%q", request.ID)
 
+		// Capture panics and return them as errors
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Critical("scan failed: panicked: %v id=%q", r, request.ID)
+				s.respondWithError(request, &proto.Error{
+					Code:    scanErrorCode,
+					Message: fmt.Sprintf("scan failed: panicked: %v", r),
+					Data:    request,
+				})
+			}
+		}()
+
 		ctx := context.Background()
 		if s.scanTimeout > 0 {
 			var cancel context.CancelFunc

@@ -7,6 +7,9 @@ leaktk
 *.so
 *.dylib
 
+# Editor files
+*.swp
+
 # Test binary, built with `go test -c`
 *.test
 
