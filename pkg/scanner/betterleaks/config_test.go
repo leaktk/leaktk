@@ -27,14 +27,14 @@ func TestParseConfig(t *testing.T) {
 		cfg, err := ParseConfig(mockConfig)
 		require.NoError(t, err)
 		assert.NotNil(t, cfg)
-		assert.Equal(t, "testdata", cfg.Allowlists[0].Paths[0].String())
+		assert.Equal(t, `matchesAny(attributes[?"path"].orValue(""), ["testdata"])`, cfg.Prefilter)
 	})
 
 	t.Run("AllowlistOnlyConfig", func(t *testing.T) {
 		cfg, err := ParseConfig(mockAllowlistOnlyConfig)
 		require.NoError(t, err)
 		assert.NotNil(t, cfg)
-		assert.Equal(t, "testdata", cfg.Allowlists[0].Paths[0].String())
+		assert.Equal(t, `matchesAny(attributes[?"path"].orValue(""), ["testdata"])`, cfg.Prefilter)
 	})
 
 	t.Run("InvalidConfig", func(t *testing.T) {

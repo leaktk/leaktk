@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/betterleaks/betterleaks/config"
 	"github.com/betterleaks/betterleaks/sources"
 
 	"github.com/leaktk/leaktk/pkg/fs"
@@ -24,11 +23,11 @@ var urlRegexp = regexp.MustCompile(`^https?:\/\/\S+$`)
 // JSON is a source for yielding fragments from strings in json data
 // and from URLs contained in the data that match FetchURLPatterns
 type JSON struct {
-	Config           *config.Config
 	FetchURLPatterns []string
 	MaxArchiveDepth  int
 	Path             string
 	RawMessage       json.RawMessage
+	ShouldSkip       sources.SkipFunc
 	data             any
 }
 
@@ -96,10 +95,10 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield sou
 					currentNode.path,
 				)
 				file := &sources.File{
-					Config:          s.Config,
 					Content:         strings.NewReader(obj),
 					MaxArchiveDepth: s.MaxArchiveDepth,
 					Path:            currentNode.path,
+					ShouldSkip:      s.ShouldSkip,
 				}
 
 				return file.Fragments(ctx, yield)
@@ -120,26 +119,30 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield sou
 				}
 
 				jsonData := &JSON{
-					Config:          s.Config,
 					MaxArchiveDepth: s.MaxArchiveDepth,
 					Path:            currentNode.path,
 					RawMessage:      data,
+					ShouldSkip:      s.ShouldSkip,
 				}
 
 				return jsonData.Fragments(ctx, yield)
 			}
 
 			file := &sources.File{
-				Path:    currentNode.path,
-				Content: resp.Body,
+				Content:         resp.Body,
+				MaxArchiveDepth: s.MaxArchiveDepth,
+				Path:            currentNode.path,
+				ShouldSkip:      s.ShouldSkip,
 			}
 
 			return file.Fragments(ctx, yield)
 		}
 
 		file := &sources.File{
-			Path:    currentNode.path,
-			Content: strings.NewReader(obj),
+			Content:         strings.NewReader(obj),
+			MaxArchiveDepth: s.MaxArchiveDepth,
+			Path:            currentNode.path,
+			ShouldSkip:      s.ShouldSkip,
 		}
 
 		return file.Fragments(ctx, yield)

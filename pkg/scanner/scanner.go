@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"iter"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/betterleaks/betterleaks/detect"
 	"github.com/betterleaks/betterleaks/report"
+	"github.com/betterleaks/betterleaks/sources"
 
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
@@ -135,7 +137,14 @@ func (s *Scanner) listen() {
 			return
 		}
 
-		detector := detect.NewDetectorContext(ctx, *cfg)
+		detector := detect.NewDetectorContext(ctx, betterleaks.CopyConfig(cfg), detect.ValidationOptions{
+			Enabled:      false,
+			Workers:      0,
+			Debug:        false,
+			ExtractEmpty: false,
+			StatusFilter: "",
+		})
+
 		detector.FollowSymlinks = false
 		detector.IgnoreGitleaksAllow = false
 		detector.MaxArchiveDepth = s.maxArchiveDepth
@@ -144,8 +153,9 @@ func (s *Scanner) listen() {
 		detector.NoColor = true
 		detector.Redact = 0
 		detector.Verbose = false
+		detector.SkipFindingAppend = true
 
-		var findings []report.Finding
+		var blResults iter.Seq[detect.Result]
 		switch request.Kind {
 		case proto.GitRepoRequestKind:
 			sourcePath := request.Resource
@@ -210,7 +220,7 @@ func (s *Scanner) listen() {
 			}
 
 			loadSourceConfig(detector, sourcePath)
-			findings, err = betterleaks.ScanGit(ctx, detector, gitDir, betterleaks.GitScanOpts{
+			blResults = betterleaks.ScanGit(ctx, detector, gitDir, betterleaks.GitScanOpts{
 				Branch:   request.Opts.Branch,
 				Depth:    scanDepth(request.Opts.Depth, s.maxScanDepth),
 				Since:    request.Opts.Since,
@@ -218,15 +228,15 @@ func (s *Scanner) listen() {
 				Unstaged: request.Opts.Unstaged,
 			})
 		case proto.URLRequestKind:
-			findings, err = betterleaks.ScanURL(ctx, detector, request.Resource, betterleaks.URLScanOpts{
+			blResults = betterleaks.ScanURL(ctx, detector, request.Resource, betterleaks.URLScanOpts{
 				FetchURLPatterns: splitFetchURLPatterns(request.Opts.FetchURLs),
 			})
 		case proto.JSONDataRequestKind:
-			findings, err = betterleaks.ScanJSON(ctx, detector, request.Resource, betterleaks.JSONScanOpts{
+			blResults = betterleaks.ScanJSON(ctx, detector, request.Resource, betterleaks.JSONScanOpts{
 				FetchURLPatterns: splitFetchURLPatterns(request.Opts.FetchURLs),
 			})
 		case proto.TextRequestKind:
-			findings, err = betterleaks.ScanReader(ctx, detector, strings.NewReader(request.Resource))
+			blResults = betterleaks.ScanReader(ctx, detector, strings.NewReader(request.Resource))
 		case proto.FilesRequestKind:
 			if !s.allowLocal {
 				logger.Critical("scan failed: local scans not allowed: id=%q", request.ID)
@@ -239,9 +249,9 @@ func (s *Scanner) listen() {
 				return
 			}
 			loadSourceConfig(detector, request.Resource)
-			findings, err = betterleaks.ScanFiles(ctx, detector, request.Resource)
+			blResults = betterleaks.ScanFiles(ctx, detector, request.Resource)
 		case proto.ContainerImageRequestKind:
-			findings, err = betterleaks.ScanContainerImage(ctx, detector, request.Resource, betterleaks.ContainerImageScanOpts{
+			blResults = betterleaks.ScanContainerImage(ctx, detector, request.Resource, betterleaks.ContainerImageScanOpts{
 				Arch:  request.Opts.Arch,
 				Depth: scanDepth(request.Opts.Depth, s.maxScanDepth),
 				Since: request.Opts.Since,
@@ -271,9 +281,13 @@ func (s *Scanner) listen() {
 			}
 		}
 
-		results := make([]*proto.Result, len(findings))
-		for i, finding := range findings {
-			results[i] = findingToResult(request, &finding)
+		var results []*proto.Result
+		for blResult := range blResults {
+			if err := blResult.Err; err != nil {
+				logger.Error("betterleaks: finding error: %v id=%q", err, request.ID)
+			} else {
+				results = append(results, findingToResult(request, &blResult.Finding))
+			}
 		}
 
 		logger.Info("queueing response: id=%q queue_size=%d", request.ID, s.responseQueue.Size()+1)
@@ -306,26 +320,12 @@ func (s *Scanner) respondWithError(request *proto.Request, err *proto.Error) {
 
 func findingToResult(request *proto.Request, finding *report.Finding) *proto.Result {
 	result := &proto.Result{
-		ID: id.ID(
-			request.Resource,
-			finding.Commit,
-			finding.File,
-			strconv.Itoa(finding.StartLine),
-			strconv.Itoa(finding.StartColumn),
-			strconv.Itoa(finding.EndLine),
-			strconv.Itoa(finding.EndColumn),
-			finding.RuleID,
-		),
 		Secret:  finding.Secret,
 		Match:   finding.Match,
 		Context: finding.Line,
 		Entropy: finding.Entropy,
 		Date:    finding.Date,
 		Notes:   map[string]string{},
-		Contact: proto.Contact{
-			Name:  finding.Author,
-			Email: finding.Email,
-		},
 		Rule: proto.Rule{
 			ID:          finding.RuleID,
 			Description: finding.Description,
@@ -334,8 +334,7 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 			Tags: finding.Tags,
 		},
 		Location: proto.Location{
-			Version: finding.Commit,
-			Path:    finding.File,
+			Path: finding.File,
 			Start: proto.Point{
 				Line:   finding.StartLine,
 				Column: finding.StartColumn,
@@ -349,11 +348,16 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 
 	switch request.Kind {
 	case proto.GitRepoRequestKind:
-		result.Notes["gitleaks_fingerprint"] = finding.Fingerprint
-		result.Notes["commit_message"] = finding.Message
-		result.Notes["repository"] = request.Resource
 		result.Kind = proto.GitCommitResultKind
+		result.Location.Version = finding.Attr(sources.AttrGitSHA)
+		result.Contact.Name = finding.Attr(sources.AttrGitAuthorName)
+		result.Contact.Email = finding.Attr(sources.AttrGitAuthorEmail)
+		result.Notes["commit_message"] = finding.Attr(sources.AttrGitMessage)
+		result.Notes["repository"] = request.Resource
 	case proto.ContainerImageRequestKind:
+		result.Location.Version = finding.Attr(betterleaks.AttrContainerDigest)
+		result.Contact.Name = finding.Attr(betterleaks.AttrContainerAuthorName)
+		result.Contact.Email = finding.Attr(betterleaks.AttrContainerAuthorEmail)
 		manifest := ""
 		parts := strings.Split(result.Location.Path, "/")
 		if len(parts) > 1 {
@@ -380,6 +384,18 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 		result.Kind = proto.GenericResultKind
 	}
 
+	// Build the result ID now that all the fields are normalized above
+	result.ID = id.ID(
+		request.Resource,
+		result.Location.Version,
+		result.Location.Path,
+		strconv.Itoa(result.Location.Start.Line),
+		strconv.Itoa(result.Location.Start.Column),
+		strconv.Itoa(result.Location.End.Line),
+		strconv.Itoa(result.Location.End.Column),
+		result.Rule.ID,
+	)
+
 	return result
 }
 
@@ -395,7 +411,6 @@ func loadSourceConfig(detector *detect.Detector, sourcePath string) {
 	if !fs.DirExists(sourcePath) {
 		return
 	}
-
 	additionalConfigPath := filepath.Join(sourcePath, ".gitleaks.toml")
 	rawAdditionalConfig, err := os.ReadFile(additionalConfigPath) // #nosec G304
 	if err == nil && len(rawAdditionalConfig) > 0 {
@@ -404,7 +419,7 @@ func loadSourceConfig(detector *detect.Detector, sourcePath string) {
 		if err != nil {
 			logger.Error("could not parse additional config: %s", err)
 		} else {
-			detector.Config.Allowlists = append(detector.Config.Allowlists, additionalConfig.Allowlists...)
+			detector.Config = betterleaks.AppendGlobalConfig(detector.Config, additionalConfig)
 		}
 	} else {
 		logger.Debug("no additional config")

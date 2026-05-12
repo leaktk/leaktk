@@ -37,8 +37,8 @@ func TestContainerImage(t *testing.T) {
 
 		require.Error(t, err)
 		require.Len(t, fragments, 1)
-		assert.Equal(t, "Fake Leaks", fragments[0].CommitInfo.AuthorName)
-		assert.Equal(t, "fake-leaks@leaktk.org", fragments[0].CommitInfo.AuthorEmail)
+		assert.Equal(t, "Fake Leaks", fragments[0].Attr(AttrContainerAuthorName))
+		assert.Equal(t, "fake-leaks@leaktk.org", fragments[0].Attr(AttrContainerAuthorEmail))
 	})
 
 	t.Run("CallbackError", func(t *testing.T) {

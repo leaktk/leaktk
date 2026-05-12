@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/betterleaks/betterleaks/config"
 	"github.com/betterleaks/betterleaks/sources"
 
 	httpclient "github.com/leaktk/leaktk/pkg/http"
@@ -16,10 +15,10 @@ import (
 )
 
 type URL struct {
-	Config           *config.Config
 	FetchURLPatterns []string
 	MaxArchiveDepth  int
 	RawURL           string
+	ShouldSkip       sources.SkipFunc
 }
 
 func (s *URL) Fragments(ctx context.Context, yield sources.FragmentsFunc) error {
@@ -54,22 +53,20 @@ func (s *URL) Fragments(ctx context.Context, yield sources.FragmentsFunc) error 
 		}
 
 		json := &JSON{
-			Config:           s.Config,
 			FetchURLPatterns: s.FetchURLPatterns,
 			MaxArchiveDepth:  s.MaxArchiveDepth,
 			Path:             parsedURL.Path,
 			RawMessage:       data,
+			ShouldSkip:       s.ShouldSkip,
 		}
-
 		return json.Fragments(ctx, yield)
 	}
 
 	file := &sources.File{
-		Config:          s.Config,
 		Content:         resp.Body,
 		MaxArchiveDepth: s.MaxArchiveDepth,
 		Path:            parsedURL.Path,
+		ShouldSkip:      s.ShouldSkip,
 	}
-
 	return file.Fragments(ctx, yield)
 }

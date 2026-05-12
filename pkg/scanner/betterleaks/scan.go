@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"iter"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,17 +13,16 @@ import (
 	"time"
 
 	"github.com/betterleaks/betterleaks/detect"
-	"github.com/betterleaks/betterleaks/report"
 	"github.com/betterleaks/betterleaks/sources"
-)
+	"github.com/betterleaks/betterleaks/sources/scm"
 
-var defaultRemote = &sources.RemoteInfo{}
+	"github.com/leaktk/leaktk/pkg/logger"
+)
 
 // GitScanOpts configures ScanGit
 type GitScanOpts struct {
 	Branch   string
 	Depth    int
-	Remote   *sources.RemoteInfo
 	Since    string
 	Staged   bool
 	Unstaged bool
@@ -46,34 +46,33 @@ type URLScanOpts struct {
 	FetchURLPatterns []string
 }
 
-func ScanReader(ctx context.Context, detector *detect.Detector, reader io.Reader) ([]report.Finding, error) {
-	return detector.DetectSource(
+func ScanReader(ctx context.Context, detector *detect.Detector, reader io.Reader) iter.Seq[detect.Result] {
+	return detector.Run(
 		ctx,
 		&sources.File{
-			Config:          &detector.Config,
 			Content:         reader,
 			MaxArchiveDepth: detector.MaxArchiveDepth,
+			ShouldSkip:      detector.SkipFunc(),
 		},
 	)
 }
 
-func ScanURL(ctx context.Context, detector *detect.Detector, rawURL string, opts URLScanOpts) ([]report.Finding, error) {
-	return detector.DetectSource(
+func ScanURL(ctx context.Context, detector *detect.Detector, rawURL string, opts URLScanOpts) iter.Seq[detect.Result] {
+	return detector.Run(
 		ctx,
 		&URL{
-			Config:           &detector.Config,
 			FetchURLPatterns: opts.FetchURLPatterns,
 			MaxArchiveDepth:  detector.MaxArchiveDepth,
 			RawURL:           rawURL,
+			ShouldSkip:       detector.SkipFunc(),
 		},
 	)
 }
 
-func ScanJSON(ctx context.Context, detector *detect.Detector, data string, opts JSONScanOpts) ([]report.Finding, error) {
-	return detector.DetectSource(
+func ScanJSON(ctx context.Context, detector *detect.Detector, data string, opts JSONScanOpts) iter.Seq[detect.Result] {
+	return detector.Run(
 		ctx,
 		&JSON{
-			Config:           &detector.Config,
 			FetchURLPatterns: opts.FetchURLPatterns,
 			MaxArchiveDepth:  detector.MaxArchiveDepth,
 			RawMessage:       json.RawMessage(data),
@@ -81,64 +80,57 @@ func ScanJSON(ctx context.Context, detector *detect.Detector, data string, opts 
 	)
 }
 
-func ScanFiles(ctx context.Context, detector *detect.Detector, path string) ([]report.Finding, error) {
-	return detector.DetectSource(
+func ScanFiles(ctx context.Context, detector *detect.Detector, path string) iter.Seq[detect.Result] {
+	return detector.Run(
 		ctx,
 		&sources.Files{
-			Config:          &detector.Config,
 			FollowSymlinks:  detector.FollowSymlinks,
+			MaxArchiveDepth: detector.MaxArchiveDepth,
 			Path:            path,
 			Sema:            detector.Sema,
-			MaxArchiveDepth: detector.MaxArchiveDepth,
+			ShouldSkip:      detector.SkipFunc(),
 		},
 	)
 }
 
-func ScanContainerImage(ctx context.Context, detector *detect.Detector, rawImageRef string, opts ContainerImageScanOpts) ([]report.Finding, error) {
+func ScanContainerImage(ctx context.Context, detector *detect.Detector, rawImageRef string, opts ContainerImageScanOpts) iter.Seq[detect.Result] {
 	source := &ContainerImage{
 		Arch:            opts.Arch,
-		Config:          &detector.Config,
 		Depth:           opts.Depth,
 		Exclusions:      opts.Exclusions,
 		MaxArchiveDepth: detector.MaxArchiveDepth,
 		RawImageRef:     rawImageRef,
-		Remote:          defaultRemote,
 		Sema:            detector.Sema,
+		ShouldSkip:      detector.SkipFunc(),
 	}
 
 	if len(opts.Since) > 0 {
 		since, err := time.Parse(time.DateOnly, opts.Since)
 		if err != nil {
-			return nil, fmt.Errorf("could not parse option: since=%q", opts.Since)
+			logger.Error("could not parse option: %v since=%q", err, opts.Since)
+			return nil
 		}
-
 		source.Since = &since
 	}
 
-	return detector.DetectSource(ctx, source)
+	return detector.Run(ctx, source)
 }
 
-func ScanGit(ctx context.Context, detector *detect.Detector, gitDir string, opts GitScanOpts) ([]report.Finding, error) {
+func ScanGit(ctx context.Context, detector *detect.Detector, gitDir string, opts GitScanOpts) iter.Seq[detect.Result] {
 	gitCmd, err := newGitCmd(ctx, gitDir, opts)
 	if err != nil {
-		return nil, fmt.Errorf("could not create git command: %w", err)
+		logger.Error("could not create git command: %v", err)
+		return nil
 	}
 
-	var remote *sources.RemoteInfo
-	if opts.Remote != nil {
-		remote = opts.Remote
-	} else {
-		remote = defaultRemote
-	}
-
-	return detector.DetectSource(
+	return detector.Run(
 		ctx,
 		&sources.Git{
 			Cmd:             gitCmd,
-			Config:          &detector.Config,
-			Remote:          remote,
-			Sema:            detector.Sema,
 			MaxArchiveDepth: detector.MaxArchiveDepth,
+			Platform:        scm.NoPlatform,
+			Sema:            detector.Sema,
+			ShouldSkip:      detector.SkipFunc(),
 		},
 	)
 }
@@ -165,7 +157,6 @@ func newGitCmd(ctx context.Context, gitDir string, opts GitScanOpts) (gitCmd *so
 		if gitCmd, err = sources.NewGitDiffCmdContext(ctx, gitDir, opts.Staged); err != nil {
 			return nil, fmt.Errorf("could not create git diff cmd: %w", err)
 		}
-
 		return gitCmd, nil
 	}
 

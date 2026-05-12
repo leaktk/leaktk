@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,8 +19,8 @@ import (
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/version"
 
-	"github.com/betterleaks/betterleaks/config"
 	"github.com/betterleaks/betterleaks/sources"
+	"github.com/betterleaks/betterleaks/sources/scm"
 	"github.com/containers/image/v5/manifest"
 	"github.com/containers/image/v5/pkg/blobinfocache"
 	"github.com/containers/image/v5/transports/alltransports"
@@ -28,16 +29,22 @@ import (
 	imagespecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
+const (
+	AttrContainerAuthorEmail = "oci.author.email"
+	AttrContainerAuthorName  = "oci.author.name"
+	AttrContainerDigest      = "oci.digest"
+)
+
 type ContainerImage struct {
 	Arch            string
-	Config          *config.Config
 	Depth           int
 	Exclusions      []string
 	MaxArchiveDepth int
+	ShouldSkip      sources.SkipFunc
 	RawImageRef     string
 	Sema            *semgroup.Group
 	Since           *time.Time
-	Remote          *sources.RemoteInfo
+	Platform        scm.Platform
 	path            string
 }
 
@@ -156,16 +163,16 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 		configHistories = append(configHistories, h)
 	}
 
-	commitInfo := s.commitInfoFromConfig(ociConfig)
-	commitInfo.SHA = imageManifest.ConfigInfo().Digest.String()
+	findingAttrs := s.findingAttrsFromConfig(ociConfig)
+	findingAttrs[AttrContainerDigest] = imageManifest.ConfigInfo().Digest.String()
 	manifestJSON := &JSON{
-		Config:          s.Config,
 		MaxArchiveDepth: s.MaxArchiveDepth,
 		Path:            filepath.Join(s.path, "manifest"),
 		RawMessage:      rawManifest,
+		ShouldSkip:      s.ShouldSkip,
 	}
 
-	err = manifestJSON.Fragments(ctx, yieldWithCommitInfo(commitInfo, yield))
+	err = manifestJSON.Fragments(ctx, yieldWithFindingAttrs(findingAttrs, yield))
 	if err != nil {
 		return err
 	}
@@ -177,8 +184,6 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 	checkSince := s.Since != nil && len(layerInfos) == len(configHistories)
 
 	for i, layerInfo := range layerInfos {
-		layerCommitInfo := commitInfo
-		layerCommitInfo.SHA = layerInfo.Digest.String()
 		if layerInfo.EmptyLayer {
 			logger.Debug("skipping empty layer: digest=%q", layerInfo.Digest)
 			continue
@@ -202,8 +207,11 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 			continue
 		}
 
-		enrichedYield := yieldWithCommitInfo(layerCommitInfo, yield)
 		digest := layerInfo.Digest.String()
+		layerFindingAttrs := make(map[string]string, len(findingAttrs))
+		maps.Copy(layerFindingAttrs, findingAttrs)
+		layerFindingAttrs[AttrContainerDigest] = digest
+		enrichedYield := yieldWithFindingAttrs(layerFindingAttrs, yield)
 
 		logger.Debug("downloading container layer blob: digest=%q", digest)
 		blobReader, blobSize, err := imageSource.GetBlob(ctx, layerInfo.BlobInfo, cache)
@@ -228,6 +236,7 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 			Content:         stream,
 			MaxArchiveDepth: s.MaxArchiveDepth - 1,
 			Path:            filepath.Join(s.path, "layers", digest),
+			ShouldSkip:      s.ShouldSkip,
 		}
 
 		err = file.Fragments(ctx, enrichedYield)
@@ -275,11 +284,10 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 			logger.Trace("skipping non-regular file: path=%q digest=%q", path, digest)
 			return nil
 		}
-		if s.Config != nil && shouldSkipPath(s.Config, path) {
+		if s.ShouldSkip != nil && shouldSkipPath(s.ShouldSkip, path) {
 			logger.Debug("skipping file: global allowlist: path=%q digest=%q", path, digest)
 			return nil
 		}
-
 		innerReader, err := d.Open()
 		if err != nil {
 			logger.Error("could not open container layer blob inner file: %v path=%q digest=%q", err, path, digest)
@@ -288,8 +296,9 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 
 		file := &sources.File{
 			Content:         innerReader,
-			Path:            filepath.Join(s.path, "layers", digest) + sources.InnerPathSeparator + path,
 			MaxArchiveDepth: s.MaxArchiveDepth - 1,
+			Path:            filepath.Join(s.path, "layers", digest) + sources.InnerPathSeparator + path,
+			ShouldSkip:      s.ShouldSkip,
 		}
 
 		if err := file.Fragments(ctx, yield); err != nil {
@@ -318,6 +327,7 @@ func (s *ContainerImage) decompressorFragments(ctx context.Context, decompressor
 		Content:         innerReader,
 		MaxArchiveDepth: s.MaxArchiveDepth - 1,
 		Path:            filepath.Join(s.path, "layers", digest),
+		ShouldSkip:      s.ShouldSkip,
 	}
 
 	if err := file.Fragments(ctx, yield); err != nil {
@@ -325,25 +335,21 @@ func (s *ContainerImage) decompressorFragments(ctx context.Context, decompressor
 	}
 }
 
-func yieldWithCommitInfo(commitInfo sources.CommitInfo, yield sources.FragmentsFunc) sources.FragmentsFunc {
+func yieldWithFindingAttrs(findingAttrs map[string]string, yield sources.FragmentsFunc) sources.FragmentsFunc {
 	return func(fragment sources.Fragment, err error) error {
 		if err == nil {
-			fragment.CommitInfo = &commitInfo
-			fragment.CommitSHA = commitInfo.SHA
+			maps.Copy(fragment.Attributes, findingAttrs)
 		}
 		return yield(fragment, err)
 	}
 }
 
-func (s *ContainerImage) commitInfoFromConfig(image *imagespecv1.Image) sources.CommitInfo {
-	commitInfo := sources.CommitInfo{
-		Remote: s.Remote,
-	}
-
+func (s *ContainerImage) findingAttrsFromConfig(image *imagespecv1.Image) map[string]string {
+	findingAttrs := make(map[string]string)
 	labels := image.Config.Labels
 
 	if labelValue, ok := labels["email"]; ok {
-		commitInfo.AuthorEmail = strings.TrimSpace(labelValue)
+		findingAttrs[AttrContainerAuthorEmail] = strings.TrimSpace(labelValue)
 	}
 
 	for _, labelName := range []string{
@@ -354,31 +360,25 @@ func (s *ContainerImage) commitInfoFromConfig(image *imagespecv1.Image) sources.
 	} {
 		if labelValue, ok := labels[labelName]; ok {
 			if match := authorRe.FindStringSubmatch(labelValue); match != nil {
-				commitInfo.AuthorName = match[1]
-				commitInfo.AuthorEmail = match[2]
-
-				return commitInfo
+				findingAttrs[AttrContainerAuthorName] = strings.TrimSpace(match[1])
+				findingAttrs[AttrContainerAuthorEmail] = strings.TrimSpace(match[2])
+				return findingAttrs
 			}
-			commitInfo.AuthorName = strings.TrimSpace(labelValue)
-
-			return commitInfo
+			findingAttrs[AttrContainerAuthorName] = strings.TrimSpace(labelValue)
+			return findingAttrs
 		}
 	}
 
-	return commitInfo
+	return findingAttrs
 }
 
-func shouldSkipPath(cfg *config.Config, path string) bool {
-	if cfg == nil {
-		logger.Debug("not skipping path because config is nil: path=%q", path)
+// shouldSkipPath checks a path against the skip callback.
+// Also handles the Windows forward-slash path normalization workaround.
+func shouldSkipPath(skip sources.SkipFunc, path string) bool {
+	if skip == nil {
+		logger.Trace("not skipping path because skip func is nil: path=%q", path)
 		return false
 	}
 
-	for _, a := range cfg.Allowlists {
-		if a.PathAllowed(filepath.ToSlash(path)) {
-			return true
-		}
-	}
-
-	return false
+	return skip(map[string]string{sources.AttrPath: filepath.ToSlash(path)})
 }

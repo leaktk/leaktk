@@ -79,7 +79,7 @@ func TestJSON(t *testing.T) {
 	assert.Len(t, fragments, 8)
 
 	for _, fragment := range fragments {
-		assert.Contains(t, expected, fragment.FilePath)
-		assert.Equal(t, expected[fragment.FilePath], fragment.Raw, "path=%s", fragment.FilePath)
+		assert.Contains(t, expected, fragment.Attr(sources.AttrPath))
+		assert.Equal(t, expected[fragment.Attr(sources.AttrPath)], fragment.Raw, "path=%s", fragment.Attr(sources.AttrPath))
 	}
 }
