@@ -79,12 +79,29 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 		return fmt.Errorf("could not fetch manifest: %v", err)
 	}
 
-	if manifestMIMEType == manifest.DockerV2ListMediaType {
-		var indexManifest manifest.Schema2List
+	var indexManifest *manifest.Schema2List
 
-		if err := json.Unmarshal(rawManifest, &indexManifest); err != nil {
+	switch manifestMIMEType {
+	case imagespecv1.MediaTypeImageIndex:
+		var oci1Index manifest.OCI1Index
+		err := json.Unmarshal(rawManifest, &oci1Index)
+		if err != nil {
 			return fmt.Errorf("could not unmarshal manifest: %v", err)
 		}
+		indexManifest, err = oci1Index.ToSchema2List()
+		if err != nil {
+			return fmt.Errorf("could not convert oci index manifest to schema2list: %v", err)
+		}
+	case manifest.DockerV2ListMediaType:
+		var schema2List manifest.Schema2List
+		err := json.Unmarshal(rawManifest, &schema2List)
+		if err != nil {
+			return fmt.Errorf("could not unmarshal manifest: %v", err)
+		}
+		indexManifest = &schema2List
+	}
+
+	if indexManifest != nil && len(indexManifest.Manifests) > 0 {
 		for _, m := range indexManifest.Manifests {
 			digest := m.Digest.String()
 			var rawImageRef string
