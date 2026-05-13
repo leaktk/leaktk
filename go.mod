@@ -146,3 +146,5 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 )
+
+replace github.com/nwaples/rardecode/v2 => github.com/leaktk/rardecode/v2 v2.0.0-20260513151212-3ad641aaa9af

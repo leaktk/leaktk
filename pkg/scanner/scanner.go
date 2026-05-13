@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -101,6 +102,20 @@ func (s *Scanner) start() {
 func (s *Scanner) listen() {
 	s.scanQueue.Recv(func(msg *queue.Message[*proto.Request]) {
 		request := msg.Value
+
+		// Capture panics and return them as errors
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Critical("scan failed: panicked: %v id=%q", r, request.ID)
+				logger.Trace("stack trace:\n%s", debug.Stack())
+				s.respondWithError(request, &proto.Error{
+					Code:    scanErrorCode,
+					Message: fmt.Sprintf("scan failed: panicked: %v", r),
+					Data:    request,
+				})
+			}
+		}()
+
 		logger.Info("starting scan: id=%q", request.ID)
 
 		ctx := context.Background()
