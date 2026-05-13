@@ -21,7 +21,7 @@ When in `listen` mode, LeakTK listens on stdin, responds on stdout, and logs to
 stderr. It reads one request per line and sends one response per line in
 [JSONL](https://jsonlines.org/). It should always generate a response to each
 request even if there were errors. More info on the formats are in the
-[listen docs](./listen.md).
+[listen docs](docs/listen.md).
 
 ## Docs by Topic
 

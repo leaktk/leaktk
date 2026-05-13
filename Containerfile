@@ -1,4 +1,4 @@
-FROM quay.io/fedora/fedora:42
+FROM quay.io/fedora/fedora:44
 ARG TARGETPLATFORM
 
 COPY --chown=0:0 --chmod=0755 $TARGETPLATFORM/leaktk /usr/local/bin/leaktk

@@ -46,7 +46,7 @@ changelog:
     exclude:
       - "^docs:"
       - "^test:"
-      
+
 homebrew_casks:
   - repository:
       owner: leaktk

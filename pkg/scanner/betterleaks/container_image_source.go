@@ -20,10 +20,10 @@ import (
 
 	"github.com/betterleaks/betterleaks/config"
 	"github.com/betterleaks/betterleaks/sources"
-	"github.com/containers/image/v5/manifest"
-	"github.com/containers/image/v5/pkg/blobinfocache"
-	"github.com/containers/image/v5/transports/alltransports"
-	"github.com/containers/image/v5/types"
+	"go.podman.io/image/v5/manifest"
+	"go.podman.io/image/v5/pkg/blobinfocache"
+	"go.podman.io/image/v5/transports/alltransports"
+	"go.podman.io/image/v5/types"
 
 	imagespecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
