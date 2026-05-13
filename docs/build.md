@@ -4,7 +4,7 @@ This covers how to build LeakTK from source in more detail.
 
 ## Dependencies
 
-If you have the `CGO_ENABLED` environment variable set to 0, then
+If you have the `CGO_ENABLED` environment variable set to `0`, then
 a standard go build should work out of the box.
 
 You can check it with this command:
@@ -40,3 +40,19 @@ sudo dnf install btrfs-progs-devel
 ```sh
 apt-get install libbtrfs-dev
 ```
+
+## Running the Build
+
+After the dependencies are installed, run this command from the root of the
+project directory:
+
+```
+go build
+```
+
+This should generate a `leaktk` binary in the same directory.
+
+> **🗒️ NOTE: If you want version info set**
+>
+> LeakTK's version info is set via special build flags. If you want to set
+> the version info, see the `build` target in the [Makefile](../Makefile).

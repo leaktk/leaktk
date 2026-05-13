@@ -18,9 +18,10 @@ already have it installed, see the main [installation guide](install.md).
 For this guide we're going to use the Git pre-commit hook, but the process is
 similar for the other hooks.
 
-> **🗒️  NOTE: alternate install methods are at the end**
+> **🗒️ NOTE: Alternate install methods are at the end**
+>
 > Some teams use git hook managers like the one provided by pre-commit.com.
-> There is a section at the end for these.
+> There is a section at the end for those.
 
 1. Choose the hook you want to install (in our case it's `git.pre-commit`).
 1. Decide where you want to install it (this example will assume all Git
@@ -62,7 +63,7 @@ There is a popular git hook manager called [pre-commit](https://pre-commit.com)
 that allows you to define hooks in the Git repository itself.
 
 1. [Install pre-commit](https://pre-commit.com/#install)
-2. Install the [build deps](build.md)
+2. Install the [build dependencies](build.md##dependencies)
 3. Add a section like this to your repository's `.pre-commit-config.yaml`:
    ```yaml
    repos:
@@ -70,9 +71,9 @@ that allows you to define hooks in the Git repository itself.
        # We recommend pinning by commit. Run this command to get the latest
        # revision:
        #
-       #   git ls-remote https://github.com/leaktk/leaktk.git refs/tags/v* | sort | head -n 1
+       #   git ls-remote https://github.com/leaktk/leaktk.git refs/tags/v*  | tail -n 1
        #
-       rev: a6221c21f4bf8a194f83abc605d9f8f5ec9ae50f
+       rev: f9468ba58c786f53e5e8c093f81925e10bfaf67e
        hooks:
          - id: leaktk.git.pre-commit
    ```
@@ -84,6 +85,7 @@ that allows you to define hooks in the Git repository itself.
 ### Custom
 
 > **⚠️  WARNING: This hook only scans staged content**
+>
 > If you are running it in a CI/CD pipeline and you wish to scan existing
 > Git history, run `leaktk scan` with the proper arguments instead. The
 > pre-commit hooks only scans staged content. See `leaktk help scan` for
