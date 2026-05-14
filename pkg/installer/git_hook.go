@@ -40,6 +40,10 @@ type GitHookOpts struct {
 	// UserTemplateDir installs the hook in the user's git init.templateDir
 	// (one is created at ~/.config/git/template if not already configured)
 	UserTemplateDir bool
+	// Stdout prints the hook template to stdout. This can be useful for
+	// cases where you need to manually generate and install the hook
+	// somewhere
+	Stdout bool
 }
 
 // gitPreCommitHookTemplate is the shell script written to .git/hooks/pre-commit.
@@ -116,6 +120,18 @@ func gitUserTemplateDir(ctx context.Context) (string, error) {
 	return templateDir, nil
 }
 
+func gitHookScript(hook hooks.Hook) string {
+	createdBy := "leaktk-" + version.Version
+	createdOn := time.Now().UTC().Format(time.RFC3339)
+	return fmt.Sprintf(
+		gitPreCommitHookTemplate,
+		createdBy,
+		createdOn,
+		hook.Name(),
+		docs.DocURL(docs.CommandNotFoundTopic),
+	)
+}
+
 // gitHookInstall installs a git hook script into installDir (the .git directory).
 func gitHookInstall(hook hooks.Hook, installDir string, force bool, perm os.FileMode) error {
 	hooksDir := filepath.Join(installDir, "hooks")
@@ -130,17 +146,7 @@ func gitHookInstall(hook hooks.Hook, installDir string, force bool, perm os.File
 		return fmt.Errorf("could not create hooks dir: %w path=%q", err, hooksDir)
 	}
 
-	createdBy := "leaktk-" + version.Version
-	createdOn := time.Now().UTC().Format(time.RFC3339)
-	script := fmt.Sprintf(
-		gitPreCommitHookTemplate,
-		createdBy,
-		createdOn,
-		hook.Name(),
-		docs.DocURL(docs.CommandNotFoundTopic),
-	)
-
-	if err := os.WriteFile(hookPath, []byte(script), perm); err != nil { // #nosec G306 -- hook script must be executable
+	if err := os.WriteFile(hookPath, []byte(gitHookScript(hook)), perm); err != nil {
 		return fmt.Errorf("could not write hook: %w path=%q", err, hookPath)
 	}
 	logger.Info("installed hook: hook=%q path=%q", hook.Name(), hookPath)
@@ -213,6 +219,10 @@ func GitHookInstall(ctx context.Context, cfg *config.Config, opts GitHookOpts) e
 			)
 			hadErrors = true
 		}
+	}
+
+	if opts.Stdout {
+		fmt.Print(gitHookScript(opts.Hook))
 	}
 
 	if hadErrors {

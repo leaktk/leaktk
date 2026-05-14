@@ -50,6 +50,7 @@ func gitHookInstallCommand(hook hooks.Hook) *cobra.Command {
 	flags.String("path", "", fmt.Sprintf("Install the %s hook in all git repositories under this path (unless --no-recursive is set)", hookname))
 	flags.Bool("no-recursive", false, fmt.Sprintf("Install the %s hook only at the repository at the selected path", hookname))
 	flags.Bool("force", false, fmt.Sprintf("Replace any existing %s hooks instead of skipping them", hookname))
+	flags.Bool("stdout", false, fmt.Sprintf("Print the %s hook script to stdout (useful for certain custom installs)", hookname))
 	return cmd
 }
 
@@ -62,10 +63,11 @@ func runGitHookInstall(cmd *cobra.Command, args []string) {
 		Path:              mustGetString(flags, "path"),
 		Recursive:         !mustGetBool(flags, "no-recursive"),
 		Force:             mustGetBool(flags, "force"),
+		Stdout:            mustGetBool(flags, "stdout"),
 	}
 
-	if len(opts.Path) == 0 && !opts.UserTemplateDir && !opts.SystemTemplateDir {
-		logger.Fatal("install requires at least one of: --path, --user-template-dir, --system-template-dir")
+	if len(opts.Path) == 0 && !opts.UserTemplateDir && !opts.SystemTemplateDir && !opts.Stdout {
+		logger.Fatal("install requires at least one of: --path, --user-template-dir, --system-template-dir, --stdout")
 	}
 
 	if err := installer.GitHookInstall(cmd.Context(), cfg, opts); err != nil {
