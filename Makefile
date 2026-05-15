@@ -22,12 +22,12 @@ clean:
 
 .PHONY: completions
 completions: build
-	declare -A outfiles=([bash]=%s [zsh]=_%s [fish]=%s.fish [powershell]=%s.ps1);\
-	for shell in $${!outfiles[*]}; do \
-		mkdir -p "completions/$$shell"; \
-		outfile=$$(printf "completions/$$shell/$${outfiles[$$shell]}" leaktk); \
-		./leaktk completion $$shell >| $$outfile; \
-	done
+	rm -rf completions
+	mkdir -p completions/{bash,zsh,fish,powershell}
+	./leaktk completion bash > completions/bash/leaktk
+	./leaktk completion zsh > completions/zsh/_leaktk
+	./leaktk completion fish > completions/fish/leaktk.fish
+	./leaktk completion powershell > completions/powershell/leaktk.ps1
 
 vet:
 	go vet ./...
