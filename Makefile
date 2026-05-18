@@ -54,16 +54,17 @@ failfast:
 	go test -failfast github.com/leaktk/leaktk ./...
 
 install:
-	install -D ./leaktk $(DESTDIR)$(PREFIX)/bin/leaktk
+	install ${SELINUXOPT} -d -m 0755 $(DESTDIR)$(PREFIX)/bin
+	install ${SELINUXOPT} -m 0755 leaktk $(DESTDIR)$(PREFIX)/bin
 
 .PHONY: install.completions
 install.completions:
-	install ${SELINUXOPT} -d -m 755 $(DESTDIR)${BASHINSTALLDIR}
-	install ${SELINUXOPT} -m 644 completions/bash/leaktk $(DESTDIR)${BASHINSTALLDIR}
-	install ${SELINUXOPT} -d -m 755 $(DESTDIR)${ZSHINSTALLDIR}
-	install ${SELINUXOPT} -m 644 completions/zsh/_leaktk $(DESTDIR)${ZSHINSTALLDIR}
-	install ${SELINUXOPT} -d -m 755 $(DESTDIR)${FISHINSTALLDIR}
-	install ${SELINUXOPT} -m 644 completions/fish/leaktk.fish $(DESTDIR)${FISHINSTALLDIR}
+	install ${SELINUXOPT} -d -m 0755 $(DESTDIR)${BASHINSTALLDIR}
+	install ${SELINUXOPT} -m 0644 completions/bash/leaktk $(DESTDIR)${BASHINSTALLDIR}
+	install ${SELINUXOPT} -d -m 0755 $(DESTDIR)${ZSHINSTALLDIR}
+	install ${SELINUXOPT} -m 0644 completions/zsh/_leaktk $(DESTDIR)${ZSHINSTALLDIR}
+	install ${SELINUXOPT} -d -m 0755 $(DESTDIR)${FISHINSTALLDIR}
+	install ${SELINUXOPT} -m 0644 completions/fish/leaktk.fish $(DESTDIR)${FISHINSTALLDIR}
 
 security-report:
 	trivy fs .

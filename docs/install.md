@@ -80,19 +80,25 @@ There are other ways to do it, but the above attempts to address:
 
 ### **🛠️ Build From Source on Linux & macOS**
 
-If you have Go installed (version 1.23.3 or newer is recommended), you can install leaktk directly using go install:
+First make sure you have the [build dependencies](build.md) installed.
 
-To install the latest version:
+Then run:
 
 ```sh
-CGO_ENABLED=0 GOBIN="${HOME}/.local/bin" go install github.com/leaktk/leaktk@latest
+git clone --depth=1 https://github.com/leaktk/leaktk.git
+cd leaktk
+make
+make install PREFIX="${HOME}/.local"
 ```
 
 Or to install a specific version:
 
 ```sh
 # Replace vX.Y.Z with the specific tag from https://github.com/leaktk/leaktk/releases
-CGO_ENABLED=0 GOBIN="${HOME}/.local/bin" go install github.com/leaktk/leaktk@vX.Y.X
+git clone --revision=vX.Y.Z --depth=1 https://github.com/leaktk/leaktk.git
+cd leaktk
+make
+make install PREFIX="${HOME}/.local"
 ```
 
 You will want to make sure you have `"${HOME}/.local/bin"` in your `PATH` if it
