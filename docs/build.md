@@ -4,27 +4,37 @@ This covers how to build LeakTK from source in more detail.
 
 ## Dependencies
 
-If you have the `CGO_ENABLED` environment variable set to `0`, then
-a standard go build should work out of the box.
+LeakTK can be built with [cgo](https://go.dev/wiki/cgo) enabled or disabled.
+We build our packages with cgo disabled, but this doc will cover the
+dependencies needed to do it with either cgo enabled or disabled.
 
-You can check it with this command:
+If you are using a tool that installs LeakTK automatically like pre-commit.com
+style hooks, we recommend skipping to the section for installing dependencies
+for when cgo is enabled.
+
+Also `pre-commit>=3.0.0` will automatically [bootstrap go](https://pre-commit.com/#golang)
+if it is not present—meaning the only LeakTK build dependancy for pre-commit.com is
+the btrfs package for Linux users.
+
+### Enabling/disabling cgo
+
+You can check if cgo is enabled in your go env with this commmand.
 
 ```sh
 go env | grep '^CGO_ENABLED'
 ```
 
-If it's set to `1` (i.e. it's enabled), you can disable it in your current
+If it's set to `1` it's enabled, and you can disable it in your current
 terminal session like this:
 
 ```sh
 export CGO_ENABLED='0'
 ```
 
-If you want to make it permanent for your go environment, you can run:
+See `go help env` if you want to make it permanent for your go environment, but
+**disabling cgo for your whole go env can cause other builds to fail!**
 
-```sh
-go env -w CGO_ENABLED='0'
-```
+### Dependencies with cgo enabled
 
 If you can't or don't want to build LeakTK with cgo disabled, you will need
 to install these build dependencies:
@@ -32,27 +42,52 @@ to install these build dependencies:
 **Fedora/RHEL:**
 
 ```sh
-sudo dnf install btrfs-progs-devel
+dnf install make git golang btrfs-progs-devel
 ```
 
 **Ubuntu/Debian:**
 
 ```sh
-apt-get install libbtrfs-dev
+apt-get install make git golang libbtrfs-dev
 ```
 
-## Running the Build
+**macOS**
 
-After the dependencies are installed, run this command from the root of the
-project directory:
-
-```
-go build
+```sh
+xcode-select --install
 ```
 
-This should generate a `leaktk` binary in the same directory.
+And follow the steps [here](https://go.dev/doc/install) for installing go or
+homebrew users can run `brew install go`.
 
-> **🗒️ NOTE: If you want version info set**
->
-> LeakTK's version info is set via special build flags. If you want to set
-> the version info, see the `build` target in the [Makefile](../Makefile).
+### Dependencies with cgo disabled
+
+**Fedora/RHEL:**
+
+```sh
+dnf install make golang git
+```
+
+**Ubuntu/Debian:**
+
+```sh
+apt-get install make golang git
+```
+
+**macOS**
+
+```sh
+xcode-select --install
+```
+
+And follow the steps [here](https://go.dev/doc/install) for installing go or
+homebrew users can run `brew install go`.
+
+## Running a build
+
+After the dependencies are installed, run this command from the root directory
+of the project to generate a `leaktk` binary in the same directory:
+
+```sh
+make
+```

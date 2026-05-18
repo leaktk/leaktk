@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-last_version="$(git tag --sort=-v:refname | grep -P '^v\d+\.\d+\.\d+$' | head -n 1 | sed 's/v//g')"
+last_version="$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 | sed 's/v//g')"
 extra_commits="$(git rev-list "v${last_version}..HEAD" --count)"
 
 if [[ "${extra_commits}" -eq 0 ]]
