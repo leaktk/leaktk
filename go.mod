@@ -91,7 +91,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
-	github.com/nwaples/rardecode/v2 v2.2.2 // indirect
+	github.com/nwaples/rardecode/v2 v2.2.3-0.20260517021011-2e0ad088ca48 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/runtime-spec v1.2.1 // indirect
 	github.com/opencontainers/selinux v1.13.1 // indirect
@@ -143,5 +143,3 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 )
-
-replace github.com/nwaples/rardecode/v2 => github.com/leaktk/rardecode/v2 v2.0.0-20260513151212-3ad641aaa9af
