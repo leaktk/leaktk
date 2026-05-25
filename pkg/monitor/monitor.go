@@ -27,5 +27,18 @@ func NewMonitor(sources []sources.Source) *Monitor {
 
 // ScanRequests starts the monitor and yields scan requests
 func (m *Monitor) ScanRequests(yield func(*proto.Request)) {
+	for _, source := range m.sources {
+		go func(src sources.Source) {
+			src.ScanRequests(func(request *proto.Request) {
+				m.scanRequestQueue.Send(&queue.Message[*proto.Request]{
+					Priority: 0,
+					Value:    request,
+				})
+			})
+		}(source)
+	}
 
+	m.scanRequestQueue.Recv(func(msg *queue.Message[*proto.Request]) {
+		yield(msg.Value)
+	})
 }

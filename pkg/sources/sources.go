@@ -4,9 +4,11 @@ import (
 	"fmt"
 
 	"github.com/leaktk/leaktk/pkg/config"
+	"github.com/leaktk/leaktk/pkg/proto"
 )
 
 type Source interface {
+	ScanRequests(yield func(*proto.Request))
 }
 
 func NewSource(srcCfg config.Source) (Source, error) {

@@ -100,14 +100,13 @@ type (
 	// Monitor provides configuration for monitoring sources and generating
 	// scan requests
 	Monitor struct {
-		SourceIDs []string `toml:"source_ids"`
 	}
 
 	// Source provides configuration for fetching resources from a configured source
 	Source struct {
-		ID   string     `toml:"id"`
-		Kind SourceKind `toml:"kind"`
-		URL  string     `toml:"url"`
+		ID   string            `toml:"id"`
+		Kind SourceKind        `toml:"kind"`
+		Auth map[string]string `toml:"auth"`
 	}
 )
 

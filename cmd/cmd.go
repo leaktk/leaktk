@@ -242,16 +242,39 @@ func readLine(reader *bufio.Reader) ([]byte, error) {
 }
 
 func runMonitor(cmd *cobra.Command, args []string) {
+	all, err := cmd.Flags().GetBool("all")
+	if err != nil {
+		logger.Fatal("could not get all flag: %v", err)
+	}
+	if all { // if --all is set, monitor all configured sources
+		args = []string{}
+		for id := range cfg.SourcesByID {
+			args = append(args, id)
+		}
+	}
+
+	format, err := cmd.Flags().GetString("format")
+	if err != nil {
+		logger.Fatal("could not get format flag: %v", err)
+	}
+	if format != "raw" && format != "request" {
+		logger.Fatal("invalid format: format=%q", format)
+	}
+	if format == "raw" {
+		// TODO: implement raw format
+		logger.Fatal("raw format not yet implemented")
+	}
+
 	// Initial sanity checks since there wouldn't be anything to monitor if no
 	// sources are listed
-	monSrcIDSize := len(cfg.Monitor.SourceIDs)
-	if monSrcIDSize == 0 {
-		logger.Fatal("no source IDs listed to monitor")
+	monSrcSize := len(args)
+	if monSrcSize == 0 {
+		logger.Fatal("no sources listed to monitor")
 	}
 
 	// Load the sources from the config
-	srcs := make([]sources.Source, 0, monSrcIDSize)
-	for i, id := range cfg.Monitor.SourceIDs {
+	srcs := make([]sources.Source, 0, monSrcSize)
+	for i, id := range args {
 		srcCfg, srcExists := cfg.SourcesByID[id]
 		if !srcExists {
 			logger.Fatal("monitor source id not defined in sources: id=%q", id)
@@ -260,7 +283,7 @@ func runMonitor(cmd *cobra.Command, args []string) {
 		if err != nil {
 			logger.Fatal("error creating source: %v monitor_source_id_index=%d", err, i)
 		}
-		srcs[i] = src
+		srcs = append(srcs, src)
 	}
 
 	monitor.NewMonitor(srcs).ScanRequests(func(request *proto.Request) {
@@ -274,11 +297,17 @@ func runMonitor(cmd *cobra.Command, args []string) {
 }
 
 func monitorCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "monitor",
 		Short: "Monitor configured sources for leaks",
 		Run:   runMonitor,
 	}
+
+	flags := cmd.Flags()
+	flags.Bool("all", false, "monitor all configured sources")
+	flags.String("format", "request", "output format (raw or request)")
+
+	return cmd
 }
 
 func runListen(cmd *cobra.Command, args []string) {
