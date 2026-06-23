@@ -9,22 +9,24 @@ import (
 	"github.com/leaktk/leaktk/pkg/scanner/betterleaks"
 )
 
+func parseBetterleaksConfig(_ context.Context, rawPatterns string) (any, error) {
+	return betterleaks.ParseConfig(rawPatterns)
+}
+
 // Gitleaks returns a Gitleaks config object, fetching/caching/updating as necessary.
-func (c *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, error) {
+func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, error) {
 	return getOrUpdate(
-		ctx, c,
-		&c.gitleaksPatterns,
-		&c.gitleaksPatternsHash,
+		ctx, p,
+		&p.gitleaksPatterns,
+		&p.gitleaksPatternsHash,
 		"gitleaks",
-		c.config.Gitleaks.LocalPath,
-		c.config.Gitleaks.Version,
-		func(_ context.Context, raw string) (*betterleaksconfig.Config, error) {
-			return betterleaks.ParseConfig(raw)
-		},
+		p.config.Gitleaks.LocalPath,
+		p.config.Gitleaks.Version,
+		parseBetterleaksConfig,
 	)
 }
 
 // GitleaksConfigHash returns the sha256 hash for the current gitleaks config.
-func (c *Patterns) GitleaksConfigHash() string {
-	return fmt.Sprintf("%x", c.gitleaksPatternsHash)
+func (p *Patterns) GitleaksConfigHash() string {
+	return fmt.Sprintf("%x", p.gitleaksPatternsHash)
 }

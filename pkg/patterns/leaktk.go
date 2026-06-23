@@ -13,25 +13,25 @@ type LeakTKPatterns struct {
 }
 
 // LeakTKConfigHash returns the sha256 hash for the current leaktk config.
-func (c *Patterns) LeakTKConfigHash() string {
-	return fmt.Sprintf("%x", c.leaktkPatternsHash)
+func (p *Patterns) LeakTKConfigHash() string {
+	return fmt.Sprintf("%x", p.leaktkPatternsHash)
 }
 
 // LeakTK returns the LeakTKPatterns object, handling fetch/caching/update.
-func (c *Patterns) LeakTK(ctx context.Context) (*LeakTKPatterns, error) {
+func (p *Patterns) LeakTK(ctx context.Context) (*LeakTKPatterns, error) {
 	return getOrUpdate(
-		ctx, c,
-		&c.leaktkPatterns,
-		&c.leaktkPatternsHash,
+		ctx, p,
+		&p.leaktkPatterns,
+		&p.leaktkPatternsHash,
 		"leaktk",
-		c.config.LeakTK.LocalPath,
-		c.config.LeakTK.Version,
-		c.parseLeakTKConfig,
+		p.config.LeakTK.LocalPath,
+		p.config.LeakTK.Version,
+		p.parseLeakTKConfig,
 	)
 }
 
 // parseLeakTKConfig parses the LeakTK patterns config and compiles the Rego policy.
-func (c *Patterns) parseLeakTKConfig(ctx context.Context, rawPatterns string) (*LeakTKPatterns, error) {
+func (p *Patterns) parseLeakTKConfig(ctx context.Context, rawPatterns string) (any, error) {
 	var uncompiledLeakTKPatterns struct {
 		Rego string `json:"opa_policy"`
 	}

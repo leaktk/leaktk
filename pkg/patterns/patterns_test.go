@@ -156,29 +156,20 @@ func TestGitleaksConfigModTimeExceeds(t *testing.T) {
 		cfg := config.DefaultConfig()
 		cfg.Scanner.Patterns.Gitleaks.LocalPath = tempFilePath
 
-		patterns := &Patterns{
-			config: &cfg.Scanner.Patterns,
-		}
-
 		// Test with a modTimeLimit of 5 seconds
-		assert.True(t, patterns.fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
+		assert.True(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
 
 		// Test with a modTimeLimit of 15 seconds
-		assert.False(t, patterns.fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
+		assert.False(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
 	})
 
 	t.Run("FileDoesNotExist", func(t *testing.T) {
 		cfg := config.DefaultConfig()
 		cfg.Scanner.Patterns.Gitleaks.LocalPath = "/path/to/nonexistent/file.toml"
 
-		// Create a Patterns instance with a non-existent file path
-		patterns := &Patterns{
-			config: &cfg.Scanner.Patterns,
-		}
-
 		// Test with any modTimeLimit
-		assert.True(t, patterns.fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
-		assert.True(t, patterns.fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
+		assert.True(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
+		assert.True(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
 	})
 
 	t.Run("FileExistsButErrorOnStat", func(t *testing.T) {
@@ -186,12 +177,8 @@ func TestGitleaksConfigModTimeExceeds(t *testing.T) {
 		cfg := config.DefaultConfig()
 		cfg.Scanner.Patterns.Gitleaks.LocalPath = "/dev/zero"
 
-		patterns := &Patterns{
-			config: &cfg.Scanner.Patterns,
-		}
-
 		// Test with any modTimeLimit
-		assert.True(t, patterns.fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
-		assert.True(t, patterns.fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
+		assert.True(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
+		assert.True(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
 	})
 }
