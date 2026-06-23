@@ -251,7 +251,7 @@ func scanCommand() *cobra.Command {
 
 	flags := scanCommand.Flags()
 	flags.String("id", id.ID(), "Set the ID request ID that will be displayed in the response and logs")
-	flags.StringP("kind", "k", "GitRepo", "Specify the kind of resource being scanned")
+	flags.StringP("kind", "k", "GitRepo", "Specify the kind of resource being scanned (ContainerImage, Files, GitRepo, JSONData, Text, URL)")
 	flags.StringP("options", "o", "{}", "Provide scan specific options formatted as JSON")
 	flags.Int("leak-exit-code", 0, "Exit with this code when leaks are detected (default 0)")
 	flags.String("gitleaks-config", "", "Load a custom gitleaks config")
