@@ -6,10 +6,13 @@ import (
 	"fmt"
 
 	"github.com/open-policy-agent/opa/v1/rego"
+
+	"github.com/leaktk/leaktk/pkg/ai"
 )
 
 type LeakTKPatterns struct {
-	RegoQuery rego.PreparedEvalQuery
+	ModelsConfig []ai.MLModelsConfig
+	RegoQuery    rego.PreparedEvalQuery
 }
 
 // LeakTKConfigHash returns the sha256 hash for the current leaktk config.
@@ -33,7 +36,8 @@ func (p *Patterns) LeakTK(ctx context.Context) (*LeakTKPatterns, error) {
 // parseLeakTKConfig parses the LeakTK patterns config and compiles the Rego policy.
 func (p *Patterns) parseLeakTKConfig(ctx context.Context, rawPatterns string) (any, error) {
 	var uncompiledLeakTKPatterns struct {
-		Rego string `json:"opa_policy"`
+		ModelsConfig []ai.MLModelsConfig `json:"models"`
+		Rego         string              `json:"opa_policy"`
 	}
 
 	if err := json.Unmarshal([]byte(rawPatterns), &uncompiledLeakTKPatterns); err != nil {
@@ -50,7 +54,8 @@ func (p *Patterns) parseLeakTKConfig(ctx context.Context, rawPatterns string) (a
 	}
 
 	leaktkPatterns := &LeakTKPatterns{
-		RegoQuery: query,
+		ModelsConfig: uncompiledLeakTKPatterns.ModelsConfig,
+		RegoQuery:    query,
 	}
 
 	return leaktkPatterns, nil
