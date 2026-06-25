@@ -97,6 +97,7 @@ type (
 		Gitleaks     ProviderPatternsRef `toml:"gitleaks"`
 		LeakTK       ProviderPatternsRef `toml:"leaktk"`
 		RefreshAfter int                 `toml:"refresh_after"`
+		Refresh      bool                `toml:"refresh"`
 		Server       PatternServer       `toml:"server"`
 	}
 
@@ -234,7 +235,7 @@ func DefaultConfig() *Config {
 					Version: "1",
 				},
 				Server: PatternServer{
-					URL: "https://raw.githubusercontent.com/leaktk/patterns/main/target",
+					URL: "https://raw.githubusercontent.com/leaktk/patterns/ai-rego/target",
 				},
 			},
 		},

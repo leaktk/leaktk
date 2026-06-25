@@ -309,6 +309,9 @@ func (s *Scanner) listen() {
 			Error:     scanErr,
 			Results:   results,
 		}
+		
+		leaktkCfg, err := s.patterns.LeakTK(ctx)
+		logger.Info("LeakTK: ", leaktkCfg.RegoQuery, s.analyst)
 
 		if s.analyst != nil {
 			logger.Info("analyzing response: id=%q response_id=%q", request.ID, response.ID)
