@@ -315,7 +315,7 @@ func (s *Scanner) listen() {
 		}
 
 		leaktkCfg, err := s.patterns.LeakTK(ctx)
-		logger.Debug("LeakTK: ", leaktkCfg)
+		logger.Info("LeakTK: ", leaktkCfg)
 
 		if s.analyst != nil {
 			logger.Info("analyzing response: id=%q response_id=%q", request.ID, response.ID)

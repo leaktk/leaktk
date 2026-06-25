@@ -235,7 +235,7 @@ func DefaultConfig() *Config {
 					Version: "1",
 				},
 				Server: PatternServer{
-					URL: "https://raw.githubusercontent.com/leaktk/patterns/ai-rego/target",
+					URL: "https://raw.githubusercontent.com/leaktk/patterns/main/target",
 				},
 			},
 		},
