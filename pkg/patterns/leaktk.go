@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/open-policy-agent/opa/v1/rego"
-	"github.com/open-policy-agent/opa/ast"
-	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/ai"
+	"github.com/leaktk/leaktk/pkg/proto"
+	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/v1/rego"
 )
 
 type LeakTKPatterns struct {
@@ -57,7 +57,7 @@ func (p *Patterns) parseLeakTKConfig(ctx context.Context, rawPatterns string) (a
 		}
 
 		findingBytes, err := json.Marshal(findingRaw)
-		if err != nil { 
+		if err != nil {
 			return nil, fmt.Errorf("leaktk.ai.RunModel: failed to marshal finding: %w", err)
 		}
 
@@ -65,7 +65,6 @@ func (p *Patterns) parseLeakTKConfig(ctx context.Context, rawPatterns string) (a
 		if err := json.Unmarshal(findingBytes, &result); err != nil {
 			return nil, fmt.Errorf("leaktk.ai.RunModel: failed to parse finding into proto.Result: %w", err)
 		}
-
 
 		analyst := ai.NewAnalyst(uncompiledLeakTKPatterns.ModelsConfig)
 		analysis, err := analyst.Analyze(modelName, &result)

@@ -313,7 +313,7 @@ func (s *Scanner) listen() {
 			Error:     scanErr,
 			Results:   results,
 		}
-		
+
 		leaktkCfg, err := s.patterns.LeakTK(ctx)
 		logger.Debug("LeakTK: ", leaktkCfg)
 
