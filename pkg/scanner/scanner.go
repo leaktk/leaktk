@@ -14,11 +14,12 @@ import (
 	"github.com/betterleaks/betterleaks/report"
 
 	"github.com/leaktk/leaktk/internal/git"
-
+	"github.com/leaktk/leaktk/pkg/analyst"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/pkg/patterns"
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/queue"
 	"github.com/leaktk/leaktk/pkg/scanner/betterleaks"
@@ -41,36 +42,44 @@ const (
 
 // Scanner holds the config and state for the scanner processes
 type Scanner struct {
-	allowLocal      bool
-	scanTimeout     time.Duration
-	clonesDir       string
-	maxArchiveDepth int
-	maxDecodeDepth  int
-	maxScanDepth    int
-	patterns        *Patterns
-	responseQueue   *queue.PriorityQueue[*proto.Response]
-	scanQueue       *queue.PriorityQueue[*proto.Request]
-	scanWorkers     int
+	allowLocal       bool
+	scanTimeout      time.Duration
+	clonesDir        string
+	maxArchiveDepth  int
+	maxDecodeDepth   int
+	maxScanDepth     int
+	patterns         *patterns.Patterns
+	responseQueue    *queue.PriorityQueue[*proto.Response]
+	scanQueue        *queue.PriorityQueue[*proto.Request]
+	scanWorkers      int
+	analyst          *analyst.Analyst
+	analyzeResponses bool
 }
 
 // NewScanner returns a initialized and listening scanner instance that should
 // be closed when it's no longer needed.
 func NewScanner(cfg *config.Config) *Scanner {
+	p := patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient())
 	scanner := &Scanner{
-		allowLocal:      cfg.Scanner.AllowLocal,
-		scanTimeout:     time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
-		clonesDir:       filepath.Join(cfg.Scanner.Workdir, "clones"),
-		maxArchiveDepth: cfg.Scanner.MaxArchiveDepth,
-		maxDecodeDepth:  cfg.Scanner.MaxDecodeDepth,
-		maxScanDepth:    cfg.Scanner.MaxScanDepth,
-		patterns:        NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
-		responseQueue:   queue.NewPriorityQueue[*proto.Response](initQueueCapacity, cfg.Scanner.MaxResponseQueueSize),
-		scanQueue:       queue.NewPriorityQueue[*proto.Request](initQueueCapacity, cfg.Scanner.MaxScanQueueSize),
-		scanWorkers:     cfg.Scanner.ScanWorkers,
+		allowLocal:       cfg.Scanner.AllowLocal,
+		scanTimeout:      time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
+		clonesDir:        filepath.Join(cfg.Scanner.Workdir, "clones"),
+		maxArchiveDepth:  cfg.Scanner.MaxArchiveDepth,
+		maxDecodeDepth:   cfg.Scanner.MaxDecodeDepth,
+		maxScanDepth:     cfg.Scanner.MaxScanDepth,
+		patterns:         patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
+		responseQueue:    queue.NewPriorityQueue[*proto.Response](initQueueCapacity, cfg.Scanner.MaxResponseQueueSize),
+		scanQueue:        queue.NewPriorityQueue[*proto.Request](initQueueCapacity, cfg.Scanner.MaxScanQueueSize),
+		scanWorkers:      cfg.Scanner.ScanWorkers,
+		analyst:          analyst.NewAnalyst(p),
+		analyzeResponses: true,
+	}
+
+	if cfg.Scanner.EnableAnalysis {
+		scanner.analyst = analyst.NewAnalyst(scanner.patterns)
 	}
 
 	scanner.start()
-
 	return scanner
 }
 
@@ -297,27 +306,42 @@ func (s *Scanner) listen() {
 			results[i] = findingToResult(request, &finding)
 		}
 
-		logger.Info("queueing response: id=%q queue_size=%d", request.ID, s.responseQueue.Size()+1)
+		response := &proto.Response{
+			ID:        id.ID(),
+			Kind:      proto.ScanResultsResponseKind,
+			RequestID: request.ID,
+			Error:     scanErr,
+			Results:   results,
+		}
+
+		leaktkCfg, err := s.patterns.LeakTK(ctx)
+		logger.Info("LeakTK: ", leaktkCfg)
+
+		if s.analyst != nil {
+			logger.Info("analyzing response: id=%q response_id=%q", request.ID, response.ID)
+			if analyzedResponse, err := s.analyst.Analyze(ctx, response); err != nil {
+				logger.Error("response analysis failed: %v id=%q response_id=%q", err, request.ID, response.ID)
+			} else {
+				response = analyzedResponse
+			}
+		}
+
+		logger.Info("queueing response: id=%q response_id=%q", request.ID, response.ID)
 		s.responseQueue.Send(&queue.Message[*proto.Response]{
 			Priority: msg.Priority,
-			Value: &proto.Response{
-				ID:        id.ID(),
-				Kind:      proto.ScanResultsResponseKind,
-				RequestID: request.ID,
-				Error:     scanErr,
-				Results:   results,
-			},
+			Value:    response,
 		})
 	})
 }
 
 func (s *Scanner) respondWithError(request *proto.Request, err *proto.Error) {
-	logger.Info("queueing response: id=%q queue_size=%d", request.ID, s.responseQueue.Size()+1)
-	logger.Error("scan error: %v id=%q", err, request.ID)
+	responseID := id.ID()
+	logger.Info("queueing response: id=%q response_id=%q queue_size=%d", request.ID, responseID, s.responseQueue.Size()+1)
+	logger.Error("scan error: %v id=%q response_id=%q", err, request.ID, responseID)
 	s.responseQueue.Send(&queue.Message[*proto.Response]{
 		Priority: request.Opts.Priority,
 		Value: &proto.Response{
-			ID:        id.ID(),
+			ID:        responseID,
 			Kind:      proto.ScanResultsResponseKind,
 			RequestID: request.ID,
 			Error:     err,
@@ -356,12 +380,13 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 			strconv.Itoa(finding.EndColumn),
 			finding.RuleID,
 		),
-		Secret:  finding.Secret,
-		Match:   finding.Match,
-		Context: finding.Line,
-		Entropy: finding.Entropy,
-		Date:    finding.Date,
-		Notes:   map[string]string{},
+		Secret:   finding.Secret,
+		Match:    finding.Match,
+		Context:  finding.Line,
+		Entropy:  finding.Entropy,
+		Date:     finding.Date,
+		Notes:    map[string]string{},
+		Analysis: map[string]any{},
 		Contact: proto.Contact{
 			Name:  finding.Author,
 			Email: finding.Email,
