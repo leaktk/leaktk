@@ -53,22 +53,26 @@ type Scanner struct {
 	scanQueue       *queue.PriorityQueue[*proto.Request]
 	scanWorkers     int
 	analyst         *analyst.Analyst
+	analyzeResponses bool
 }
 
 // NewScanner returns a initialized and listening scanner instance that should
 // be closed when it's no longer needed.
 func NewScanner(cfg *config.Config) *Scanner {
+	p := patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient())
 	scanner := &Scanner{
-		allowLocal:      cfg.Scanner.AllowLocal,
-		scanTimeout:     time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
-		clonesDir:       filepath.Join(cfg.Scanner.Workdir, "clones"),
-		maxArchiveDepth: cfg.Scanner.MaxArchiveDepth,
-		maxDecodeDepth:  cfg.Scanner.MaxDecodeDepth,
-		maxScanDepth:    cfg.Scanner.MaxScanDepth,
-		patterns:        patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
-		responseQueue:   queue.NewPriorityQueue[*proto.Response](initQueueCapacity, cfg.Scanner.MaxResponseQueueSize),
-		scanQueue:       queue.NewPriorityQueue[*proto.Request](initQueueCapacity, cfg.Scanner.MaxScanQueueSize),
-		scanWorkers:     cfg.Scanner.ScanWorkers,
+		allowLocal:       cfg.Scanner.AllowLocal,
+		scanTimeout:      time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
+		clonesDir:        filepath.Join(cfg.Scanner.Workdir, "clones"),
+		maxArchiveDepth:  cfg.Scanner.MaxArchiveDepth,
+		maxDecodeDepth:   cfg.Scanner.MaxDecodeDepth,
+		maxScanDepth:     cfg.Scanner.MaxScanDepth,
+		patterns:         patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
+		responseQueue:    queue.NewPriorityQueue[*proto.Response](initQueueCapacity, cfg.Scanner.MaxResponseQueueSize),
+		scanQueue:        queue.NewPriorityQueue[*proto.Request](initQueueCapacity, cfg.Scanner.MaxScanQueueSize),
+		scanWorkers:      cfg.Scanner.ScanWorkers,
+		analyst:          analyst.NewAnalyst(p),
+		analyzeResponses: true,
 	}
 
 	if cfg.Scanner.EnableAnalysis {
@@ -310,10 +314,14 @@ func (s *Scanner) listen() {
 			Results:   results,
 		}
 
+		leaktkCfg, err := s.patterns.LeakTK(ctx)
+		logger.Info("LeakTK: ", leaktkCfg.RegoQuery, s.analyst)
+
 		if s.analyst != nil {
-			logger.Info("analyzing response: id=%q response_id=%q", request.ID, response.ID)
-			if analyzedResponse, err := s.analyst.Analyze(ctx, response); err != nil {
-				logger.Error("response analysis failed: %v id=%q response_id=%q", err, request.ID, response.ID)
+			logger.Info("analyzing reponse: id=%q", response.ID)
+			analyzedResponse, err := s.analyst.Analyze(ctx, response)
+			if err != nil {
+				logger.Error("error analyzing response: %v", err)
 			} else {
 				response = analyzedResponse
 			}

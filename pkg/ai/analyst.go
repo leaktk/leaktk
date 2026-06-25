@@ -52,11 +52,11 @@ type Coefficients struct {
 	SecretHasDictionaryWord      float64 `json:"secret_has_dictionary_word"`
 }
 
-func (a *Analyst) Analyze(model string, modelsConfig []MLModelsConfig, result *proto.Result) (*AnalysisResult, error) {
+func (a *Analyst) Analyze(model string, result *proto.Result) (*AnalysisResult, error) {
 
 	var modelData MLModelsConfig
 	found := false
-	for _, mData := range modelsConfig {
+	for _, mData := range a.models {
 		if mData.Kind == model {
 			modelData = mData
 			found = true
@@ -118,6 +118,7 @@ func runLogisticRegression(f *Features, c *Coefficients) float64 {
 		f.SecretHasStopword*c.SecretHasStopword +
 		f.MatchHasStopword*c.MatchHasStopword +
 		f.SecretHasDictionaryWord*c.SecretHasDictionaryWord
+		//logger.Info("log reg ran")
 	return 1.0 / (1.0 + math.Exp(-z))
 }
 
@@ -142,7 +143,7 @@ func ParseConfig(rawConfig string) (*MLModelsConfig, error) {
 	return config, nil
 }
 
-var RunModelBuiltin = &rego.Function{
+var RunModelBuiltIn = &rego.Function{
 	Name: "leaktk.ai.RunModel",
 	Decl: types.NewFunction(
 		types.Args(types.S, types.A),

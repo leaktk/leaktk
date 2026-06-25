@@ -7,6 +7,8 @@ import (
 	"github.com/open-policy-agent/opa/v1/rego"
 
 	"github.com/go-viper/mapstructure/v2"
+	"github.com/leaktk/leaktk/pkg/logger"
+
 
 	"github.com/leaktk/leaktk/pkg/patterns"
 	"github.com/leaktk/leaktk/pkg/proto"
@@ -44,6 +46,7 @@ func (a *Analyst) Analyze(ctx context.Context, response *proto.Response) (*proto
 	if err := mapstructure.Decode(results[0].Expressions[0].Value, &analyzedResponse); err != nil {
 		return nil, fmt.Errorf("could not bind analyzed response: %w", err)
 	}
+	logger.Info("Analyzed Response", analyzedResponse)
 
 	return analyzedResponse, nil
 }

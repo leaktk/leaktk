@@ -104,6 +104,12 @@ func runScan(cmd *cobra.Command, args []string) {
 		logger.Fatal("invalid gitleaks-config: %v", err.Error())
 	}
 
+	refresh, err := cmd.Flags().GetBool("refresh")
+	if err != nil {
+		logger.Fatal("invalid refresh value: %v", err.Error())
+	}
+	cfg.Scanner.Patterns.Refresh = refresh
+
 	// Providing a gitleaks-config via command line arguments takes
 	// precedence over gitleaks config set in the leaktk config file
 	if len(gitleaksConfig) != 0 {
@@ -264,6 +270,7 @@ func scanCommand() *cobra.Command {
 	flags.StringP("options", "o", "{}", "Provide scan specific options formatted as JSON")
 	flags.Int("leak-exit-code", 0, "Exit with this code when leaks are detected (default 0)")
 	flags.String("gitleaks-config", "", "Load a custom gitleaks config")
+	flags.BoolP("refresh", "r", false, "Refresh patterns")
 
 	return scanCommand
 }

@@ -53,6 +53,7 @@ func (p *Patterns) fetchURLFor(provider, version string) (string, error) {
 
 // fetchAndUpdate fetches patterns from server, checks hash, and updates if changed.
 func (p *Patterns) fetchAndUpdate(ctx context.Context, parse parseFunc, fetchURL, localPath string, currentHash *hashDgst) (any, *hashDgst, error) {
+	logger.Info("fetchURL:", fetchURL)
 	rawPatterns, err := fetchPatterns(ctx, p.client, fetchURL, p.config.Server.AuthToken)
 	if err != nil {
 		return nil, nil, err
@@ -106,7 +107,7 @@ func getOrUpdate[T any](
 	cfg := p.config
 	modTimeExceeds := fileModTimeExceeds(localPath, cfg.RefreshAfter)
 
-	if cfg.Autofetch && modTimeExceeds {
+	if cfg.Autofetch && modTimeExceeds || cfg.Refresh == true {
 		logger.Info("fetching %s patterns", resourceName)
 
 		fetchURL, err := p.fetchURLFor(resourceName, version)
