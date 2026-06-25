@@ -42,33 +42,37 @@ const (
 
 // Scanner holds the config and state for the scanner processes
 type Scanner struct {
-	allowLocal      bool
-	scanTimeout     time.Duration
-	clonesDir       string
-	maxArchiveDepth int
-	maxDecodeDepth  int
-	maxScanDepth    int
-	patterns        *patterns.Patterns
-	responseQueue   *queue.PriorityQueue[*proto.Response]
-	scanQueue       *queue.PriorityQueue[*proto.Request]
-	scanWorkers     int
-	analyst         *analyst.Analyst
+	allowLocal       bool
+	scanTimeout      time.Duration
+	clonesDir        string
+	maxArchiveDepth  int
+	maxDecodeDepth   int
+	maxScanDepth     int
+	patterns         *patterns.Patterns
+	responseQueue    *queue.PriorityQueue[*proto.Response]
+	scanQueue        *queue.PriorityQueue[*proto.Request]
+	scanWorkers      int
+	analyst          *analyst.Analyst
+	analyzeResponses bool
 }
 
 // NewScanner returns a initialized and listening scanner instance that should
 // be closed when it's no longer needed.
 func NewScanner(cfg *config.Config) *Scanner {
+	p := patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient())
 	scanner := &Scanner{
-		allowLocal:      cfg.Scanner.AllowLocal,
-		scanTimeout:     time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
-		clonesDir:       filepath.Join(cfg.Scanner.Workdir, "clones"),
-		maxArchiveDepth: cfg.Scanner.MaxArchiveDepth,
-		maxDecodeDepth:  cfg.Scanner.MaxDecodeDepth,
-		maxScanDepth:    cfg.Scanner.MaxScanDepth,
-		patterns:        patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
-		responseQueue:   queue.NewPriorityQueue[*proto.Response](initQueueCapacity, cfg.Scanner.MaxResponseQueueSize),
-		scanQueue:       queue.NewPriorityQueue[*proto.Request](initQueueCapacity, cfg.Scanner.MaxScanQueueSize),
-		scanWorkers:     cfg.Scanner.ScanWorkers,
+		allowLocal:       cfg.Scanner.AllowLocal,
+		scanTimeout:      time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
+		clonesDir:        filepath.Join(cfg.Scanner.Workdir, "clones"),
+		maxArchiveDepth:  cfg.Scanner.MaxArchiveDepth,
+		maxDecodeDepth:   cfg.Scanner.MaxDecodeDepth,
+		maxScanDepth:     cfg.Scanner.MaxScanDepth,
+		patterns:         patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
+		responseQueue:    queue.NewPriorityQueue[*proto.Response](initQueueCapacity, cfg.Scanner.MaxResponseQueueSize),
+		scanQueue:        queue.NewPriorityQueue[*proto.Request](initQueueCapacity, cfg.Scanner.MaxScanQueueSize),
+		scanWorkers:      cfg.Scanner.ScanWorkers,
+		analyst:          analyst.NewAnalyst(p),
+		analyzeResponses: true,
 	}
 
 	if cfg.Scanner.EnableAnalysis {
@@ -311,7 +315,7 @@ func (s *Scanner) listen() {
 		}
 		
 		leaktkCfg, err := s.patterns.LeakTK(ctx)
-		logger.Info("LeakTK: ", leaktkCfg.RegoQuery, s.analyst)
+		logger.Debug("LeakTK: ", leaktkCfg)
 
 		if s.analyst != nil {
 			logger.Info("analyzing response: id=%q response_id=%q", request.ID, response.ID)

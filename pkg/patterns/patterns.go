@@ -106,7 +106,7 @@ func getOrUpdate[T any](
 	cfg := p.config
 	modTimeExceeds := fileModTimeExceeds(localPath, cfg.RefreshAfter)
 
-	if cfg.Autofetch && modTimeExceeds {
+	if cfg.Autofetch && modTimeExceeds || cfg.Refresh == true {
 		logger.Info("fetching %s patterns", resourceName)
 
 		fetchURL, err := p.fetchURLFor(resourceName, version)
