@@ -24,18 +24,21 @@ type HookKind string
 type Hook string
 
 const (
-	GitHookKind = HookKind("git")
+	GitHookKind   = HookKind("git")
+	PosixHookKind = HookKind("posix")
 )
 
 const (
 	GitPreCommitHook  = Hook(GitHookKind + ".pre-commit")
 	GitPreReceiveHook = Hook(GitHookKind + ".pre-receive")
+	PosixStdioHook    = Hook(PosixHookKind + ".stdio")
 )
 
 // Hooks defines all the hooks suported
 var Hooks = []Hook{
 	GitPreCommitHook,
 	GitPreReceiveHook,
+	PosixStdioHook,
 }
 
 // Name returns the full name of the hook
@@ -69,6 +72,8 @@ func Run(cfg *config.Config, hook Hook, args []string) (int, error) {
 		return gitPreReceiveRun(cfg, hook, args)
 	case GitPreCommitHook:
 		return gitPreCommitRun(cfg, hook, args)
+	case PosixStdioHook:
+		return posixStdioRun(cfg, hook, args)
 	default:
 		return 1, fmt.Errorf("invalid hookname: hookname=%q", hook.Name())
 	}
