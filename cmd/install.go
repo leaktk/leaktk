@@ -104,7 +104,7 @@ func runPosixHookInstall(cmd *cobra.Command, args []string) {
 	}
 
 	if !opts.Bashrc && !opts.Zshrc && !opts.Stdout {
-		logger.Fatal("install requires at least oneof: --bashrc, --zshrc, --stdout")
+		logger.Fatal("install requires at least one of: --bashrc, --zshrc, --stdout")
 	}
 
 	if err := installer.PosixStdioHookInstall(cmd.Context(), cfg, opts); err != nil {
