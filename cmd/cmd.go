@@ -341,6 +341,39 @@ func versionCommand() *cobra.Command {
 	}
 }
 
+func runRedact(cmd *cobra.Command, args []string) {
+	flags := cmd.Flags()
+
+	kind := mustGetString(flags, "kind")
+	redactionMark := mustGetString(flags, "redaction-mark")
+	redactionWord := mustGetString(flags, "redaction-word")
+
+	leaktkScanner := scanner.NewScanner(cfg)
+
+	err := leaktkScanner.RedactStream(cmd.Context(), os.Stdin, os.Stdout, kind, redactionMark, redactionWord)
+	if err != nil {
+		logger.Fatal("redact stream execution failed: %v", err)
+	}
+}
+
+func redactCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "redact",
+		Short: "Reads data from stdin, redacts secrets, and prints to stdout",
+		Run:   runRedact,
+	}
+
+	flags := cmd.Flags()
+
+	flags.String("kind", "Stdio", "The analytical kind of profile to use")
+	flags.String("redaction-mark", "*", "Replace each character of the secret with this character")
+	flags.String("redaction-word", "", "Replace the whole secret with this word")
+
+	cmd.MarkFlagsMutuallyExclusive("redaction-mark", "redaction-word")
+
+	return cmd
+}
+
 func configure(cmd *cobra.Command, args []string) error {
 	switch cmd.Use {
 	case "listen":
@@ -402,6 +435,7 @@ func rootCommand() *cobra.Command {
 	rootCommand.AddCommand(hookCommand())
 	rootCommand.AddCommand(listenCommand())
 	rootCommand.AddCommand(versionCommand())
+	rootCommand.AddCommand(redactCommand())
 
 	return rootCommand
 }
