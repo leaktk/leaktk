@@ -1,5 +1,14 @@
 package hooks
 
+import (
+	"github.com/leaktk/leaktk/pkg/config"
+	"github.com/leaktk/leaktk/pkg/logger"
+
+	"fmt"
+	"os"
+	"strings"
+)
+
 func posixStdioRun(cfg *config.Config, hook Hook, _ []string) (int, error) {
 	hookScript := `
 	exec 3>&1
