@@ -50,7 +50,7 @@ func (s *Scanner) RedactStream(
 				chunk := string(buf[:n])
 				sanitizedChunk, err := s.scanChunk(ctx, detector, chunk, redactionMark, redactionWord)
 				if err != nil {
-					return fmt.Errorf("Unable to scan chunk: %w", err)
+					return fmt.Errorf("unable to scan chunk: %w", err)
 				}
 				if _, writeErr := w.Write([]byte(sanitizedChunk)); writeErr != nil {
 					return writeErr
@@ -72,7 +72,7 @@ func (s *Scanner) RedactStream(
 func (s *Scanner) scanChunk(ctx context.Context, detector *detect.Detector, chunk string, mark string, word string) (string, error) {
 	findings, err := betterleaks.ScanReader(ctx, detector, strings.NewReader(chunk))
 	if err != nil {
-		return "", fmt.Errorf("Betterleaks error: %w", err)
+		return "", fmt.Errorf("betterleaks error: %w", err)
 	}
 
 	if len(findings) == 0 {
