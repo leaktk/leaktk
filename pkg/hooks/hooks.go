@@ -24,7 +24,7 @@ type HookKind string
 type Hook string
 
 const (
-	GitHookKind   = HookKind("git")
+	GitHookKind = HookKind("git")
 )
 
 const (

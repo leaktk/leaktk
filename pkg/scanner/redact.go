@@ -2,10 +2,10 @@ package scanner
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"time"
-	"fmt"
 
 	"github.com/betterleaks/betterleaks/detect"
 	"github.com/leaktk/leaktk/pkg/scanner/betterleaks"
