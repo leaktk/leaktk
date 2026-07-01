@@ -9,7 +9,6 @@ import (
 
 	"github.com/betterleaks/betterleaks/detect"
 	"github.com/leaktk/leaktk/pkg/scanner/betterleaks"
-	"github.com/leaktk/leaktk/pkg/logger"
 )
 
 func (s *Scanner) RedactStream(
@@ -47,9 +46,7 @@ func (s *Scanner) RedactStream(
 			return ctx.Err()
 		default:
 			n, err := r.Read(buf)
-			logger.Info("About to scan")
 			if n > 0 {
-				logger.Info("2")
 				chunk := string(buf[:n])
 				sanitizedChunk, err := s.scanChunk(ctx, detector, chunk, redactionMark, redactionWord)
 				if err != nil {
@@ -73,14 +70,12 @@ func (s *Scanner) RedactStream(
 }
 
 func (s *Scanner) scanChunk(ctx context.Context, detector *detect.Detector, chunk string, mark string, word string) (string, error) {
-	logger.Info("Scanning: ", strings.NewReader(chunk))
 	findings, err := betterleaks.ScanReader(ctx, detector, strings.NewReader(chunk))
 	if err != nil {
 		return "", fmt.Errorf("Betterleaks error: %w", err)
 	}
 
 	if len(findings) == 0 {
-		logger.Info("nothing found")
 		return chunk, nil
 	}
 
