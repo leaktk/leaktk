@@ -56,22 +56,6 @@ func gitHookInstallCommand(hook hooks.Hook) *cobra.Command {
 	return cmd
 }
 
-func posixHookInstallCommand(hook hooks.Hook) *cobra.Command {
-	hookname := hook.Name()
-	cmd := &cobra.Command{
-		Use:   hookname,
-		Short: "Install and configure " + hookname,
-		Run:   runPosixHookInstall,
-	}
-	flags := cmd.Flags()
-	var bashrc, zshrc, stdout bool
-	flags.BoolVar(&bashrc, "bashrc", false, "Target ~/.bashrc for installation")
-	flags.BoolVar(&zshrc, "zshrc", false, "Target ~/.zshrc for isntallation")
-	flags.BoolVar(&stdout, "stdout", false, "Print the command to stdout for ad-hoc custom installs")
-	cmd.MarkFlagsMutuallyExclusive("bashrc", "zshrc", "stdout")
-	return cmd
-}
-
 func runGitHookInstall(cmd *cobra.Command, args []string) {
 	flags := cmd.Flags()
 	opts := installer.GitHookOpts{

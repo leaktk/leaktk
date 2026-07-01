@@ -73,13 +73,14 @@ func (s *Scanner) RedactStream(
 }
 
 func (s *Scanner) scanChunk(ctx context.Context, detector *detect.Detector, chunk string, mark string, word string) (string, error) {
-	logger.Info("Scanning")
+	logger.Info("Scanning: ", strings.NewReader(chunk))
 	findings, err := betterleaks.ScanReader(ctx, detector, strings.NewReader(chunk))
 	if err != nil {
 		return "", fmt.Errorf("Betterleaks error: %w", err)
 	}
 
 	if len(findings) == 0 {
+		logger.Info("nothing found")
 		return chunk, nil
 	}
 
