@@ -3,14 +3,17 @@ package cmd
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -20,9 +23,9 @@ import (
 	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/proto"
+	"github.com/leaktk/leaktk/pkg/redactor"
 	"github.com/leaktk/leaktk/pkg/scanner"
 	"github.com/leaktk/leaktk/pkg/version"
-	"github.com/leaktk/leaktk/pkg/redactor"
 )
 
 var cfg *config.Config
@@ -342,18 +345,18 @@ func versionCommand() *cobra.Command {
 	}
 }
 
-func yieldChunks(ctx, r io.Reader, yield func(chunk []byte, err error) error) error {
+func yieldChunks(ctx context.Context, r io.Reader, yield func(chunk []byte, err error) error) error {
 	buf := make([]byte, 64*1024)
-  for {
+	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
 			n, err := r.Read(buf)
-      if err := yield(buf[:n], err); err != nil {
-        return err
-      }
-    }
+			if err := yield(buf[:n], err); err != nil {
+				return err
+			}
+		}
 	}
 }
 
@@ -363,50 +366,50 @@ func runRedact(cmd *cobra.Command, args []string) {
 	kind := mustGetString(flags, "kind")
 	if redactionMark := mustGetString(flags, "redaction-mark"); redactionMark != "*" {
 		cfg.Redactor.RedactionMark = redactionMark
-  }
-  if redactionWord := mustGetString(flags, "redaction-word"); redactionWord != "" {
+	}
+	if redactionWord := mustGetString(flags, "redaction-word"); redactionWord != "" {
 		cfg.Redactor.RedactionWord = redactionWord
-  }
+	}
 
 	var wg sync.WaitGroup
 	leaktkScanner := scanner.NewScanner(cfg)
 	leaktkRedactor := redactor.NewRedactor(cfg)
 
 	// Note: As more kinds are supported this will be refactored
-  // the code below will be moved into the redactor
-	if kind != "Stdio"{
+	// the code below will be moved into the redactor
+	if kind != "Stdio" {
 		logger.Fatal("unsupported kind: kind=%q", kind)
 	}
 
 	go leaktkScanner.Recv(func(response *proto.Response) {
-    if len(response.Results) > 0 {
-      redactedText, err := leaktkRedactor.RedactText(response.Resource, response)
-      if err != nil {
-        logger.Error("could not redact text: %v, offset=%s, len=%d", err, response.ID, len(response.Resource))
-      }
-      fmt.Print(redactedText)
-    }
-    wg.Done()
-  })
+		if len(response.Results) > 0 {
+			redactedText, err := leaktkRedactor.RedactText(response.Resource, response)
+			if err != nil {
+				logger.Error("could not redact text: %v, offset=%s, len=%d", err, response.ID, len(response.Resource))
+			}
+			fmt.Print(redactedText)
+		}
+		wg.Done()
+	})
 
-  offset := 0
-  err := yieldChunks(cmd.Context(), func(chunk []byte, err error) error {
-  	if chunkSize := len(chunk); chunkSize > 0 { 
-    	offset += chunkSize
-    	wg.Add(1)
-    	leaktkScanner.Send(&proto.Request{
-      	ID: strconv.Itoa(offset) ,
-      	Kind: proto.TextRequestKind,
-      	Resource: string(chunk),
-    	})
-  	}
-  	time.Sleep(128 * time.Millisecond)
-  	return err 
-  })
+	offset := 0
+	err := yieldChunks(cmd.Context(), os.Stdin, func(chunk []byte, err error) error {
+		if chunkSize := len(chunk); chunkSize > 0 {
+			offset += chunkSize
+			wg.Add(1)
+			leaktkScanner.Send(&proto.Request{
+				ID:       strconv.Itoa(offset),
+				Kind:     proto.TextRequestKind,
+				Resource: string(chunk),
+			})
+		}
+		time.Sleep(128 * time.Millisecond)
+		return err
+	})
 
-  if err != nil && err != io.EOF {
-    logger.Fatal("error reading from stdin: %v", err)
-  }
+	if err != nil && err != io.EOF {
+		logger.Fatal("error reading from stdin: %v", err)
+	}
 
 	wg.Wait()
 }
