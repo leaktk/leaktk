@@ -1,4 +1,4 @@
-package scanner
+package redactor
 
 import (
 	"context"
@@ -38,7 +38,7 @@ func (s *Scanner) RedactStream(
 	detector.Redact = 0
 	detector.Verbose = false
 
-	buf := make([]byte, 2048)
+	buf := make([]byte, (64 * 1024))
 
 	for {
 		select {
