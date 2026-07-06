@@ -373,7 +373,10 @@ func runRedact(cmd *cobra.Command, args []string) {
 
 	var wg sync.WaitGroup
 	leaktkScanner := scanner.NewScanner(cfg)
-	leaktkRedactor := redactor.NewRedactor(cfg)
+	leaktkRedactor, err := redactor.NewRedactor(cfg)
+	if err != nil {
+		logger.Fatal("could not create redactor: %v", err)
+	}
 
 	// Note: As more kinds are supported this will be refactored
 	// the code below will be moved into the redactor
@@ -382,18 +385,16 @@ func runRedact(cmd *cobra.Command, args []string) {
 	}
 
 	go leaktkScanner.Recv(func(response *proto.Response) {
-		if len(response.Results) > 0 {
-			redactedText, err := leaktkRedactor.RedactText(response.Resource, response)
-			if err != nil {
-				logger.Error("could not redact text: %v, offset=%s, len=%d", err, response.ID, len(response.Resource))
-			}
-			fmt.Print(redactedText)
+		redactedText, err := leaktkRedactor.RedactText(response.Resource, response)
+		if err != nil {
+			logger.Error("could not redact text: %v, offset=%s, len=%d", err, response.ID, len(response.Resource))
 		}
+		fmt.Print(redactedText)
 		wg.Done()
 	})
 
 	offset := 0
-	err := yieldChunks(cmd.Context(), os.Stdin, func(chunk []byte, err error) error {
+	err = yieldChunks(cmd.Context(), os.Stdin, func(chunk []byte, err error) error {
 		if chunkSize := len(chunk); chunkSize > 0 {
 			offset += chunkSize
 			wg.Add(1)
@@ -412,6 +413,7 @@ func runRedact(cmd *cobra.Command, args []string) {
 	}
 
 	wg.Wait()
+	fmt.Print(leaktkRedactor.Flush())
 }
 
 func redactCommand() *cobra.Command {
