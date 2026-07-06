@@ -9,7 +9,18 @@ import (
 
 	"github.com/betterleaks/betterleaks/detect"
 	"github.com/leaktk/leaktk/pkg/scanner/betterleaks"
+	"github.com/leaktk/leaktk/pkg/config"
 )
+
+type Redactor struct {
+	Config *config.Config
+}
+
+func NewRedactor(cfg *config.Config) *Redactor {
+	return &Redactor {
+		Config: cfg,
+	}
+}
 
 func (s *Scanner) RedactStream(
 	ctx context.Context,
