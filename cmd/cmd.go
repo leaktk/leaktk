@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
-	"regexp"
 
 	"github.com/spf13/cobra"
 
@@ -107,13 +107,13 @@ func runScan(cmd *cobra.Command, args []string) {
 		if err != nil {
 			logger.Fatal("could not create a temp config: %v", err)
 		}
-		defer os.Remove(tmpFile.Name())
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 		if _, err := tmpFile.WriteString(buildGitleaksConfig(grepPattern)); err != nil {
-			tmpFile.Close()
+			_ = tmpFile.Close()
 			logger.Fatal("could not write temp config: %v", err)
 		}
-		tmpFile.Close()
+		_ = tmpFile.Close()
 
 		gitleaksConfig = tmpFile.Name()
 	}
