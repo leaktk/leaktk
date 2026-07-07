@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/BurntSushi/toml"
 	"github.com/spf13/cobra"
 
 	"github.com/leaktk/leaktk/pkg/config"
@@ -290,21 +291,21 @@ func scanCommand() *cobra.Command {
 }
 
 func buildGitleaksConfig(pattern string) string {
-        var rule struct {
-                ID          string `toml:"id"`
-                Description string `toml:"description"`
-                Regex       string `toml:"regex"`
-        }
-        rule.ID = id.ID("grep", pattern)
-        rule.Description = "Grep Pattern Match"
-        rule.Regex = pattern
+	var rule struct {
+		ID          string `toml:"id"`
+		Description string `toml:"description"`
+		Regex       string `toml:"regex"`
+	}
+	rule.ID = id.ID("grep", pattern)
+	rule.Description = "Grep Pattern Match"
+	rule.Regex = pattern
 
-        data, err := toml.Marshal(&rule)
-        if err != nil {
-                logger.Fatal("could not marshal grep rule: %v", err)
-        }
+	data, err := toml.Marshal(&rule)
+	if err != nil {
+		logger.Fatal("could not marshal grep rule: %v", err)
+	}
 
-        return fmt.Sprintf("[[rules]]\n%s\n", string(data))
+	return fmt.Sprintf("[[rules]]\n%s\n", string(data))
 }
 
 func readLine(reader *bufio.Reader) ([]byte, error) {
