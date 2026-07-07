@@ -290,9 +290,21 @@ func scanCommand() *cobra.Command {
 }
 
 func buildGitleaksConfig(pattern string) string {
-	ruleID := id.ID(pattern)
+        var rule struct {
+                ID          string `toml:"id"`
+                Description string `toml:"description"`
+                Regex       string `toml:"regex"`
+        }
+        rule.ID = id.ID("grep", pattern)
+        rule.Description = "Grep Pattern Match"
+        rule.Regex = pattern
 
-	return fmt.Sprintf("[[rules]]\nid = %q\ndescription = \"Custom Regex\"\nregex = '''%s'''\n", ruleID, pattern)
+        data, err := toml.Marshal(&rule)
+        if err != nil {
+                logger.Fatal("could not marshal grep rule: %v", err)
+        }
+
+        return fmt.Sprintf("[[rules]]\n%s\n", string(data))
 }
 
 func readLine(reader *bufio.Reader) ([]byte, error) {
