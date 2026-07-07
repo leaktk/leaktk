@@ -283,6 +283,9 @@ func scanCommand() *cobra.Command {
 	flags.String("gitleaks-config", "", "Load a custom gitleaks config")
 	flags.StringP("grep", "g", "", "Scan using ad-hoc regex instead of the configured patterns")
 
+	// Ensure incompatible flags can't be combined
+	scanCommand.MarkFlagsMutuallyExclusive("grep", "gitleaks-config")
+
 	return scanCommand
 }
 
