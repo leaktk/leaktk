@@ -1,8 +1,8 @@
 package redactor
 
 import (
-	"strings"
 	"sort"
+	"strings"
 
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/proto"
@@ -33,7 +33,7 @@ func (r *Redactor) RedactText(resource string, response *proto.Response) (string
 	if len(response.Results) == 0 {
 		return resource, nil
 	}
-	
+
 	results := response.Results
 	sort.Slice(results, func(i, j int) bool {
 		return len(results[i].Secret) > len(results[j].Secret)
