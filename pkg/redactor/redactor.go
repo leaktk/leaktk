@@ -1,9 +1,11 @@
 package redactor
 
 import (
+	"strings"
+	"sort"
+
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/proto"
-	"strings"
 )
 
 type Redactor struct {
@@ -31,8 +33,12 @@ func (r *Redactor) RedactText(resource string, response *proto.Response) (string
 	if len(response.Results) == 0 {
 		return resource, nil
 	}
-
-	for _, result := range response.Results {
+	
+	results := response.Results
+	sort.Slice(results, func(i, j int) bool {
+		return len(results[i].Secret) > len(results[j].Secret)
+	})
+	for _, result := range results {
 		if len(result.Secret) == 0 {
 			continue
 		}
