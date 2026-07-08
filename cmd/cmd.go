@@ -17,6 +17,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/betterleaks/betterleaks/detect"
+
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/hooks"
@@ -25,6 +27,7 @@ import (
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/redactor"
 	"github.com/leaktk/leaktk/pkg/scanner"
+	"github.com/leaktk/leaktk/pkg/scanner/betterleaks"
 	"github.com/leaktk/leaktk/pkg/version"
 )
 
@@ -381,17 +384,59 @@ func runRedact(cmd *cobra.Command, args []string) {
 		logger.Fatal("unsupported kind: kind=%q", kind)
 	}
 
+	rawConfig, err := os.ReadFile(cfg.Scanner.Patterns.Gitleaks.ConfigPath)
+	if err != nil {
+		logger.Fatal("could not read gitleaks config: %v", err)
+	}
+
+	blcfg, err := betterleaks.ParseConfig(string(rawConfig))
+	if err != nil {
+		logger.Fatal("could not load scanner config: %v", err)
+	}
+
+	detector := detect.NewDetectorContext(context.Background(), *blcfg)
+	detector.FollowSymlinks = false
+	detector.IgnoreGitleaksAllow = false
+	detector.MaxArchiveDepth = cfg.Scanner.MaxArchiveDepth
+	detector.MaxDecodeDepth = cfg.Scanner.MaxDecodeDepth
+	detector.MaxTargetMegaBytes = 0
+	detector.NoColor = true
+	detector.Redact = 0
+	detector.Verbose = false
+
+	pendingRaw := ""
+	pendingRedacted := ""
+
 	go leaktkScanner.Recv(func(response *proto.Response) {
-		redactedText, err := leaktkRedactor.RedactText(response.Resource, response)
-		if err != nil {
-			logger.Error("could not redact text: %v, offset=%s, len=%d", err, response.ID, len(response.Resource))
+		combined := pendingRaw + response.Resource
+
+		findings, scanErr := betterleaks.ScanReader(context.Background(), detector, strings.NewReader(combined))
+		if scanErr != nil {
+			logger.Error("could not scan combined chunk: %v, offset=%s", scanErr, response.ID)
 		}
-		fmt.Print(redactedText)
+
+		combinedResponse := &proto.Response{Results: make([]*proto.Result, 0, len(findings))}
+		for _, f := range findings {
+			combinedResponse.Results = append(combinedResponse.Results, &proto.Result{
+				Secret: f.Secret,
+			})
+		}
+
+		redacted, redactErr := leaktkRedactor.RedactText(combined, combinedResponse)
+		if redactErr != nil {
+			logger.Error("could not redact text: %v, offset=%s, len=%d", redactErr, response.ID, len(response.Resource))
+		}
+
+		split := max(0, len(redacted)-len(response.Resource))
+		fmt.Print(redacted[:split])
+
+		pendingRaw = combined[max(0, len(combined)-len(response.Resource)):]
+		pendingRedacted = redacted[split:]
 		wg.Done()
 	})
 
 	offset := 0
-	err := yieldChunks(cmd.Context(), os.Stdin, func(chunk []byte, err error) error {
+	err = yieldChunks(cmd.Context(), os.Stdin, func(chunk []byte, err error) error {
 		if chunkSize := len(chunk); chunkSize > 0 {
 			offset += chunkSize
 			wg.Add(1)
@@ -410,6 +455,7 @@ func runRedact(cmd *cobra.Command, args []string) {
 	}
 
 	wg.Wait()
+	fmt.Print(pendingRedacted + "\n")
 }
 
 func redactCommand() *cobra.Command {
