@@ -1,10 +1,9 @@
 package redactor
 
 import (
-	"strings"
-
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/proto"
+	"strings"
 )
 
 type Redactor struct {
