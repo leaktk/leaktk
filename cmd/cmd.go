@@ -17,8 +17,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/betterleaks/betterleaks/detect"
-
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/hooks"
@@ -27,7 +25,6 @@ import (
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/redactor"
 	"github.com/leaktk/leaktk/pkg/scanner"
-	"github.com/leaktk/leaktk/pkg/scanner/betterleaks"
 	"github.com/leaktk/leaktk/pkg/version"
 )
 
@@ -350,14 +347,37 @@ func versionCommand() *cobra.Command {
 
 func yieldChunks(ctx context.Context, r io.Reader, yield func(chunk []byte, err error) error) error {
 	buf := make([]byte, 64*1024)
+	var tailLen int
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			n, err := r.Read(buf)
-			if err := yield(buf[:n], err); err != nil {
+			n, err := r.Read(buf[tailLen:])
+			totalBytes := tailLen + n
+
+			if n > 0 {
+				yieldBuf := make([]byte, totalBytes)
+				copy(yieldBuf, buf[:totalBytes])
+
+				if yieldErr := yield(yieldBuf, nil); yieldErr != nil {
+					return yieldErr
+				}
+			}
+			if err != nil {
+				if err == io.EOF {
+					return nil
+				}
 				return err
+			}
+
+			if totalBytes > 1024 {
+				copy(buf[0:1024], buf[totalBytes-1024:totalBytes])
+				tailLen = 1024
+			} else {
+				copy(buf[0:totalBytes], buf[:totalBytes])
+				tailLen = totalBytes
 			}
 		}
 	}
@@ -384,59 +404,18 @@ func runRedact(cmd *cobra.Command, args []string) {
 		logger.Fatal("unsupported kind: kind=%q", kind)
 	}
 
-	rawConfig, err := os.ReadFile(cfg.Scanner.Patterns.Gitleaks.ConfigPath)
-	if err != nil {
-		logger.Fatal("could not read gitleaks config: %v", err)
-	}
-
-	blcfg, err := betterleaks.ParseConfig(string(rawConfig))
-	if err != nil {
-		logger.Fatal("could not load scanner config: %v", err)
-	}
-
-	detector := detect.NewDetectorContext(context.Background(), *blcfg)
-	detector.FollowSymlinks = false
-	detector.IgnoreGitleaksAllow = false
-	detector.MaxArchiveDepth = cfg.Scanner.MaxArchiveDepth
-	detector.MaxDecodeDepth = cfg.Scanner.MaxDecodeDepth
-	detector.MaxTargetMegaBytes = 0
-	detector.NoColor = true
-	detector.Redact = 0
-	detector.Verbose = false
-
-	pendingRaw := ""
-	pendingRedacted := ""
-
 	go leaktkScanner.Recv(func(response *proto.Response) {
-		combined := pendingRaw + response.Resource
-
-		findings, scanErr := betterleaks.ScanReader(context.Background(), detector, strings.NewReader(combined))
-		if scanErr != nil {
-			logger.Error("could not scan combined chunk: %v, offset=%s", scanErr, response.ID)
-		}
-
-		combinedResponse := &proto.Response{Results: make([]*proto.Result, 0, len(findings))}
-		for _, f := range findings {
-			combinedResponse.Results = append(combinedResponse.Results, &proto.Result{
-				Secret: f.Secret,
-			})
-		}
-
-		redacted, redactErr := leaktkRedactor.RedactText(combined, combinedResponse)
+		redacted, redactErr := leaktkRedactor.RedactText(response.Resource, response)
 		if redactErr != nil {
 			logger.Error("could not redact text: %v, offset=%s, len=%d", redactErr, response.ID, len(response.Resource))
 		}
 
-		split := max(0, len(redacted)-len(response.Resource))
-		fmt.Print(redacted[:split])
-
-		pendingRaw = combined[max(0, len(combined)-len(response.Resource)):]
-		pendingRedacted = redacted[split:]
+		fmt.Print(redacted)
 		wg.Done()
 	})
 
 	offset := 0
-	err = yieldChunks(cmd.Context(), os.Stdin, func(chunk []byte, err error) error {
+	err := yieldChunks(cmd.Context(), os.Stdin, func(chunk []byte, err error) error {
 		if chunkSize := len(chunk); chunkSize > 0 {
 			offset += chunkSize
 			wg.Add(1)
@@ -455,7 +434,6 @@ func runRedact(cmd *cobra.Command, args []string) {
 	}
 
 	wg.Wait()
-	fmt.Print(pendingRedacted + "\n")
 }
 
 func redactCommand() *cobra.Command {
