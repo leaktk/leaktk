@@ -1,7 +1,6 @@
 package redactor
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 
