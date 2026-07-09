@@ -21,8 +21,10 @@ import (
 	"github.com/leaktk/leaktk/pkg/hooks"
 	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/pkg/monitor"
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/scanner"
+	"github.com/leaktk/leaktk/pkg/sources"
 	"github.com/leaktk/leaktk/pkg/version"
 )
 
@@ -156,7 +158,7 @@ func runScan(cmd *cobra.Command, args []string) {
 		}
 		fmt.Println(formatter.Format(response))
 		if response.Error != nil {
-			logger.Fatal("response contains error: %w", response.Error)
+			logger.Fatal("response contains error: %v", response.Error)
 		}
 		wg.Done()
 	})
@@ -321,6 +323,46 @@ func readLine(reader *bufio.Reader) ([]byte, error) {
 	}
 }
 
+func runMonitor(cmd *cobra.Command, args []string) {
+	// Initial sanity checks since there wouldn't be anything to monitor if no
+	// sources are listed
+	monSrcIDSize := len(cfg.Monitor.SourceIDs)
+	if monSrcIDSize == 0 {
+		logger.Fatal("no source IDs listed to monitor")
+	}
+
+	// Load the sources from the config
+	srcs := make([]sources.Source, 0, monSrcIDSize)
+	for i, id := range cfg.Monitor.SourceIDs {
+		srcCfg, srcExists := cfg.SourcesByID[id]
+		if !srcExists {
+			logger.Fatal("monitor source id not defined in sources: id=%q", id)
+		}
+		src, err := sources.NewSource(srcCfg)
+		if err != nil {
+			logger.Fatal("error creating source: %v monitor_source_id_index=%d", err, i)
+		}
+		srcs[i] = src
+	}
+
+	monitor.NewMonitor(srcs).ScanRequests(func(request *proto.Request) {
+		data, err := json.Marshal(request)
+		if err != nil {
+			logger.Error("could not marshal scan request: %v %v", err, request)
+		} else {
+			fmt.Println(string(data))
+		}
+	})
+}
+
+func monitorCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "monitor",
+		Short: "Monitor configured sources for leaks",
+		Run:   runMonitor,
+	}
+}
+
 func runListen(cmd *cobra.Command, args []string) {
 	var wg sync.WaitGroup
 
@@ -450,6 +492,7 @@ func rootCommand() *cobra.Command {
 	rootCommand.AddCommand(logoutCommand())
 	rootCommand.AddCommand(hookCommand())
 	rootCommand.AddCommand(listenCommand())
+	rootCommand.AddCommand(monitorCommand())
 	rootCommand.AddCommand(versionCommand())
 
 	return rootCommand
