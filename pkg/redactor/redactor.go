@@ -1,6 +1,7 @@
 package redactor
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -13,42 +14,125 @@ type Redactor struct {
 	RedactionWord string
 }
 
+type Span struct {
+	Start int
+	End   int
+}
+
 func NewRedactor(cfg *config.Config) *Redactor {
-	redactor := &Redactor{
+	return &Redactor{
 		RedactionMark: cfg.Redactor.RedactionMark,
 		RedactionWord: cfg.Redactor.RedactionWord,
 	}
+}
 
-	return redactor
+func computeLineOffsets(s string) []int {
+	offsets := []int{0}
+
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			offsets = append(offsets, i+1)
+		}
+	}
+
+	return offsets
+}
+
+func positionToOffset(lineStarts []int, line, column int) int {
+	if line <= 0 || line > len(lineStarts) {
+		return 0
+	}
+
+	return lineStarts[line-1] + (column - 1)
+}
+
+func mergeSpans(spans []Span) []Span {
+	if len(spans) == 0 {
+		return spans
+	}
+
+	sort.Slice(spans, func(i, j int) bool {
+		return spans[i].Start < spans[j].Start
+	})
+
+	merged := make([]Span, 0, len(spans))
+	merged = append(merged, spans[0])
+
+	for _, s := range spans[1:] {
+		last := &merged[len(merged)-1]
+
+		if s.Start <= last.End {
+			if s.End > last.End {
+				last.End = s.End
+			}
+			continue
+		}
+
+		merged = append(merged, s)
+	}
+
+	return merged
 }
 
 func (r *Redactor) RedactText(resource string, response *proto.Response) (string, error) {
-	mark := r.RedactionMark
-	word := r.RedactionWord
-
-	if len(mark) == 0 && len(word) == 0 {
-		mark = "*"
-	}
-
 	if len(response.Results) == 0 {
 		return resource, nil
 	}
 
-	results := response.Results
-	sort.Slice(results, func(i, j int) bool {
-		return len(results[i].Secret) > len(results[j].Secret)
-	})
-	for _, result := range results {
-		if len(result.Secret) == 0 {
+	lineStarts := computeLineOffsets(resource)
+
+	spans := make([]Span, 0, len(response.Results))
+
+	for _, result := range response.Results {
+		start := positionToOffset(lineStarts, result.Location.Start.Line, result.Location.Start.Column)
+		end := positionToOffset(lineStarts, result.Location.End.Line, result.Location.End.Column) + 1
+		if start < 0 {
+			start = 0
+		}
+
+		if end > len(resource) {
+			end = len(resource)
+		}
+
+		if start >= end {
 			continue
 		}
 
-		if word != "" {
-			resource = strings.ReplaceAll(resource, result.Secret, word)
-		} else {
-			mask := strings.Repeat(mark, len(result.Secret))
-			resource = strings.ReplaceAll(resource, result.Secret, mask)
-		}
+		spans = append(spans, Span{
+			Start: start,
+			End:   end,
+		})
 	}
-	return resource, nil
+
+	if len(spans) == 0 {
+		return resource, nil
+	}
+
+	spans = mergeSpans(spans)
+
+	var b strings.Builder
+	b.Grow(len(resource))
+
+	cursor := 0
+
+	for _, s := range spans {
+		b.WriteString(resource[cursor:s.Start])
+
+		if r.RedactionWord != "" {
+			b.WriteString(r.RedactionWord)
+		} else {
+			mark := r.RedactionMark
+			if mark == "" {
+				mark = "*"
+			}
+
+			b.WriteString(strings.Repeat(mark, s.End-s.Start))
+		}
+
+		cursor = s.End
+	}
+
+	b.WriteString(resource[cursor:])
+
+	return b.String(), nil
 }
