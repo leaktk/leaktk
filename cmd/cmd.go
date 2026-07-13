@@ -347,37 +347,14 @@ func versionCommand() *cobra.Command {
 
 func yieldChunks(ctx context.Context, r io.Reader, yield func(chunk []byte, err error) error) error {
 	buf := make([]byte, 64*1024)
-	var tailLen int
-
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			n, err := r.Read(buf[tailLen:])
-			totalBytes := tailLen + n
-
-			if n > 0 {
-				yieldBuf := make([]byte, totalBytes)
-				copy(yieldBuf, buf[:totalBytes])
-
-				if yieldErr := yield(yieldBuf, nil); yieldErr != nil {
-					return yieldErr
-				}
-			}
-			if err != nil {
-				if err == io.EOF {
-					return nil
-				}
+			n, err := r.Read(buf)
+			if err := yield(buf[:n], err); err != nil {
 				return err
-			}
-
-			if totalBytes > 1024 {
-				copy(buf[0:1024], buf[totalBytes-1024:totalBytes])
-				tailLen = 1024
-			} else {
-				copy(buf[0:totalBytes], buf[:totalBytes])
-				tailLen = totalBytes
 			}
 		}
 	}
