@@ -381,13 +381,32 @@ func runRedact(cmd *cobra.Command, args []string) {
 		logger.Fatal("unsupported kind: kind=%q", kind)
 	}
 
+	var mu sync.Mutex
+	backlog := make(map[string]*proto.Response)
+	var requestQueue []string
+	headIdx := 0
+
 	go leaktkScanner.Recv(func(response *proto.Response) {
 		redacted, redactErr := leaktkRedactor.RedactText(response.Resource, response)
 		if redactErr != nil {
 			logger.Error("could not redact text: %v, offset=%s, len=%d", redactErr, response.ID, len(response.Resource))
 		}
+		response.Resource = redacted
 
-		fmt.Print(redacted)
+		mu.Lock()
+		backlog[response.RequestID] = response
+
+		for headIdx < len(requestQueue) {
+			nextExpectedID := requestQueue[headIdx]
+			nextResponse, ok := backlog[nextExpectedID]
+			if !ok {
+				break
+			}
+			fmt.Print(nextResponse.Resource)
+			delete(backlog, nextExpectedID)
+			headIdx++
+		}
+		mu.Unlock()
 		wg.Done()
 	})
 
@@ -396,6 +415,11 @@ func runRedact(cmd *cobra.Command, args []string) {
 		if chunkSize := len(chunk); chunkSize > 0 {
 			offset += chunkSize
 			wg.Add(1)
+			id := strconv.Itoa(offset)
+			mu.Lock()
+			requestQueue = append(requestQueue, id)
+			mu.Unlock()
+
 			leaktkScanner.Send(&proto.Request{
 				ID:       strconv.Itoa(offset),
 				Kind:     proto.TextRequestKind,
