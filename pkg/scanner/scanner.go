@@ -306,6 +306,7 @@ func (s *Scanner) listen() {
 				RequestID: request.ID,
 				Error:     scanErr,
 				Results:   results,
+				Resource:  request.Resource,
 			},
 		})
 	})
