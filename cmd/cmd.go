@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/spf13/cobra"
 
 	"github.com/leaktk/leaktk/pkg/config"
@@ -91,9 +93,34 @@ func runScan(cmd *cobra.Command, args []string) {
 		logger.Fatal("invalid leak-exit-code: %v", err)
 	}
 
+	grepPattern, err := cmd.Flags().GetString("grep")
+	if err != nil {
+		logger.Fatal("invalid grep: %v", err)
+	}
+
 	gitleaksConfig, err := cmd.Flags().GetString("gitleaks-config")
 	if err != nil {
 		logger.Fatal("invalid gitleaks-config: %v", err.Error())
+	}
+
+	if len(grepPattern) != 0 {
+		if _, err := regexp.Compile(grepPattern); err != nil {
+			logger.Fatal("invalid grep pattern: %v", err)
+		}
+
+		tmpFile, err := os.CreateTemp("", "leaktk-grep-*.toml")
+		if err != nil {
+			logger.Fatal("could not create a temp config: %v", err)
+		}
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+		if _, err := tmpFile.WriteString(buildGitleaksConfig(grepPattern)); err != nil {
+			_ = tmpFile.Close()
+			logger.Fatal("could not write temp config: %v", err)
+		}
+		_ = tmpFile.Close()
+
+		gitleaksConfig = tmpFile.Name()
 	}
 
 	// Providing a gitleaks-config via command line arguments takes
@@ -259,8 +286,30 @@ func scanCommand() *cobra.Command {
 	flags.StringP("options", "o", "{}", "Provide scan specific options formatted as JSON")
 	flags.Int("leak-exit-code", 0, "Exit with this code when leaks are detected (default 0)")
 	flags.String("gitleaks-config", "", "Load a custom gitleaks config")
+	flags.StringP("grep", "g", "", "Scan using ad-hoc regex instead of the configured patterns")
+
+	// Ensure incompatible flags can't be combined
+	scanCommand.MarkFlagsMutuallyExclusive("grep", "gitleaks-config")
 
 	return scanCommand
+}
+
+func buildGitleaksConfig(pattern string) string {
+	var rule struct {
+		ID          string `toml:"id"`
+		Description string `toml:"description"`
+		Regex       string `toml:"regex"`
+	}
+	rule.ID = id.ID("grep", pattern)
+	rule.Description = "Grep Pattern Match"
+	rule.Regex = pattern
+
+	data, err := toml.Marshal(&rule)
+	if err != nil {
+		logger.Fatal("could not marshal grep rule: %v", err)
+	}
+
+	return fmt.Sprintf("[[rules]]\n%s\n", string(data))
 }
 
 func readLine(reader *bufio.Reader) ([]byte, error) {
