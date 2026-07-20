@@ -27,11 +27,15 @@ func NewRedactor(cfg *config.Config) *Redactor {
 
 func computeLineOffsets(s string) []int {
 	offsets := []int{0}
-
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			offsets = append(offsets, i+1)
+	offset := 1
+	n := len(s)
+	for offset < n {
+		i := strings.IndexByte(s[offset:], '\n')
+		if i < 0 {
+			break
 		}
+		offset += i + 1
+		offsets = append(offsets, offset)
 	}
 
 	return offsets
@@ -57,17 +61,18 @@ func mergeSpans(spans []Span) []Span {
 	merged := make([]Span, 0, len(spans))
 	merged = append(merged, spans[0])
 
-	for _, s := range spans[1:] {
-		last := &merged[len(merged)-1]
+	var last Span
+	last = merged[0]
 
+	for _, s := range spans[1:] {
 		if s.Start <= last.End {
 			if s.End > last.End {
 				last.End = s.End
 			}
 			continue
 		}
-
 		merged = append(merged, s)
+		last = s
 	}
 
 	return merged
