@@ -126,9 +126,6 @@ func (r *Redactor) RedactText(resource string, response *proto.Response) (string
 			b.WriteString(r.RedactionWord)
 		} else {
 			mark := r.RedactionMark
-			if mark == "" {
-				mark = "*"
-			}
 
 			b.WriteString(strings.Repeat(mark, s.End-s.Start))
 		}
