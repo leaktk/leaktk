@@ -19,6 +19,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/spf13/cobra"
 
+	"github.com/leaktk/leaktk/internal"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/hooks"
@@ -411,6 +412,7 @@ func yieldChunks(ctx context.Context, r io.Reader, yield func(chunk []byte, err 
 
 func runRedact(cmd *cobra.Command, args []string) {
 	flags := cmd.Flags()
+	ctx := cmd.Context()
 
 	kind := mustGetString(flags, "kind")
 	if redactionMark := mustGetString(flags, "redaction-mark"); redactionMark != "*" {
@@ -430,10 +432,8 @@ func runRedact(cmd *cobra.Command, args []string) {
 		logger.Fatal("unsupported kind: kind=%q", kind)
 	}
 
-	var mu sync.Mutex
 	backlog := make(map[string]*proto.Response)
-	var requestQueue []string
-	headIdx := 0
+	requestQueue := internal.NewRingBuffer[string](1024)
 
 	go leaktkScanner.Recv(func(response *proto.Response) {
 		redacted, redactErr := leaktkRedactor.RedactText(response.Resource, response)
@@ -442,32 +442,40 @@ func runRedact(cmd *cobra.Command, args []string) {
 		}
 		response.Resource = redacted
 
-		mu.Lock()
 		backlog[response.RequestID] = response
 
-		for headIdx < len(requestQueue) {
-			nextExpectedID := requestQueue[headIdx]
+		for {
+			rPtr, err := requestQueue.ReadPtr(ctx)
+			if err != nil {
+				logger.Fatal("could not check for next request id: %v", err)
+			}
+			nextExpectedID := *rPtr
+
 			nextResponse, ok := backlog[nextExpectedID]
 			if !ok {
 				break
 			}
 			fmt.Print(nextResponse.Resource)
+
 			delete(backlog, nextExpectedID)
-			headIdx++
+			requestQueue.ReadDone()
 		}
-		mu.Unlock()
 		wg.Done()
 	})
 
 	offset := 0
-	err := yieldChunks(cmd.Context(), os.Stdin, func(chunk []byte, err error) error {
+	err := yieldChunks(ctx, os.Stdin, func(chunk []byte, err error) error {
 		if chunkSize := len(chunk); chunkSize > 0 {
 			offset += chunkSize
 			wg.Add(1)
 			id := strconv.Itoa(offset)
-			mu.Lock()
-			requestQueue = append(requestQueue, id)
-			mu.Unlock()
+
+			wPtr, err := requestQueue.WritePtr(ctx)
+			if err != nil {
+				logger.Fatal("could not store request id: %v id=%s", err, id)
+			}
+			*wPtr = id
+			requestQueue.WriteDone()
 
 			leaktkScanner.Send(&proto.Request{
 				ID:       id,
