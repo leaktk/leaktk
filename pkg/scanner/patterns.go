@@ -3,6 +3,7 @@ package scanner
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,11 +15,17 @@ import (
 
 	betterleaksconfig "github.com/betterleaks/betterleaks/config"
 
+	"github.com/leaktk/leaktk/pkg/auth"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/scanner/betterleaks"
 )
+
+// ErrUnauthorized is returned when the pattern server returns 401
+var ErrUnauthorized = errors.New("unauthorized")
+
+const defaultPatternServerURL = "https://raw.githubusercontent.com/leaktk/patterns/main/target"
 
 // Patterns acts as an abstraction for fetching different scanner patterns
 // and keeping them up to date and cached
@@ -73,6 +80,10 @@ func (p *Patterns) fetchGitleaksConfig(ctx context.Context) (string, error) {
 		}
 	})()
 
+	if response.StatusCode == http.StatusUnauthorized {
+		return "", fmt.Errorf("%w: status_code=%d", ErrUnauthorized, response.StatusCode)
+	}
+
 	if response.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("unexpected status code: status_code=%d", response.StatusCode)
 	}
@@ -111,7 +122,10 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 	if p.config.Autofetch && p.gitleaksConfigModTimeExceeds(p.config.RefreshAfter) {
 		rawConfig, err := p.fetchGitleaksConfig(ctx)
 		if err != nil {
-			return p.gitleaksConfig, err
+			rawConfig, err = p.handleFetchError(ctx, err)
+			if err != nil {
+				return p.gitleaksConfig, err
+			}
 		}
 
 		p.gitleaksConfig, err = betterleaks.ParseConfig(rawConfig)
@@ -198,4 +212,41 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 // GitleaksConfigHash returns the sha256 hash for the current gitleaks config
 func (p *Patterns) GitleaksConfigHash() string {
 	return fmt.Sprintf("%x", p.gitleaksConfigHash)
+}
+
+func (p *Patterns) isCustomServer() bool {
+	return p.config.Server.URL != defaultPatternServerURL
+}
+
+func (p *Patterns) handleFetchError(ctx context.Context, fetchErr error) (string, error) {
+	if !errors.Is(fetchErr, ErrUnauthorized) {
+		return "", fetchErr
+	}
+
+	if !p.config.Autologin || !p.isCustomServer() {
+		return "", fmt.Errorf(
+			"authentication required: run \"leaktk login %s\" to authenticate: %w",
+			p.config.Server.URL, fetchErr,
+		)
+	}
+
+	logger.Info("authentication required, attempting autologin: server=%q", p.config.Server.URL)
+
+	token, err := auth.WebLogin(ctx, p.client, p.config.Server.URL)
+	if err != nil {
+		return "", fmt.Errorf("autologin failed: %w", err)
+	}
+
+	if err := config.SavePatternServerAuthToken(token); err != nil {
+		return "", fmt.Errorf("could not save token after autologin: %w", err)
+	}
+
+	p.config.Server.AuthToken = token
+
+	rawConfig, err := p.fetchGitleaksConfig(ctx)
+	if err != nil {
+		return "", fmt.Errorf("fetch failed after autologin: %w", err)
+	}
+
+	return rawConfig, nil
 }

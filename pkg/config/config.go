@@ -98,6 +98,7 @@ type (
 	// Patterns provides configuration for managing pattern updates
 	Patterns struct {
 		Autofetch    bool          `toml:"autofetch"`
+		Autologin    bool          `toml:"autologin"`
 		ExpiredAfter int           `toml:"expired_after"`
 		Gitleaks     Gitleaks      `toml:"gitleaks"`
 		RefreshAfter int           `toml:"refresh_after"`
@@ -132,6 +133,11 @@ func setMissingValues(cfg *Config) *Config {
 	cfg.Scanner.Patterns.Autofetch = stringToBool(
 		os.Getenv("LEAKTK_SCANNER_AUTOFETCH"),
 		cfg.Scanner.Patterns.Autofetch,
+	)
+
+	cfg.Scanner.Patterns.Autologin = stringToBool(
+		os.Getenv("LEAKTK_AUTOLOGIN"),
+		cfg.Scanner.Patterns.Autologin,
 	)
 
 	// It's better to have the auth token out of the config file to make it

@@ -17,9 +17,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/leaktk/leaktk/pkg/auth"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/hooks"
+	httpclient "github.com/leaktk/leaktk/pkg/http"
 	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/proto"
@@ -43,20 +45,52 @@ func runHelp(cmd *cobra.Command, args []string) {
 }
 
 func runLogin(cmd *cobra.Command, args []string) {
-	logger.Info("logging in: pattern_server=%q", cfg.Scanner.Patterns.Server.URL)
-
-	fmt.Printf("Enter %s auth token: ", cfg.Scanner.Patterns.Server.URL)
-
-	var authToken string
-	if _, err := fmt.Scanln(&authToken); err != nil {
-		logger.Fatal("could not login: %v", err)
+	serverURL := cfg.Scanner.Patterns.Server.URL
+	if len(args) > 0 {
+		serverURL = args[0]
 	}
 
-	if err := config.SavePatternServerAuthToken(authToken); err != nil {
-		logger.Fatal("could not login: %v", err)
+	logger.Info("logging in: pattern_server=%q", serverURL)
+
+	token, _ := cmd.Flags().GetString("token")
+	web, _ := cmd.Flags().GetBool("web")
+
+	switch {
+	case len(token) > 0:
+		client := httpclient.NewClient()
+		if err := auth.ValidateToken(cmd.Context(), client, serverURL, token); err != nil {
+			logger.Fatal("token validation failed: %v", err)
+		}
+
+		if err := config.SavePatternServerAuthToken(token); err != nil {
+			logger.Fatal("could not save token: %v", err)
+		}
+
+	case web:
+		client := httpclient.NewClient()
+		token, err := auth.WebLogin(cmd.Context(), client, serverURL)
+		if err != nil {
+			logger.Fatal("web login failed: %v", err)
+		}
+
+		if err := config.SavePatternServerAuthToken(token); err != nil {
+			logger.Fatal("could not save token: %v", err)
+		}
+
+	default:
+		fmt.Printf("Enter %s auth token: ", serverURL)
+
+		var authToken string
+		if _, err := fmt.Scanln(&authToken); err != nil {
+			logger.Fatal("could not login: %v", err)
+		}
+
+		if err := config.SavePatternServerAuthToken(authToken); err != nil {
+			logger.Fatal("could not login: %v", err)
+		}
 	}
 
-	logger.Info("token saved")
+	logger.Info("login successful")
 }
 
 func runLogout(cmd *cobra.Command, args []string) {
@@ -70,11 +104,17 @@ func runLogout(cmd *cobra.Command, args []string) {
 }
 
 func loginCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "login",
+	cmd := &cobra.Command{
+		Use:   "login [url]",
 		Short: "Log into a pattern server",
+		Args:  cobra.MaximumNArgs(1),
 		Run:   runLogin,
 	}
+
+	cmd.Flags().String("token", "", "Bearer token for authentication to the server")
+	cmd.Flags().BoolP("web", "w", false, "Login with web browser using OAuth2")
+
+	return cmd
 }
 
 func logoutCommand() *cobra.Command {
