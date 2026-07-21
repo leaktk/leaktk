@@ -61,18 +61,18 @@ func mergeSpans(spans []Span) []Span {
 	merged := make([]Span, 0, len(spans))
 	merged = append(merged, spans[0])
 
-	var last Span
-	last = merged[0]
+	var i int
+	i = 0
 
 	for _, s := range spans[1:] {
-		if s.Start <= last.End {
-			if s.End > last.End {
-				last.End = s.End
+		if s.Start < merged[i].End {
+			if s.End > merged[i].End {
+				merged[i].End = s.End
 			}
 			continue
 		}
 		merged = append(merged, s)
-		last = s
+		i++
 	}
 
 	return merged
@@ -90,6 +90,7 @@ func (r *Redactor) RedactText(resource string, response *proto.Response) (string
 	for _, result := range response.Results {
 		start := positionToOffset(lineStarts, result.Location.Start.Line, result.Location.Start.Column)
 		end := positionToOffset(lineStarts, result.Location.End.Line, result.Location.End.Column) + 1
+
 		if start < 0 {
 			start = 0
 		}
