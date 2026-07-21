@@ -61,8 +61,7 @@ func mergeSpans(spans []Span) []Span {
 	merged := make([]Span, 0, len(spans))
 	merged = append(merged, spans[0])
 
-	var i int
-	i = 0
+	i := 0
 
 	for _, s := range spans[1:] {
 		if s.Start < merged[i].End {

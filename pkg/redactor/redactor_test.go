@@ -15,11 +15,11 @@ func testResponse(spans ...[2]int) *proto.Response {
 			Location: proto.Location{
 				Start: proto.Point{
 					Line:   1,
-					Column: int(s[0] + 1),
+					Column: s[0] + 1,
 				},
 				End: proto.Point{
 					Line:   1,
-					Column: int(s[1]),
+					Column: s[1],
 				},
 			},
 		})
