@@ -293,6 +293,7 @@ func BuildAuthURL(authEndpoint, redirectURI, state, clientID string, pkce *PKCEC
 		"client_id":     {clientID},
 		"redirect_uri":  {redirectURI},
 		"state":         {state},
+		"scope":         {"openid"},
 	}
 
 	if pkce != nil {
