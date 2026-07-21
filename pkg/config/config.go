@@ -63,6 +63,7 @@ type (
 		Logger    Logger    `toml:"logger"`
 		Scanner   Scanner   `toml:"scanner"`
 		Formatter Formatter `toml:"formatter"`
+		Redactor  Redactor  `toml:"Redactor"`
 	}
 
 	// Formatter provides a general output format config
@@ -73,6 +74,11 @@ type (
 	// Logger provides general logger config
 	Logger struct {
 		Level string `toml:"level"`
+	}
+
+	Redactor struct {
+		RedactionMark string `toml:"redaction_mark"`
+		RedactionWord string `toml:"redaction_word"`
 	}
 
 	// Scanner provides scanner specific config
@@ -205,6 +211,9 @@ func DefaultConfig() *Config {
 		},
 		Logger: Logger{
 			Level: "INFO",
+		},
+		Redactor: Redactor{
+			RedactionMark: "*",
 		},
 		Scanner: Scanner{
 			AllowLocal:      true,

@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,8 +11,10 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/spf13/cobra"
@@ -22,6 +25,7 @@ import (
 	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/proto"
+	"github.com/leaktk/leaktk/pkg/redactor"
 	"github.com/leaktk/leaktk/pkg/scanner"
 	"github.com/leaktk/leaktk/pkg/version"
 )
@@ -390,6 +394,116 @@ func versionCommand() *cobra.Command {
 	}
 }
 
+func yieldChunks(ctx context.Context, r io.Reader, yield func(chunk []byte, err error) error) error {
+	buf := make([]byte, 64*1024)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			n, err := r.Read(buf)
+			if err := yield(buf[:n], err); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func runRedact(cmd *cobra.Command, args []string) {
+	flags := cmd.Flags()
+
+	kind := mustGetString(flags, "kind")
+	if redactionMark := mustGetString(flags, "redaction-mark"); redactionMark != "*" {
+		cfg.Redactor.RedactionMark = redactionMark
+	}
+	if redactionWord := mustGetString(flags, "redaction-word"); redactionWord != "" {
+		cfg.Redactor.RedactionWord = redactionWord
+	}
+
+	var wg sync.WaitGroup
+	leaktkScanner := scanner.NewScanner(cfg)
+	leaktkRedactor := redactor.NewRedactor(cfg)
+
+	// Note: As more kinds are supported this will be refactored
+	// the code below will be moved into the redactor
+	if kind != "Stdio" {
+		logger.Fatal("unsupported kind: kind=%q", kind)
+	}
+
+	var mu sync.Mutex
+	backlog := make(map[string]*proto.Response)
+	var requestQueue []string
+	headIdx := 0
+
+	go leaktkScanner.Recv(func(response *proto.Response) {
+		redacted, redactErr := leaktkRedactor.RedactText(response.Resource, response)
+		if redactErr != nil {
+			logger.Error("could not redact text: %v, offset=%s, len=%d", redactErr, response.ID, len(response.Resource))
+		}
+		response.Resource = redacted
+
+		mu.Lock()
+		backlog[response.RequestID] = response
+
+		for headIdx < len(requestQueue) {
+			nextExpectedID := requestQueue[headIdx]
+			nextResponse, ok := backlog[nextExpectedID]
+			if !ok {
+				break
+			}
+			fmt.Print(nextResponse.Resource)
+			delete(backlog, nextExpectedID)
+			headIdx++
+		}
+		mu.Unlock()
+		wg.Done()
+	})
+
+	offset := 0
+	err := yieldChunks(cmd.Context(), os.Stdin, func(chunk []byte, err error) error {
+		if chunkSize := len(chunk); chunkSize > 0 {
+			offset += chunkSize
+			wg.Add(1)
+			id := strconv.Itoa(offset)
+			mu.Lock()
+			requestQueue = append(requestQueue, id)
+			mu.Unlock()
+
+			leaktkScanner.Send(&proto.Request{
+				ID:       id,
+				Kind:     proto.TextRequestKind,
+				Resource: string(chunk),
+			})
+		}
+		time.Sleep(128 * time.Millisecond)
+		return err
+	})
+
+	if err != nil && err != io.EOF {
+		logger.Fatal("error reading from stdin: %v", err)
+	}
+
+	wg.Wait()
+}
+
+func redactCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "redact",
+		Short: "Reads data from stdin, redacts secrets, and prints to stdout",
+		Run:   runRedact,
+	}
+
+	flags := cmd.Flags()
+
+	flags.String("kind", "Stdio", "The analytical kind of profile to use")
+	flags.String("redaction-mark", "*", "Replace each character of the secret with this character")
+	flags.String("redaction-word", "", "Replace the whole secret with this word")
+
+	cmd.MarkFlagsMutuallyExclusive("redaction-mark", "redaction-word")
+
+	return cmd
+}
+
 func configure(cmd *cobra.Command, args []string) error {
 	switch cmd.Use {
 	case "listen":
@@ -451,6 +565,7 @@ func rootCommand() *cobra.Command {
 	rootCommand.AddCommand(hookCommand())
 	rootCommand.AddCommand(listenCommand())
 	rootCommand.AddCommand(versionCommand())
+	rootCommand.AddCommand(redactCommand())
 
 	return rootCommand
 }
