@@ -212,6 +212,9 @@ func DefaultConfig() *Config {
 		Logger: Logger{
 			Level: "INFO",
 		},
+		Redactor: Redactor{
+			RedactionMark: "*",
+		},
 		Scanner: Scanner{
 			AllowLocal:      true,
 			ScanTimeout:     0,

@@ -470,7 +470,7 @@ func runRedact(cmd *cobra.Command, args []string) {
 			mu.Unlock()
 
 			leaktkScanner.Send(&proto.Request{
-				ID:       strconv.Itoa(offset),
+				ID:       id,
 				Kind:     proto.TextRequestKind,
 				Resource: string(chunk),
 			})
