@@ -73,7 +73,7 @@ func Run(cfg *config.Config, hook Hook, args []string) (int, error) {
 	case GitPreCommitHook:
 		return gitPreCommitRun(cfg, hook, args)
 	case PosixStdioHook:
-		return posixStdioRun(hook, args)
+		return posixStdioRun()
 	default:
 		return 1, fmt.Errorf("invalid hookname: hookname=%q", hook.Name())
 	}

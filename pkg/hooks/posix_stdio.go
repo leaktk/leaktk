@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func posixStdioRun(hook Hook, _ []string) (int, error) {
+func posixStdioRun() (int, error) {
 	hookScript := `
 	# Set user configurable var defaults
 	: "${LEAKTK_LOGGER_FILE:="/dev/null"}"
