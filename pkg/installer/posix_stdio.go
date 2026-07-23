@@ -41,11 +41,16 @@ func PosixStdioHookInstall(ctx context.Context, cfg *config.Config, opts PosixSt
 	}
 	targetPath := filepath.Join(homeDir, targetFilename)
 
-	file, err := os.OpenFile(targetPath, os.O_RDWR|os.O_CREATE, 0644)
+	file, err := os.OpenFile(targetPath, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return fmt.Errorf("faile to open or create target file %s: %w", targetPath, err)
 	}
-	defer file.Close()
+
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 
 	hookRegex, err := regexp.Compile(`\bleaktk\s+hook\s+posix\.stdio\b`)
 	if err != nil {
@@ -79,7 +84,7 @@ func PosixStdioHookInstall(ctx context.Context, cfg *config.Config, opts PosixSt
 		return fmt.Errorf("failed to seek to end of file: %w", err)
 	}
 
-	if _, err = file.WriteString(fmt.Sprintf("%s%s\n", appendPrefix, hookEvalLine)); err != nil {
+	if _, err = fmt.Fprintf(file, "%s%s\n", appendPrefix, hookEvalLine); err != nil {
 		return fmt.Errorf("failed to write hook to configuration file: %w", err)
 	}
 

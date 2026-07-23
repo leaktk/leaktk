@@ -66,7 +66,7 @@ func posixHookInstallCommand(hook hooks.Hook) *cobra.Command {
 	flags := cmd.Flags()
 	var bashrc, zshrc, stdout bool
 	flags.BoolVar(&bashrc, "bashrc", false, "Target ~/.bashrc for installation")
-	flags.BoolVar(&zshrc, "zshrc", false, "Target ~/.zshrc for isntallation")
+	flags.BoolVar(&zshrc, "zshrc", false, "Target ~/.zshrc for installation")
 	flags.BoolVar(&stdout, "stdout", false, "Print the command to stdout for ad-hoc custom installs")
 	cmd.MarkFlagsMutuallyExclusive("bashrc", "zshrc", "stdout")
 	return cmd

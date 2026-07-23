@@ -1,7 +1,6 @@
 package hooks
 
 import (
-	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
 
 	"fmt"
@@ -9,7 +8,7 @@ import (
 	"strings"
 )
 
-func posixStdioRun(cfg *config.Config, hook Hook, _ []string) (int, error) {
+func posixStdioRun(hook Hook, _ []string) (int, error) {
 	hookScript := `
 	# Set user configurable var defaults
 	: "${LEAKTK_LOGGER_FILE:="/dev/null"}"
