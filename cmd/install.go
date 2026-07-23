@@ -30,6 +30,8 @@ func hookInstallCommand() *cobra.Command {
 		switch hookkind := hook.Kind(); hookkind {
 		case hooks.GitHookKind:
 			cmd.AddCommand(gitHookInstallCommand(hook))
+		case hooks.PosixHookKind:
+			cmd.AddCommand(posixHookInstallCommand(hook))
 		default:
 			logger.Fatal("hookkind not supported by installer: hookkind=%q", hookkind)
 		}
@@ -54,6 +56,21 @@ func gitHookInstallCommand(hook hooks.Hook) *cobra.Command {
 	return cmd
 }
 
+func posixHookInstallCommand(hook hooks.Hook) *cobra.Command {
+	hookname := hook.Name()
+	cmd := &cobra.Command{
+		Use:   hookname,
+		Short: "Install and configure " + hookname,
+		Run:   runPosixHookInstall,
+	}
+	flags := cmd.Flags()
+	var bashrc, zshrc, stdout bool
+	flags.BoolVar(&bashrc, "bashrc", false, "Target ~/.bashrc for installation")
+	flags.BoolVar(&zshrc, "zshrc", false, "Target ~/.zshrc for installation")
+	flags.BoolVar(&stdout, "stdout", false, "Print the command to stdout for ad-hoc custom installs")
+	return cmd
+}
+
 func runGitHookInstall(cmd *cobra.Command, args []string) {
 	flags := cmd.Flags()
 	opts := installer.GitHookOpts{
@@ -72,5 +89,24 @@ func runGitHookInstall(cmd *cobra.Command, args []string) {
 
 	if err := installer.GitHookInstall(cmd.Context(), cfg, opts); err != nil {
 		logger.Fatal("could not install git hook: %v hookname=%q", err, opts.Hook.Name())
+	}
+}
+
+func runPosixHookInstall(cmd *cobra.Command, args []string) {
+	flags := cmd.Flags()
+
+	opts := installer.PosixStdioHookOpts{
+		Hook:   hooks.Hook(cmd.Use),
+		Bashrc: mustGetBool(flags, "bashrc"),
+		Zshrc:  mustGetBool(flags, "zshrc"),
+		Stdout: mustGetBool(flags, "stdout"),
+	}
+
+	if !opts.Bashrc && !opts.Zshrc && !opts.Stdout {
+		logger.Fatal("install requires at least one of: --bashrc, --zshrc, --stdout")
+	}
+
+	if err := installer.PosixStdioHookInstall(cmd.Context(), cfg, opts); err != nil {
+		logger.Fatal("could not install posix stdio hook: %v hookname=%q", err, opts.Hook.Name())
 	}
 }
