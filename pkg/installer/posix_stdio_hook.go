@@ -3,6 +3,7 @@ package installer
 import (
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/hooks"
+	"github.com/leaktk/leaktk/pkg/logger"
 
 	"bufio"
 	"context"
@@ -15,7 +16,7 @@ import (
 
 const posixStdioHookEvalLine = `eval "$(leaktk hook posix.stdio)"`
 
-var hookRegex = regexp.MustCompile(`\bleaktk\s+hook\s+posix\.stdio\b`)
+var posixStdioHookRegex = regexp.MustCompile(`\bleaktk\s+hook\s+posix\.stdio\b`)
 
 type PosixStdioHookOpts struct {
 	Hook   hooks.Hook
@@ -27,7 +28,6 @@ type PosixStdioHookOpts struct {
 func PosixStdioHookInstall(ctx context.Context, cfg *config.Config, opts PosixStdioHookOpts) error {
 	if opts.Stdout {
 		fmt.Println(posixStdioHookEvalLine)
-		return nil
 	}
 
 	homeDir, err := os.UserHomeDir()
@@ -36,12 +36,12 @@ func PosixStdioHookInstall(ctx context.Context, cfg *config.Config, opts PosixSt
 	}
 
 	if opts.Bashrc {
-		if err = appendToTargetFile(".bashrc", homeDir); err != nil {
+		if err = appendToTargetFile(homeDir, ".bashrc"); err != nil {
 			return fmt.Errorf("failed to write hook to .bashrc: %w", err)
 		}
 	}
 	if opts.Zshrc {
-		if err = appendToTargetFile(".zshrc", homeDir); err != nil {
+		if err = appendToTargetFile(homeDir, ".zshrc"); err != nil {
 			return fmt.Errorf("failed to write hook to .zshrc: %w", err)
 		}
 	}
@@ -49,7 +49,7 @@ func PosixStdioHookInstall(ctx context.Context, cfg *config.Config, opts PosixSt
 	return nil
 }
 
-func appendToTargetFile(targetFile string, homeDir string) error {
+func appendToTargetFile(homeDir, targetFile string) error {
 	cleanPath := filepath.Clean(filepath.Join(homeDir, targetFile))
 
 	file, err := os.OpenFile(cleanPath, os.O_RDWR|os.O_CREATE, 0600)
@@ -57,13 +57,10 @@ func appendToTargetFile(targetFile string, homeDir string) error {
 		return fmt.Errorf("failed to open or create target file: %w path=%q", err, cleanPath)
 	}
 
-	defer func() {
-		if closeErr := file.Close(); closeErr != nil && err == nil {
-			err = closeErr
-		}
-	}()
+	defer func() { _ = file.Close() }()
 
-	if len(hookRegex.FindReaderIndex(bufio.NewReader(file))) > 0 {
+	if len(posixStdioHookRegex.FindReaderIndex(bufio.NewReader(file))) > 0 {
+		logger.Info("skipping file: posix.stdio hook reference detected path=%q", cleanPath)
 		return nil
 	}
 

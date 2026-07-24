@@ -6,7 +6,8 @@ import (
 	"fmt"
 )
 
-const posixStdioHookRunScript = `# Set user configurable var defaults
+const posixStdioHookRunScript = `
+# Set user configurable var defaults
 : "${LEAKTK_LOGGER_FILE:="/dev/null"}"
 
 # Define tmpdir and fifos using the current shell PID ($$)
@@ -36,7 +37,8 @@ rmdir "${_leaktk_hook_posix_stdio_tmpdir}"
 # Unset environment cleanup variables
 unset _leaktk_hook_posix_stdio_tmpdir
 unset _leaktk_hook_posix_stdio_stdout_fifo
-unset _leaktk_hook_posix_stdio_stderr_fifo`
+unset _leaktk_hook_posix_stdio_stderr_fifo
+`
 
 func posixStdioRun() (int, error) {
 	if _, err := fmt.Print(posixStdioHookRunScript); err != nil {
