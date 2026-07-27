@@ -60,10 +60,11 @@ type (
 	// for the toolchain. This may be abstracted out to a common library in
 	// the future as more components are added to the toolchain.
 	Config struct {
-		Logger    Logger    `toml:"logger"`
-		Scanner   Scanner   `toml:"scanner"`
 		Formatter Formatter `toml:"formatter"`
+		Logger    Logger    `toml:"logger"`
 		Redactor  Redactor  `toml:"Redactor"`
+		Scanner   Scanner   `toml:"scanner"`
+		Sources   Sources   `toml:"sources"`
 	}
 
 	// Formatter provides a general output format config

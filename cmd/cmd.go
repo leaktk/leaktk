@@ -566,6 +566,7 @@ func rootCommand() *cobra.Command {
 	rootCommand.AddCommand(listenCommand())
 	rootCommand.AddCommand(versionCommand())
 	rootCommand.AddCommand(redactCommand())
+	rootCommand.AddCommand(collectCommand())
 
 	return rootCommand
 }

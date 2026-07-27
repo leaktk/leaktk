@@ -84,3 +84,23 @@ func TestLocateAndLoadConfig(t *testing.T) {
 	})
 
 }
+
+func TestLoadSources(t *testing.T) {
+	cfg, err := LoadConfigFromFile("../../testdata/sources-config.toml")
+	require.NoError(t, err)
+
+	ss := cfg.Sources
+	require.Len(t, ss, 2)
+	require.IsType(t, &AtlassianCloudJiraSource{}, ss[0])
+	require.IsType(t, &AtlassianCloudAdminSource{}, ss[1])
+
+	jira := ss[0].(*AtlassianCloudJiraSource)
+	assert.Equal(t, "cloud-jira", jira.ID())
+	assert.Equal(t, "jimbo", jira.Username)
+	assert.Equal(t, "...", jira.Password)
+
+	admin := ss[1].(*AtlassianCloudAdminSource)
+	assert.Equal(t, "cloud-admin", admin.ID())
+	assert.Equal(t, "...", admin.Token)
+	assert.Equal(t, "1", admin.OrgID)
+}
