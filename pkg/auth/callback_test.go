@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -46,7 +47,10 @@ func TestStartCallbackServer(t *testing.T) {
 
 		resp, err := http.Get("http://" + addr + "/callback?error=access_denied")
 		require.NoError(t, err)
-		defer func() { _ = resp.Body.Close() }()
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+
+		assert.Contains(t, string(body), "Login failed")
 
 		select {
 		case result := <-resultCh:
@@ -54,6 +58,22 @@ func TestStartCallbackServer(t *testing.T) {
 		case <-time.After(2 * time.Second):
 			t.Fatal("timed out waiting for callback result")
 		}
+	})
+
+	t.Run("ShowsSuccessOnValidCallback", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		addr, _, shutdown, err := StartCallbackServer(ctx, "127.0.0.1:0")
+		require.NoError(t, err)
+		defer shutdown()
+
+		resp, err := http.Get("http://" + addr + "/callback?code=test-code&state=test-state")
+		require.NoError(t, err)
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+
+		assert.Contains(t, string(body), "Login successful")
 	})
 
 	t.Run("ShutdownStopsServer", func(t *testing.T) {

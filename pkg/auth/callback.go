@@ -33,7 +33,11 @@ func StartCallbackServer(ctx context.Context, addr string) (string, <-chan Callb
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		_, _ = fmt.Fprint(w, callbackHTML)
+		if len(result.Error) > 0 {
+			_, _ = fmt.Fprint(w, callbackErrorHTML)
+		} else {
+			_, _ = fmt.Fprint(w, callbackSuccessHTML)
+		}
 
 		select {
 		case resultCh <- result:
@@ -62,11 +66,20 @@ func StartCallbackServer(ctx context.Context, addr string) (string, <-chan Callb
 	return listener.Addr().String(), resultCh, shutdown, nil
 }
 
-const callbackHTML = `<!DOCTYPE html>
+const callbackSuccessHTML = `<!DOCTYPE html>
 <html>
 <head><title>LeakTK Login</title></head>
 <body>
 <h2>Login successful</h2>
 <p>You may close this tab and return to the terminal.</p>
+</body>
+</html>`
+
+const callbackErrorHTML = `<!DOCTYPE html>
+<html>
+<head><title>LeakTK Login</title></head>
+<body>
+<h2>Login failed</h2>
+<p>Authentication was denied. Please close this tab and try again.</p>
 </body>
 </html>`

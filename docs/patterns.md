@@ -37,7 +37,7 @@ leaktk login https://patterns.example.com --web
 # Provide a token directly
 leaktk login --token=<YOUR_AUTH_TOKEN>
 
-# Still browser
+# Prompt for a token interactively
 leaktk login
 ```
 
@@ -81,7 +81,7 @@ file located at `$HOME/.config/leaktk/config.toml`.
 url = "https://patterns.example.com"
 ```
 
-And then run `leaktk login` to provide set the auth token.
+And then run `leaktk login` to set the auth token.
 
 #### Environment Variables
 
