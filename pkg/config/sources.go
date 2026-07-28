@@ -35,7 +35,7 @@ func (ss *Sources) UnmarshalTOML(data any) error {
 		}
 
 		if err := kind.UnmarshalText([]byte(kindStr)); err != nil {
-			return fmt.Errorf("%v index=%d", err, i)
+			return fmt.Errorf("%w index=%d", err, i)
 		}
 
 		switch kind {
@@ -49,7 +49,8 @@ func (ss *Sources) UnmarshalTOML(data any) error {
 			})
 		case AtlassianCloudJiraSourceKind:
 			*ss = append(*ss, &AtlassianCloudJiraSource{
-				id: castSrcField[string](value, "id"),
+				id:      castSrcField[string](value, "id"),
+				SiteURL: castSrcField[string](value, "site_url"),
 				BasicAuth: BasicAuth{
 					Username: castSrcField[string](value, "username"),
 					Password: castSrcField[string](value, "password"),
@@ -61,4 +62,38 @@ func (ss *Sources) UnmarshalTOML(data any) error {
 	}
 
 	return nil
+}
+
+type Source interface {
+	ID() string
+	Kind() SourceKind
+	Auth
+}
+
+type AtlassianCloudAdminSource struct {
+	id    string
+	OrgID string
+	BearerAuth
+}
+
+func (s *AtlassianCloudAdminSource) ID() string {
+	return s.id
+}
+
+func (s *AtlassianCloudAdminSource) Kind() SourceKind {
+	return AtlassianCloudAdminSourceKind
+}
+
+type AtlassianCloudJiraSource struct {
+	id      string
+	SiteURL string
+	BasicAuth
+}
+
+func (s *AtlassianCloudJiraSource) ID() string {
+	return s.id
+}
+
+func (s *AtlassianCloudJiraSource) Kind() SourceKind {
+	return AtlassianCloudJiraSourceKind
 }

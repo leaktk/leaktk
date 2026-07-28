@@ -10,6 +10,8 @@ import (
 var once sync.Once
 var client *http.Client
 
+var NewRequestWithContext = http.NewRequestWithContext
+
 // NewClient creates an http client with preferred configuration
 func NewClient() *http.Client {
 	once.Do(func() {

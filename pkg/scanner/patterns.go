@@ -128,7 +128,7 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 		// Open the config file, creating it if it doesn't already exist, but don't truncate yet
 		configFile, err := os.OpenFile(p.config.Gitleaks.ConfigPath, os.O_RDWR|os.O_CREATE, 0600)
 		if err != nil {
-			return p.gitleaksConfig, fmt.Errorf("could not open config file: %v path=%q", err, p.config.Gitleaks.ConfigPath)
+			return p.gitleaksConfig, fmt.Errorf("could not open config file: %w path=%q", err, p.config.Gitleaks.ConfigPath)
 		}
 
 		// defer the close and add logging around it since we're adding locks

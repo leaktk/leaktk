@@ -41,7 +41,7 @@ func runCollect(cmd *cobra.Command, args []string) {
 				err = encoder.Encode(fact)
 			}
 			if err != nil {
-				return fmt.Errorf("could not encode fact: %v fact_entity_id=%d fact_kind=%q", err, fact.EntityID, fact.Kind)
+				return fmt.Errorf("could not encode fact: %w fact_entity_id=%d fact_kind=%q", err, fact.EntityID, fact.Kind)
 			}
 			return nil
 		})

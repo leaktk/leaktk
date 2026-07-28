@@ -157,7 +157,7 @@ func SetLoggerFormat(logFormat LogFormat) error {
 	case HUMAN:
 		currentLogFormat = HUMAN
 	default:
-		return fmt.Errorf("invalid log format: log_format=%v", logFormat)
+		return fmt.Errorf("invalid log format log_format=%v", logFormat)
 	}
 
 	return nil
