@@ -218,14 +218,15 @@ func discoverFromRedirects(ctx context.Context, client *http.Client, resp *http.
 		if err != nil {
 			return nil, fmt.Errorf("error following redirect chain: %w", err)
 		}
-		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode == http.StatusOK {
+			_ = resp.Body.Close()
 			return nil, nil
 		}
 
 		if resp.StatusCode == http.StatusUnauthorized {
 			header := resp.Header.Get("WWW-Authenticate")
+			_ = resp.Body.Close()
 			if len(header) > 0 {
 				auth, err := ParseWWWAuthenticate(header)
 				if err == nil {
@@ -236,6 +237,7 @@ func discoverFromRedirects(ctx context.Context, client *http.Client, resp *http.
 
 		if resp.StatusCode != http.StatusMovedPermanently && resp.StatusCode != http.StatusFound &&
 			resp.StatusCode != http.StatusSeeOther && resp.StatusCode != http.StatusTemporaryRedirect {
+			_ = resp.Body.Close()
 			break
 		}
 	}
