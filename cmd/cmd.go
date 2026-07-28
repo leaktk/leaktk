@@ -85,8 +85,13 @@ func runLogin(cmd *cobra.Command, args []string) {
 			logger.Fatal("could not login: %v", err)
 		}
 
+		client := httpclient.NewClient()
+		if err := auth.ValidateToken(cmd.Context(), client, serverURL, authToken); err != nil {
+			logger.Fatal("token validation failed: %v", err)
+		}
+
 		if err := config.SavePatternServerAuthToken(authToken); err != nil {
-			logger.Fatal("could not login: %v", err)
+			logger.Fatal("could not save token: %v", err)
 		}
 	}
 
