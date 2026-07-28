@@ -17,7 +17,7 @@ func main() {
 			_, _ = fmt.Fprintln(w, "unauthorized")
 			return
 		}
-		_, _ = fmt.Fprintf(w, "authenticated: %s\n", r.URL.Path)
+		_, _ = fmt.Fprintln(w, "authenticated")
 	})
 
 	addr := "127.0.0.1:8580"
