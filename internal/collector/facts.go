@@ -1,47 +1,39 @@
 package collector
 
-import (
-	"encoding/json"
-	"fmt"
-)
-
 type FactKind uint32
 
 var FactKindNames = []string{
-	"URL",
-	"EmailAddr",
 	"ID",
+	"Active",
+	"EmailAddress",
+	"EmailAddressVerified",
 	"Name",
 	"SourceID",
+	"URL",
 	"Username",
+}
+
+const (
+	FactTrueValue  = "t"
+	FactFalseValue = "f"
+)
+
+func (fk FactKind) ID() uint32 {
+	return uint32(fk)
 }
 
 func (fk FactKind) String() string {
 	return FactKindNames[fk]
 }
 
-func (fk FactKind) MarshalJSON() ([]byte, error) {
-	return json.Marshal(fk.String())
-}
-
-func (fk *FactKind) UnmarshalText(text []byte) error {
-	s := string(text)
-	for i, name := range FactKindNames {
-		if name == s {
-			*fk = FactKind(i)
-			return nil
-		}
-	}
-
-	return fmt.Errorf("unknown fact kind: %q", s)
-}
-
 const (
-	URLFactKind FactKind = iota
-	EmailAddrFactKind
-	IDFactKind
+	IDFactKind FactKind = iota
+	ActiveFactKind
+	EmailAddressFactKind
+	EmailAddressVerifiedFactKind
 	NameFactKind
-	SourceID
+	SourceIDFactKind
+	URLFactKind
 	UsernameFactKind
 )
 
@@ -50,4 +42,17 @@ type Fact struct {
 	Kind      FactKind `json:"knd"`
 	Timestamp int64    `json:"ts"`
 	Value     string   `json:"val"`
+}
+
+type FactYieldFunc func(fact Fact) error
+
+// helper for yielding values
+func yieldKV(f Fact, fk FactKind, v string, yield FactYieldFunc, err error) error {
+	if err != nil {
+		return err
+	}
+
+	f.Kind = fk
+	f.Value = v
+	return yield(f)
 }

@@ -9,6 +9,17 @@ import (
 
 type Sources []Source
 
+func castOptSrcField[T any](values map[string]any, field string, fallback T) T {
+	v := values[field]
+	t, ok := v.(T)
+	if !ok {
+		if v == nil {
+			return fallback
+		}
+		logger.Fatal("invalid source field type: field=%q expected_type=%T actual_type=%T", field, t, v)
+	}
+	return t
+}
 func castSrcField[T any](values map[string]any, field string) T {
 	v := values[field]
 	t, ok := v.(T)
@@ -41,8 +52,9 @@ func (ss *Sources) UnmarshalTOML(data any) error {
 		switch kind {
 		case AtlassianCloudAdminSourceKind:
 			*ss = append(*ss, &AtlassianCloudAdminSource{
-				id:    castSrcField[string](value, "id"),
-				OrgID: castSrcField[string](value, "org_id"),
+				id:      castSrcField[string](value, "id"),
+				OrgID:   castSrcField[string](value, "org_id"),
+				BaseURL: castOptSrcField[string](value, "base_url", "https://api.atlassian.com/admin"),
 				BearerAuth: BearerAuth{
 					Token: castSrcField[string](value, "token"),
 				},
@@ -50,7 +62,7 @@ func (ss *Sources) UnmarshalTOML(data any) error {
 		case AtlassianCloudJiraSourceKind:
 			*ss = append(*ss, &AtlassianCloudJiraSource{
 				id:      castSrcField[string](value, "id"),
-				SiteURL: castSrcField[string](value, "site_url"),
+				BaseURL: castSrcField[string](value, "base_url"),
 				BasicAuth: BasicAuth{
 					Username: castSrcField[string](value, "username"),
 					Password: castSrcField[string](value, "password"),
@@ -71,8 +83,9 @@ type Source interface {
 }
 
 type AtlassianCloudAdminSource struct {
-	id    string
-	OrgID string
+	id      string
+	OrgID   string
+	BaseURL string
 	BearerAuth
 }
 
@@ -86,7 +99,7 @@ func (s *AtlassianCloudAdminSource) Kind() SourceKind {
 
 type AtlassianCloudJiraSource struct {
 	id      string
-	SiteURL string
+	BaseURL string
 	BasicAuth
 }
 

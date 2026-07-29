@@ -14,14 +14,22 @@ import (
 )
 
 func runCollect(cmd *cobra.Command, args []string) {
-	srcs := make(map[string]config.Source, len(cfg.Sources))
-
+	srcsByID := make(map[string]config.Source, len(cfg.Sources))
 	for i, src := range cfg.Sources {
 		id := src.ID()
-		if _, exists := srcs[id]; exists {
+		if _, exists := srcsByID[id]; exists {
 			logger.Fatal("duplicate source ID detected in config id=%q index=%d", id, i)
 		}
-		srcs[id] = src
+		srcsByID[id] = src
+	}
+
+	srcs := make(config.Sources, 0, len(args))
+	for _, id := range args {
+		src, exists := srcsByID[id]
+		if !exists {
+			logger.Fatal("source ID does not exist id=%q", id)
+		}
+		srcs = append(srcs, src)
 	}
 
 	leaktCollector := collector.NewCollector()
@@ -29,26 +37,15 @@ func runCollect(cmd *cobra.Command, args []string) {
 	defer func() { _ = writer.Flush() }()
 	encoder := json.NewEncoder(writer)
 	ctx := cmd.Context()
-
-	for _, id := range args {
-		src, exists := srcs[id]
-		if !exists {
-			logger.Fatal("source ID does not exist id=%q", id)
+	err := leaktCollector.Facts(ctx, srcs, func(fact collector.Fact) error {
+		if err := encoder.Encode(fact); err != nil {
+			return fmt.Errorf("could not encode fact: %w fact_entity_id=%d fact_kind=%q", err, fact.EntityID, fact.Kind)
 		}
+		return nil
+	})
 
-		err := leaktCollector.Facts(ctx, src, func(fact collector.Fact, err error) error {
-			if err == nil {
-				err = encoder.Encode(fact)
-			}
-			if err != nil {
-				return fmt.Errorf("could not encode fact: %w fact_entity_id=%d fact_kind=%q", err, fact.EntityID, fact.Kind)
-			}
-			return nil
-		})
-
-		if err != nil {
-			logger.Fatal("collect failed: %v src_id=%q src_kind=%q", err, src.ID(), src.Kind())
-		}
+	if err != nil {
+		logger.Fatal("collect failed: %v", err)
 	}
 }
 

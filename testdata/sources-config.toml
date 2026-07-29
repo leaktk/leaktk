@@ -1,7 +1,7 @@
 [[sources]]
 kind = "AtlassianCloudJira"
 id = "cloud-jira"
-site_url = "https://example.atlassian.net"
+base_url = "https://example.atlassian.net"
 username = "jimbo"
 password = "..." # notsecret
 
