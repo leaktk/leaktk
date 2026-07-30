@@ -114,7 +114,7 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 			return p.gitleaksConfig, err
 		}
 
-		p.gitleaksConfig, err = betterleaks.ParseConfig(rawConfig)
+		p.gitleaksConfig, err = betterleaks.ParseConfig([]byte(rawConfig))
 		if err != nil {
 			logger.Debug("fetched config:\n%s", rawConfig)
 
@@ -180,7 +180,7 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 			return p.gitleaksConfig, err
 		}
 
-		p.gitleaksConfig, err = betterleaks.ParseConfig(string(rawConfig))
+		p.gitleaksConfig, err = betterleaks.ParseConfig(rawConfig)
 		if err != nil {
 			logger.Debug("loaded config:\n%s\n", rawConfig)
 

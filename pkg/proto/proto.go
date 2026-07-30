@@ -176,6 +176,7 @@ type Location struct {
 	Path    string `json:"path"    toml:"path"    yaml:"path"`
 	Start   Point  `json:"start"   toml:"start"   yaml:"start"`
 	End     Point  `json:"end"     toml:"end"     yaml:"end"`
+	URL     string `json:"url"     toml:"url"     yaml:"url"`
 }
 
 // Point just provides line & column coordinates for a Result in a text file

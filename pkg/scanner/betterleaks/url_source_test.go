@@ -53,7 +53,7 @@ func TestURL(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Len(t, fragments, 1)
-	assert.Equal(t, "/general", fragments[0].FilePath)
+	assert.Equal(t, "/general", fragments[0].Attributes[sources.AttrPath])
 	assert.Equal(t, "general-content", fragments[0].Raw)
 
 	// Test json data
@@ -72,6 +72,6 @@ func TestURL(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Len(t, fragments, 1)
-	assert.Equal(t, "/data.json!data", fragments[0].FilePath)
+	assert.Equal(t, "/data.json!data", fragments[0].Attributes[sources.AttrPath])
 	assert.Equal(t, "json-data", fragments[0].Raw)
 }

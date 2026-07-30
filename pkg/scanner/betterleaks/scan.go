@@ -14,18 +14,18 @@ import (
 	"github.com/betterleaks/betterleaks/detect"
 	"github.com/betterleaks/betterleaks/report"
 	"github.com/betterleaks/betterleaks/sources"
+	"github.com/betterleaks/betterleaks/sources/scm"
 )
-
-var defaultRemote = &sources.RemoteInfo{}
 
 // GitScanOpts configures ScanGit
 type GitScanOpts struct {
-	RevisionRange string
 	Depth         int
-	Remote        *sources.RemoteInfo
+	RemoteURL     string
+	RevisionRange string
 	Since         string
 	Staged        bool
 	Unstaged      bool
+	Platform      scm.Platform
 }
 
 // ContainerImageScanOpts configures ScanContainerImage
@@ -50,9 +50,9 @@ func ScanReader(ctx context.Context, detector *detect.Detector, reader io.Reader
 	return detector.DetectSource(
 		ctx,
 		&sources.File{
-			Config:          &detector.Config,
 			Content:         reader,
 			MaxArchiveDepth: detector.MaxArchiveDepth,
+			ShouldSkip:      detector.SkipFunc(),
 		},
 	)
 }
@@ -61,10 +61,10 @@ func ScanURL(ctx context.Context, detector *detect.Detector, rawURL string, opts
 	return detector.DetectSource(
 		ctx,
 		&URL{
-			Config:           &detector.Config,
 			FetchURLPatterns: opts.FetchURLPatterns,
 			MaxArchiveDepth:  detector.MaxArchiveDepth,
 			RawURL:           rawURL,
+			ShouldSkip:       detector.SkipFunc(),
 		},
 	)
 }
@@ -73,10 +73,10 @@ func ScanJSON(ctx context.Context, detector *detect.Detector, data string, opts 
 	return detector.DetectSource(
 		ctx,
 		&JSON{
-			Config:           &detector.Config,
 			FetchURLPatterns: opts.FetchURLPatterns,
 			MaxArchiveDepth:  detector.MaxArchiveDepth,
 			RawMessage:       json.RawMessage(data),
+			ShouldSkip:       detector.SkipFunc(),
 		},
 	)
 }
@@ -85,11 +85,11 @@ func ScanFiles(ctx context.Context, detector *detect.Detector, path string) ([]r
 	return detector.DetectSource(
 		ctx,
 		&sources.Files{
-			Config:          &detector.Config,
 			FollowSymlinks:  detector.FollowSymlinks,
+			MaxArchiveDepth: detector.MaxArchiveDepth,
 			Path:            path,
 			Sema:            detector.Sema,
-			MaxArchiveDepth: detector.MaxArchiveDepth,
+			ShouldSkip:      detector.SkipFunc(),
 		},
 	)
 }
@@ -97,13 +97,12 @@ func ScanFiles(ctx context.Context, detector *detect.Detector, path string) ([]r
 func ScanContainerImage(ctx context.Context, detector *detect.Detector, rawImageRef string, opts ContainerImageScanOpts) ([]report.Finding, error) {
 	source := &ContainerImage{
 		Arch:            opts.Arch,
-		Config:          &detector.Config,
 		Depth:           opts.Depth,
 		Exclusions:      opts.Exclusions,
 		MaxArchiveDepth: detector.MaxArchiveDepth,
 		RawImageRef:     rawImageRef,
-		Remote:          defaultRemote,
 		Sema:            detector.Sema,
+		ShouldSkip:      detector.SkipFunc(),
 	}
 
 	if len(opts.Since) > 0 {
@@ -124,21 +123,15 @@ func ScanGit(ctx context.Context, detector *detect.Detector, gitDir string, opts
 		return nil, fmt.Errorf("could not create git command: %w", err)
 	}
 
-	var remote *sources.RemoteInfo
-	if opts.Remote != nil {
-		remote = opts.Remote
-	} else {
-		remote = defaultRemote
-	}
-
 	return detector.DetectSource(
 		ctx,
 		&sources.Git{
 			Cmd:             gitCmd,
-			Config:          &detector.Config,
-			Remote:          remote,
-			Sema:            detector.Sema,
 			MaxArchiveDepth: detector.MaxArchiveDepth,
+			RemoteURL:       opts.RemoteURL,
+			Platform:        opts.Platform,
+			Sema:            detector.Sema,
+			ShouldSkip:      detector.SkipFunc(),
 		},
 	)
 }
