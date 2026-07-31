@@ -44,6 +44,16 @@ func runHelp(cmd *cobra.Command, args []string) {
 	}
 }
 
+func saveLogin(ctx context.Context, serverURL, token string) {
+	client := httpclient.NewClient()
+	if err := auth.ValidateToken(ctx, client, serverURL, token); err != nil {
+		logger.Fatal("token validation failed: %v", err)
+	}
+	if err := config.SavePatternServerAuth(serverURL, token); err != nil {
+		logger.Fatal("could not save token: %v", err)
+	}
+}
+
 func runLogin(cmd *cobra.Command, args []string) {
 	serverURL := cfg.Scanner.Patterns.Server.URL
 	if len(args) > 0 {
@@ -58,14 +68,7 @@ func runLogin(cmd *cobra.Command, args []string) {
 
 	switch {
 	case len(token) > 0:
-		client := httpclient.NewClient()
-		if err := auth.ValidateToken(cmd.Context(), client, serverURL, token); err != nil {
-			logger.Fatal("token validation failed: %v", err)
-		}
-
-		if err := config.SavePatternServerAuth(serverURL, token); err != nil {
-			logger.Fatal("could not save token: %v", err)
-		}
+		saveLogin(cmd.Context(), serverURL, token)
 
 	case web:
 		client := httpclient.NewClient()
@@ -73,10 +76,7 @@ func runLogin(cmd *cobra.Command, args []string) {
 		if err != nil {
 			logger.Fatal("web login failed: %v", err)
 		}
-
-		if err := config.SavePatternServerAuth(serverURL, token); err != nil {
-			logger.Fatal("could not save token: %v", err)
-		}
+		saveLogin(cmd.Context(), serverURL, token)
 
 	default:
 		fmt.Printf("Enter %s auth token: ", serverURL)
@@ -85,15 +85,7 @@ func runLogin(cmd *cobra.Command, args []string) {
 		if _, err := fmt.Scanln(&authToken); err != nil {
 			logger.Fatal("could not login: %v", err)
 		}
-
-		client := httpclient.NewClient()
-		if err := auth.ValidateToken(cmd.Context(), client, serverURL, authToken); err != nil {
-			logger.Fatal("token validation failed: %v", err)
-		}
-
-		if err := config.SavePatternServerAuth(serverURL, authToken); err != nil {
-			logger.Fatal("could not save token: %v", err)
-		}
+		saveLogin(cmd.Context(), serverURL, authToken)
 	}
 
 	logger.Info("login successful")

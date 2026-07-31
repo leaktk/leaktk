@@ -11,6 +11,9 @@ import (
 func TestPartialLoadConfigFromFile(t *testing.T) {
 	require.NoError(t, os.Setenv("LEAKTK_PATTERN_SERVER_AUTH_TOKEN", "x"))
 	require.NoError(t, os.Unsetenv("LEAKTK_PATTERN_SERVER_URL"))
+	origConfigDir := localConfigDir
+	localConfigDir = t.TempDir()
+	defer func() { localConfigDir = origConfigDir }()
 	cfg, err := LoadConfigFromFile("../../testdata/partial-config.toml")
 
 	if err != nil {

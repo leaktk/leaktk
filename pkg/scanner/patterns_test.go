@@ -183,7 +183,6 @@ func TestHandleFetchError(t *testing.T) {
 
 	t.Run("AuthError on default server shows login command", func(t *testing.T) {
 		cfg := config.DefaultConfig()
-		cfg.Scanner.Patterns.Autologin = true
 
 		client := httpclient.NewClient()
 		p := NewPatterns(&cfg.Scanner.Patterns, client)

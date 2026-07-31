@@ -14,6 +14,7 @@ import (
 	"time"
 
 	betterleaksconfig "github.com/betterleaks/betterleaks/config"
+	"golang.org/x/term"
 
 	"github.com/leaktk/leaktk/pkg/auth"
 	"github.com/leaktk/leaktk/pkg/config"
@@ -24,8 +25,6 @@ import (
 
 // ErrUnauthorized is returned when the pattern server returns 401
 var ErrUnauthorized = errors.New("unauthorized")
-
-const defaultPatternServerURL = "https://raw.githubusercontent.com/leaktk/patterns/main/target"
 
 // Patterns acts as an abstraction for fetching different scanner patterns
 // and keeping them up to date and cached
@@ -214,16 +213,12 @@ func (p *Patterns) GitleaksConfigHash() string {
 	return fmt.Sprintf("%x", p.gitleaksConfigHash)
 }
 
-func (p *Patterns) isCustomServer() bool {
-	return p.config.Server.URL != defaultPatternServerURL
-}
-
 func (p *Patterns) handleFetchError(ctx context.Context, fetchErr error) (string, error) {
 	if !errors.Is(fetchErr, ErrUnauthorized) {
 		return "", fetchErr
 	}
 
-	if !p.config.Autologin || !p.isCustomServer() {
+	if !p.config.Autologin || !term.IsTerminal(int(os.Stdin.Fd())) {
 		return "", fmt.Errorf(
 			"authentication required: run \"leaktk login %s\" to authenticate: %w",
 			p.config.Server.URL, fetchErr,

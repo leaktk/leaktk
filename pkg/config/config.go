@@ -137,6 +137,11 @@ func setMissingValues(cfg *Config) *Config {
 		cfg.Scanner.Patterns.Autofetch,
 	)
 
+	defaultURL := DefaultConfig().Scanner.Patterns.Server.URL
+	if cfg.Scanner.Patterns.Server.URL == defaultURL {
+		cfg.Scanner.Patterns.Autologin = false
+	}
+
 	cfg.Scanner.Patterns.Autologin = stringToBool(
 		os.Getenv("LEAKTK_AUTOLOGIN"),
 		cfg.Scanner.Patterns.Autologin,
