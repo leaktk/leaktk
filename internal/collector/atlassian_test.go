@@ -195,7 +195,7 @@ func TestAtlassian(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Equal(t, FactKindNames, actualFactKindNames)
-		assert.Len(t, facts, 24)
+		assert.Len(t, facts, 28)
 
 		actual := make(map[uint32]map[string]string)
 		for _, fact := range facts {
@@ -212,6 +212,7 @@ func TestAtlassian(t *testing.T) {
 			ActiveFactKind.String():               FactTrueValue,
 			EmailAddressFactKind.String():         "john@example.com",
 			EmailAddressVerifiedFactKind.String(): FactTrueValue,
+			KindFactKind.String():                 "AtlassianCloudUser",
 			IDFactKind.String():                   "12345678-1234-1234-1234-123456789012",
 			NameFactKind.String():                 "John Doe",
 			SourceIDFactKind.String():             "cloud-admin",
@@ -220,6 +221,7 @@ func TestAtlassian(t *testing.T) {
 			ActiveFactKind.String():               FactTrueValue,
 			EmailAddressFactKind.String():         "jane@example.com",
 			EmailAddressVerifiedFactKind.String(): FactTrueValue,
+			KindFactKind.String():                 "AtlassianCloudUser",
 			IDFactKind.String():                   "12345678-1234-1234-1234-123456789013",
 			NameFactKind.String():                 "Jane Doe",
 			SourceIDFactKind.String():             "cloud-admin",

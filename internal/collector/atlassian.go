@@ -142,6 +142,7 @@ func atlassianCloudAdminYieldUserFacts(ctx context.Context, src *config.Atlassia
 			} else {
 				err = yieldKV(fact, EmailAddressVerifiedFactKind, FactFalseValue, yield, err)
 			}
+			err = yieldKV(fact, KindFactKind, "AtlassianCloudUser", yield, err)
 			err = yieldKV(fact, SourceIDFactKind, src.ID(), yield, err)
 			err = yieldKV(fact, IDFactKind, item.ID, yield, err)
 			err = yieldKV(fact, EmailAddressFactKind, item.Email, yield, err)

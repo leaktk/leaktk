@@ -13,6 +13,7 @@ var FactKindNames = []string{
 	"Active",
 	"EmailAddress",
 	"EmailAddressVerified",
+	"Kind",
 	"Name",
 	"SourceID",
 	"URL",
@@ -37,6 +38,7 @@ const (
 	ActiveFactKind
 	EmailAddressFactKind
 	EmailAddressVerifiedFactKind
+	KindFactKind
 	NameFactKind
 	SourceIDFactKind
 	URLFactKind
