@@ -1,10 +1,9 @@
 package cmd
 
 import (
-	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -33,13 +32,17 @@ func runCollect(cmd *cobra.Command, args []string) {
 	}
 
 	leaktCollector := collector.NewCollector()
-	writer := bufio.NewWriter(os.Stdout)
-	defer func() { _ = writer.Flush() }()
-	encoder := json.NewEncoder(writer)
+	if _, err := fmt.Fprintln(os.Stdout, strings.Join(collector.FactCSVHeader, ",")); err != nil {
+		logger.Fatal("could not write CSV header: %v", err)
+	}
 	ctx := cmd.Context()
 	err := leaktCollector.Facts(ctx, srcs, func(fact collector.Fact) error {
-		if err := encoder.Encode(fact); err != nil {
-			return fmt.Errorf("could not encode fact: %w fact_entity_id=%d fact_kind=%q", err, fact.EntityID, fact.Kind)
+		row, err := fact.MarshalCSV()
+		if err != nil {
+			return fmt.Errorf("could not marshal fact: %w eid=%d kind=%q", err, fact.EntityID, fact.Kind)
+		}
+		if _, err := os.Stdout.Write(row); err != nil {
+			return fmt.Errorf("could not write fact: %w eid=%d kind=%q", err, fact.EntityID, fact.Kind)
 		}
 		return nil
 	})
@@ -51,9 +54,19 @@ func runCollect(cmd *cobra.Command, args []string) {
 
 func collectCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "collect <source-id>",
-		Short: "Collect facts about a source",
-		Args:  cobra.MinimumNArgs(1),
-		Run:   runCollect,
+		Use:   "collect <source-id>...",
+		Short: "Collect facts about configured sources",
+		Long: `Collect facts about given source ids in the config and stream them to stdout.
+
+Facts are structured as a CSV with a header row and one fact per line. Facts
+are similar to RDF triples in that they have a subject (the eid), predicate
+(kind), and object (value). They also have a timestamp (ts) for when the fact
+was collected.
+
+An entity ID should be treated as ephemeral between runs and is solely for
+grouping facts. Entity ID 0 is a special ID used for mapping enum IDs to
+values.`,
+		Args: cobra.MinimumNArgs(1),
+		Run:  runCollect,
 	}
 }

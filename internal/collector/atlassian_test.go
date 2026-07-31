@@ -195,7 +195,7 @@ func TestAtlassian(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Equal(t, FactKindNames, actualFactKindNames)
-		assert.Len(t, facts, 8)
+		assert.Len(t, facts, 24)
 
 		actual := make(map[uint32]map[string]string)
 		for _, fact := range facts {
@@ -208,23 +208,26 @@ func TestAtlassian(t *testing.T) {
 			emap[fact.Kind.String()] = fact.Value
 		}
 
+		john := map[string]string{
+			ActiveFactKind.String():               FactTrueValue,
+			EmailAddressFactKind.String():         "john@example.com",
+			EmailAddressVerifiedFactKind.String(): FactTrueValue,
+			IDFactKind.String():                   "12345678-1234-1234-1234-123456789012",
+			NameFactKind.String():                 "John Doe",
+			SourceIDFactKind.String():             "cloud-admin",
+		}
+		jane := map[string]string{
+			ActiveFactKind.String():               FactTrueValue,
+			EmailAddressFactKind.String():         "jane@example.com",
+			EmailAddressVerifiedFactKind.String(): FactTrueValue,
+			IDFactKind.String():                   "12345678-1234-1234-1234-123456789013",
+			NameFactKind.String():                 "Jane Doe",
+			SourceIDFactKind.String():             "cloud-admin",
+		}
+
 		expected := map[uint32]map[string]string{
-			1: {
-				ActiveFactKind.String():               FactTrueValue,
-				EmailAddressFactKind.String():         "john@example.com",
-				EmailAddressVerifiedFactKind.String(): FactTrueValue,
-				IDFactKind.String():                   "12345678-1234-1234-1234-123456789012",
-				NameFactKind.String():                 "John Doe",
-				SourceIDFactKind.String():             "cloud-admin",
-			},
-			2: {
-				ActiveFactKind.String():               FactTrueValue,
-				EmailAddressFactKind.String():         "jane@example.com",
-				EmailAddressVerifiedFactKind.String(): FactTrueValue,
-				IDFactKind.String():                   "12345678-1234-1234-1234-123456789013",
-				NameFactKind.String():                 "Jane Doe",
-				SourceIDFactKind.String():             "cloud-admin",
-			},
+			1: john, 2: jane,
+			3: john, 4: jane,
 		}
 
 		assert.Equal(t, expected, actual)

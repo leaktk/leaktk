@@ -125,8 +125,8 @@ func atlassianCloudAdminYieldUserFacts(ctx context.Context, src *config.Atlassia
 			goto done
 		}
 
-		for i, item := range respData.Data {
-			fact.EntityID = eidOffset + uint32(i)
+		for _, item := range respData.Data {
+			fact.EntityID = eidOffset
 			eidOffset++
 
 			if len(item.ID) == 0 {
@@ -170,7 +170,7 @@ func atlassianCloudAdminFacts(ctx context.Context, src *config.AtlassianCloudAdm
 		return eidOffset, fmt.Errorf("atlassian cloud admin facts: %w", err)
 	}
 	for _, dirID := range dirIDs {
-		if eidOffset, err := atlassianCloudAdminYieldUserFacts(ctx, src, eidOffset, dirID, yield); err != nil {
+		if eidOffset, err = atlassianCloudAdminYieldUserFacts(ctx, src, eidOffset, dirID, yield); err != nil {
 			return eidOffset, err
 		}
 	}
