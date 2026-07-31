@@ -119,5 +119,19 @@ func TestLoadSources(t *testing.T) {
 		"uid":  "Username",
 		"mail": "EmailAddress",
 		"cn":   "Name",
-	}, ldapSrc.AttributeMap)
+	}, ldapSrc.Attributes)
+
+	require.Len(t, ldapSrc.Extractions, 3)
+
+	assert.Equal(t, "info", ldapSrc.Extractions[0].Attribute)
+	assert.Equal(t, `github\.com/(?P<Username>\w+)`, ldapSrc.Extractions[0].Pattern.String())
+	assert.Equal(t, "GitHubAccount", ldapSrc.Extractions[0].Kind)
+
+	assert.Equal(t, "info", ldapSrc.Extractions[1].Attribute)
+	assert.Equal(t, `(?P<Username>\w+)\.github\.io`, ldapSrc.Extractions[1].Pattern.String())
+	assert.Equal(t, "GitHubPagesAccount", ldapSrc.Extractions[1].Kind)
+
+	assert.Equal(t, "info", ldapSrc.Extractions[2].Attribute)
+	assert.Equal(t, `gitlab\.com/(?P<Username>[\w.-]+)`, ldapSrc.Extractions[2].Pattern.String())
+	assert.Equal(t, "GitLabAccount", ldapSrc.Extractions[2].Kind)
 }

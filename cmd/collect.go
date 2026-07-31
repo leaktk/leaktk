@@ -7,7 +7,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/leaktk/leaktk/internal/collector"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
@@ -31,12 +30,12 @@ func runCollect(cmd *cobra.Command, args []string) {
 		srcs = append(srcs, src)
 	}
 
-	leaktCollector := collector.NewCollector()
-	if _, err := fmt.Fprintln(os.Stdout, strings.Join(collector.FactCSVHeader, ",")); err != nil {
+	leaktCollector := collectors.NewCollector()
+	if _, err := fmt.Fprintln(os.Stdout, strings.Join(collectors.FactCSVHeader, ",")); err != nil {
 		logger.Fatal("could not write CSV header: %v", err)
 	}
 	ctx := cmd.Context()
-	err := leaktCollector.Facts(ctx, srcs, func(fact collector.Fact) error {
+	err := leaktCollector.Facts(ctx, srcs, func(fact collectors.Fact) error {
 		row, err := fact.MarshalCSV()
 		if err != nil {
 			return fmt.Errorf("could not marshal fact: %w eid=%d kind=%q", err, fact.EntityID, fact.Kind)

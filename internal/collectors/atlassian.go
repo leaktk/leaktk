@@ -1,4 +1,4 @@
-package collector
+package collectors
 
 import (
 	"bufio"
@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"io"
 	nethttp "net/http"
-	"time"
 
+	"github.com/leaktk/leaktk/internal/entities"
+	"github.com/leaktk/leaktk/internal/facts"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/http"
 	"github.com/leaktk/leaktk/pkg/logger"
@@ -101,7 +102,7 @@ func atlassianCloudAdminYieldUserFacts(ctx context.Context, src *config.Atlassia
 		Cursor string `json:"cursor,omitempty"`
 	}
 
-	fact := Fact{Timestamp: time.Now().Unix()}
+	fact := Fact{}
 	client := http.NewClient()
 	payload.Limit = 100
 
@@ -134,22 +135,22 @@ func atlassianCloudAdminYieldUserFacts(ctx context.Context, src *config.Atlassia
 			if len(item.ID) == 0 {
 				continue
 			}
-			err = yieldKV(fact, IDFactKind, item.ID, yield, err)
+			err = facts.YieldWithKV(fact, facts.IDKind, item.ID, err, yield)
 			if item.Status == "active" {
-				err = yieldKV(fact, ActiveFactKind, FactTrueValue, yield, err)
+				err = facts.YieldWithKV(fact, facts.ActiveKind, FactValueTrue, err, yield)
 			} else {
-				err = yieldKV(fact, ActiveFactKind, FactFalseValue, yield, err)
+				err = facts.YieldWithKV(fact, facts.ActiveKind, FactValueFalse, err, yield)
 			}
-			err = yieldKV(fact, EmailAddressFactKind, item.Email, yield, err)
+			err = facts.YieldWithKV(fact, facts.EmailAddressKind, item.Email, err, yield)
 			if item.EmailVerified {
-				err = yieldKV(fact, EmailAddressVerifiedFactKind, FactTrueValue, yield, err)
+				err = facts.YieldWithKV(fact, facts.EmailAddressVerifiedKind, FactValueTrue, err, yield)
 			} else {
-				err = yieldKV(fact, EmailAddressVerifiedFactKind, FactFalseValue, yield, err)
+				err = facts.YieldWithKV(fact, facts.EmailAddressVerifiedKind, FactValueFalse, err, yield)
 			}
-			err = yieldKV(fact, KindFactKind, "AtlassianCloudUser", yield, err)
-			err = yieldKV(fact, NameFactKind, item.Name, yield, err)
-			err = yieldKV(fact, SourceIDFactKind, src.ID(), yield, err)
-			err = yieldKV(fact, URLFactKind, fmt.Sprintf("https://home.atlassian.com/o/%s/people/%s", src.OrgID, item.ID), yield, err)
+			err = facts.YieldWithKV(fact, facts.EntityKindKind, entities.AtlassianCloudUserKind.String(), err, yield)
+			err = facts.YieldWithKV(fact, facts.NameKind, item.Name, err, yield)
+			err = facts.YieldWithKV(fact, facts.SourceIDKind, src.ID(), err, yield)
+			err = facts.YieldWithKV(fact, facts.URLKind, fmt.Sprintf("https://home.atlassian.com/o/%s/people/%s", src.OrgID, item.ID), err, yield)
 			if err != nil {
 				goto done
 			}

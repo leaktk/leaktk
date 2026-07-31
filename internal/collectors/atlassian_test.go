@@ -1,4 +1,4 @@
-package collector
+package collectors
 
 import (
 	"encoding/json"
@@ -181,12 +181,12 @@ func TestAtlassian(t *testing.T) {
 
 	t.Run("atlassianCloudAdminFacts", func(t *testing.T) {
 		var facts []Fact
-		var actualFactKindNames []string
+		var actualKindNames []string
 
 		err := NewCollector().Facts(t.Context(), cfg.Sources[0:1], func(fact Fact) error {
 			// zero entity ID facts map the fact kinds so the strings aren't repeated over and over again
 			if fact.EntityID == 0 {
-				actualFactKindNames = append(actualFactKindNames, fact.Kind.String())
+				actualKindNames = append(actualKindNames, fact.Kind.String())
 			} else {
 				facts = append(facts, fact)
 			}
@@ -194,7 +194,7 @@ func TestAtlassian(t *testing.T) {
 		})
 
 		require.NoError(t, err)
-		require.Equal(t, FactKindNames, actualFactKindNames)
+		require.Equal(t, KindNames, actualKindNames)
 		assert.Len(t, facts, 32)
 
 		actual := make(map[uint32]map[string]string)
@@ -209,24 +209,24 @@ func TestAtlassian(t *testing.T) {
 		}
 
 		john := map[string]string{
-			ActiveFactKind.String():               FactTrueValue,
-			EmailAddressFactKind.String():         "john@example.com",
-			EmailAddressVerifiedFactKind.String(): FactTrueValue,
-			KindFactKind.String():                 "AtlassianCloudUser",
-			IDFactKind.String():                   "12345678-1234-1234-1234-123456789012",
-			NameFactKind.String():                 "John Doe",
-			SourceIDFactKind.String():             "cloud-admin",
-			URLFactKind.String():                  "https://home.atlassian.com/o/1/people/12345678-1234-1234-1234-123456789012",
+			facts.ActiveKind.String():               FactValueTrue,
+			facts.EmailAddressKind.String():         "john@example.com",
+			facts.EmailAddressVerifiedKind.String(): FactValueTrue,
+			facts.EntityKindKind.String():           "AtlassianCloudUser",
+			facts.IDKind.String():                   "12345678-1234-1234-1234-123456789012",
+			facts.NameKind.String():                 "John Doe",
+			facts.SourceIDKind.String():             "cloud-admin",
+			facts.URLKind.String():                  "https://home.atlassian.com/o/1/people/12345678-1234-1234-1234-123456789012",
 		}
 		jane := map[string]string{
-			ActiveFactKind.String():               FactTrueValue,
-			EmailAddressFactKind.String():         "jane@example.com",
-			EmailAddressVerifiedFactKind.String(): FactTrueValue,
-			KindFactKind.String():                 "AtlassianCloudUser",
-			IDFactKind.String():                   "12345678-1234-1234-1234-123456789013",
-			NameFactKind.String():                 "Jane Doe",
-			SourceIDFactKind.String():             "cloud-admin",
-			URLFactKind.String():                  "https://home.atlassian.com/o/1/people/12345678-1234-1234-1234-123456789013",
+			facts.ActiveKind.String():               FactValueTrue,
+			facts.EmailAddressKind.String():         "jane@example.com",
+			facts.EmailAddressVerifiedKind.String(): FactValueTrue,
+			facts.EntityKindKind.String():           "AtlassianCloudUser",
+			facts.IDKind.String():                   "12345678-1234-1234-1234-123456789013",
+			facts.NameKind.String():                 "Jane Doe",
+			facts.SourceIDKind.String():             "cloud-admin",
+			facts.URLKind.String():                  "https://home.atlassian.com/o/1/people/12345678-1234-1234-1234-123456789013",
 		}
 
 		expected := map[uint32]map[string]string{

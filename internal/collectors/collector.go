@@ -1,4 +1,4 @@
-package collector
+package collectors
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/leaktk/leaktk/internal/facts"
 	"github.com/leaktk/leaktk/pkg/config"
 )
 
@@ -20,8 +21,8 @@ func (*Collector) Facts(ctx context.Context, srcs config.Sources, yield FactYiel
 	// Yield fact kind mapping first (entity_id = 0)
 	// This is so we don't have to pass the strings along for each fact kind
 	fact := Fact{EntityID: 0, Timestamp: time.Now().Unix()}
-	for fk, name := range FactKindNames {
-		fact.Kind = FactKind(fk)
+	for fk, name := range facts.KindNames {
+		fact.Kind = facts.Kind(fk)
 		fact.Value = name
 		if err = yield(fact); err != nil {
 			return err

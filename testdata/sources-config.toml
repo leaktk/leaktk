@@ -21,8 +21,23 @@ base_dn = "ou=people,dc=example,dc=com"
 filter = "(objectClass=person)"
 scope = "sub"
 
-[sources.attribute_map]
+[sources.attributes]
 uuid = "ID"
 uid = "Username"
 mail = "EmailAddress"
 cn = "Name"
+
+[[sources.extractions]]
+attribute = "info"
+pattern = 'github\.com/(?P<Username>\w+)'
+kind = "GitHubAccount"
+
+[[sources.extractions]]
+attribute = "info"
+pattern = '(?P<Username>\w+)\.github\.io'
+kind = "GitHubPagesAccount"
+
+[[sources.extractions]]
+attribute = "info"
+pattern = 'gitlab\.com/(?P<Username>[\w.-]+)'
+kind = "GitLabAccount"
