@@ -77,20 +77,20 @@ func parseParams(s string) map[string]string {
 }
 
 func OAuthConfig(ctx context.Context, client *http.Client, realm, clientID, redirectURI string) (*oauth2.Config, error) {
-    if len(clientID) == 0 {
-        clientID = defaultClientID
-    }
-    ctx = oidc.ClientContext(ctx, client)
-    provider, err := oidc.NewProvider(ctx, realm)
-    if err != nil {
-        return nil, fmt.Errorf("OIDC discovery failed: %w", err)
-    }
-    return &oauth2.Config{
-        ClientID:    clientID,
-        Endpoint:    provider.Endpoint(),
-        RedirectURL: redirectURI,
-        Scopes:      []string{oidc.ScopeOpenID},
-    }, nil
+	if len(clientID) == 0 {
+		clientID = defaultClientID
+	}
+	ctx = oidc.ClientContext(ctx, client)
+	provider, err := oidc.NewProvider(ctx, realm)
+	if err != nil {
+		return nil, fmt.Errorf("OIDC discovery failed: %w", err)
+	}
+	return &oauth2.Config{
+		ClientID:    clientID,
+		Endpoint:    provider.Endpoint(),
+		RedirectURL: redirectURI,
+		Scopes:      []string{oidc.ScopeOpenID},
+	}, nil
 }
 
 const maxRedirects = 10
