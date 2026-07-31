@@ -2,6 +2,7 @@ package collector
 
 import (
 	"bytes"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -75,6 +76,14 @@ func (f Fact) MarshalCSV() ([]byte, error) {
 }
 
 type FactYieldFunc func(fact Fact) error
+
+func factKindByName(name string) (FactKind, bool) {
+	i := slices.Index(FactKindNames, name)
+	if i < 0 {
+		return 0, false
+	}
+	return FactKind(i), true
+}
 
 // helper for yielding values
 func yieldKV(f Fact, fk FactKind, v string, yield FactYieldFunc, err error) error {

@@ -37,6 +37,8 @@ func (*Collector) Facts(ctx context.Context, srcs config.Sources, yield FactYiel
 			// TODO
 			// eidOffset, err = atlassianCloudJiraFacts(ctx, src, eidOffset, yield)
 			err = errors.New("unsupported source")
+		case *config.LDAPSource:
+			eidOffset, err = ldapFacts(ctx, src, eidOffset, yield)
 		default:
 			err = errors.New("unsupported source")
 		}

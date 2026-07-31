@@ -6,10 +6,6 @@ import (
 	"net/http"
 )
 
-type Auth interface {
-	SetHeader(h http.Header) error
-}
-
 type BasicAuth struct {
 	Username string `toml:"username"`
 	Password string `toml:"password"`

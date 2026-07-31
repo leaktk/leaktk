@@ -7,6 +7,7 @@ type SourceKind uint32
 var SourceKindNames = []string{
 	"AtlassianCloudAdmin",
 	"AtlassianCloudJira",
+	"LDAP",
 }
 
 func (sk SourceKind) String() string {
@@ -28,4 +29,5 @@ func (sk *SourceKind) UnmarshalText(text []byte) error {
 const (
 	AtlassianCloudAdminSourceKind SourceKind = iota
 	AtlassianCloudJiraSourceKind
+	LDAPSourceKind
 )

@@ -90,9 +90,10 @@ func TestLoadSources(t *testing.T) {
 	require.NoError(t, err)
 
 	ss := cfg.Sources
-	require.Len(t, ss, 2)
+	require.Len(t, ss, 3)
 	require.IsType(t, &AtlassianCloudJiraSource{}, ss[0])
 	require.IsType(t, &AtlassianCloudAdminSource{}, ss[1])
+	require.IsType(t, &LDAPSource{}, ss[2])
 
 	jira := ss[0].(*AtlassianCloudJiraSource)
 	assert.Equal(t, "cloud-jira", jira.ID())
@@ -103,4 +104,20 @@ func TestLoadSources(t *testing.T) {
 	assert.Equal(t, "cloud-admin", admin.ID())
 	assert.Equal(t, "...", admin.Token)
 	assert.Equal(t, "1", admin.OrgID)
+
+	ldapSrc := ss[2].(*LDAPSource)
+	assert.Equal(t, "corp-ldap", ldapSrc.ID())
+	assert.Equal(t, LDAPSourceKind, ldapSrc.Kind())
+	assert.Equal(t, "ldaps://ldap.example.com:636", ldapSrc.URL)
+	assert.Equal(t, "cn=admin,dc=example,dc=com", ldapSrc.Username)
+	assert.Equal(t, "...", ldapSrc.Password)
+	assert.Equal(t, "ou=people,dc=example,dc=com", ldapSrc.BaseDN)
+	assert.Equal(t, "(objectClass=person)", ldapSrc.Filter)
+	assert.Equal(t, "sub", ldapSrc.Scope)
+	assert.Equal(t, map[string]string{
+		"uuid": "ID",
+		"uid":  "Username",
+		"mail": "EmailAddress",
+		"cn":   "Name",
+	}, ldapSrc.AttributeMap)
 }

@@ -68,6 +68,26 @@ func (ss *Sources) UnmarshalTOML(data any) error {
 					Password: castSrcField[string](value, "password"),
 				},
 			})
+		case LDAPSourceKind:
+			rawMap := castSrcField[map[string]any](value, "attribute_map")
+			attrMap := make(map[string]string, len(rawMap))
+			for k, v := range rawMap {
+				s, ok := v.(string)
+				if !ok {
+					return fmt.Errorf("attribute_map values must be strings key=%q index=%d", k, i)
+				}
+				attrMap[k] = s
+			}
+			*ss = append(*ss, &LDAPSource{
+				id:           castSrcField[string](value, "id"),
+				URL:          castSrcField[string](value, "url"),
+				Username:     castSrcField[string](value, "username"),
+				Password:     castSrcField[string](value, "password"),
+				BaseDN:       castSrcField[string](value, "base_dn"),
+				Filter:       castOptSrcField(value, "filter", "(objectClass=*)"),
+				Scope:        castOptSrcField(value, "scope", "sub"),
+				AttributeMap: attrMap,
+			})
 		default:
 			return fmt.Errorf("unknown source kind: %q index=%d", kind, i)
 		}
@@ -79,7 +99,6 @@ func (ss *Sources) UnmarshalTOML(data any) error {
 type Source interface {
 	ID() string
 	Kind() SourceKind
-	Auth
 }
 
 type AtlassianCloudAdminSource struct {
@@ -109,4 +128,23 @@ func (s *AtlassianCloudJiraSource) ID() string {
 
 func (s *AtlassianCloudJiraSource) Kind() SourceKind {
 	return AtlassianCloudJiraSourceKind
+}
+
+type LDAPSource struct {
+	id           string
+	URL          string
+	Username     string
+	Password     string
+	BaseDN       string
+	Filter       string
+	Scope        string
+	AttributeMap map[string]string
+}
+
+func (s *LDAPSource) ID() string {
+	return s.id
+}
+
+func (s *LDAPSource) Kind() SourceKind {
+	return LDAPSourceKind
 }
