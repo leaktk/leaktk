@@ -38,10 +38,10 @@ const (
 )
 
 type Fact struct {
-	EntityID  uint32   `json:"eid"`
-	Kind      FactKind `json:"knd"`
-	Timestamp int64    `json:"ts"`
-	Value     string   `json:"val"`
+	EntityID  uint32   `json:"eid"   csv:"eid"`
+	Kind      FactKind `json:"kind"  csv:"kind"`
+	Timestamp int64    `json:"ts"    csv:"ts"`
+	Value     string   `json:"value" csv:"value"`
 }
 
 type FactYieldFunc func(fact Fact) error

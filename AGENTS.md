@@ -92,15 +92,16 @@ The collector gathers facts about configured sources and streams them as CSV to 
 
 Usage: `leaktk collect <source-id>...`
 
-**Facts** are structured as CSV rows with a header row using snake_case field names. Facts are modeled after RDF triples: each has a subject (entity_id), predicate (kind), and object (value), plus a timestamp. Entity IDs group related facts about the same entity (e.g. a user). Facts are streamed one per row so they can be produced incrementally.
+**Facts** are structured as CSV rows with a header row using snake case field names. Facts are modeled after RDF triples: each has a subject (eid), predicate (kind), and object (value), plus a timestamp (ts). Entity IDs group related facts about the same entity (e.g. a user). Facts are streamed one per row so they can be produced incrementally.
 
-Entity ID 0 is reserved for metadata. Before any real facts are emitted, the collector yields rows with `entity_id=0` that map each numeric `kind` value to its human-readable name (e.g. `0 → "ID"`, `1 → "Active"`). This lets subsequent rows use the compact numeric kind without repeating the string in every row. See `FactKindNames` in `facts.go` for the canonical mapping.
+Entity ID 0 is reserved for metadata. Before any real facts are emitted, the collector yields rows with `eid=0` that map each numeric `kind` value to its human-readable name (e.g. `0 → "ID"`, `1 → "Active"`). This lets subsequent rows use the compact numeric kind without repeating the string in every row. See `FactKindNames` in `facts.go` for the canonical mapping.
 
 Fact fields:
-- `entity_id`: Groups facts about the same entity (uint32; 0 = metadata/mapping rows, 1+ = real entities)
+
+- `eid`: Groups facts about the same entity (uint32; 0 = metadata/mapping rows, 1+ = real entities)
 - `kind`: The type of fact as a numeric ID (maps to names like ID, Active, EmailAddress, Name, SourceID, URL, Username)
-- `value`: The fact's value (for entity_id=0 rows, this is the kind's string name)
-- `timestamp`: Unix timestamp of when the fact was collected
+- `value`: The fact's value (for eid=0 rows, this is the kind's string name)
+- `ts`: Unix timestamp of when the fact was collected
 
 Key components:
 - `collector.go`: Core Collector type, dispatches to source-specific collectors
