@@ -21,8 +21,8 @@ var FactKindNames = []string{
 }
 
 const (
-	FactTrueValue  = "t"
-	FactFalseValue = "f"
+	FactTrueValue  = "true"
+	FactFalseValue = "false"
 )
 
 func (fk FactKind) ID() uint32 {

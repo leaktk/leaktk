@@ -38,13 +38,15 @@ func atlassianReq(ctx context.Context, src *config.AtlassianCloudAdminSource, cl
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
 		logger.Debug("atlassian admin API response body: %s", string(body))
-		return fmt.Errorf("unexpected status status_code=%d", resp.StatusCode)
+		return fmt.Errorf("unexpected status status_code=%d url=%s", resp.StatusCode, req.URL)
 	}
 
 	decoder := json.NewDecoder(bufio.NewReader(resp.Body))
 	if err = decoder.Decode(respData); err != nil {
 		return fmt.Errorf("decode response: %w", err)
 	}
+
+	logger.Trace("atlassian admin API response data: %+v", respData)
 
 	return nil
 }
@@ -96,7 +98,7 @@ func atlassianCloudAdminYieldUserFacts(ctx context.Context, src *config.Atlassia
 	var jsonText []byte
 	var payload struct {
 		Limit  int    `json:"limit"`
-		Cursor string `json:"cursor"`
+		Cursor string `json:"cursor,omitempty"`
 	}
 
 	fact := Fact{Timestamp: time.Now().Unix()}
@@ -132,21 +134,22 @@ func atlassianCloudAdminYieldUserFacts(ctx context.Context, src *config.Atlassia
 			if len(item.ID) == 0 {
 				continue
 			}
+			err = yieldKV(fact, IDFactKind, item.ID, yield, err)
 			if item.Status == "active" {
 				err = yieldKV(fact, ActiveFactKind, FactTrueValue, yield, err)
 			} else {
 				err = yieldKV(fact, ActiveFactKind, FactFalseValue, yield, err)
 			}
+			err = yieldKV(fact, EmailAddressFactKind, item.Email, yield, err)
 			if item.EmailVerified {
 				err = yieldKV(fact, EmailAddressVerifiedFactKind, FactTrueValue, yield, err)
 			} else {
 				err = yieldKV(fact, EmailAddressVerifiedFactKind, FactFalseValue, yield, err)
 			}
 			err = yieldKV(fact, KindFactKind, "AtlassianCloudUser", yield, err)
-			err = yieldKV(fact, SourceIDFactKind, src.ID(), yield, err)
-			err = yieldKV(fact, IDFactKind, item.ID, yield, err)
-			err = yieldKV(fact, EmailAddressFactKind, item.Email, yield, err)
 			err = yieldKV(fact, NameFactKind, item.Name, yield, err)
+			err = yieldKV(fact, SourceIDFactKind, src.ID(), yield, err)
+			err = yieldKV(fact, URLFactKind, fmt.Sprintf("https://home.atlassian.com/o/%s/people/%s", src.OrgID, item.ID), yield, err)
 			if err != nil {
 				goto done
 			}
