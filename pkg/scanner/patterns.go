@@ -237,7 +237,7 @@ func (p *Patterns) handleFetchError(ctx context.Context, fetchErr error) (string
 		return "", fmt.Errorf("autologin failed: %w", err)
 	}
 
-	if err := config.SavePatternServerAuthToken(token); err != nil {
+	if err := config.SavePatternServerAuth(p.config.Server.URL, token); err != nil {
 		return "", fmt.Errorf("could not save token after autologin: %w", err)
 	}
 
