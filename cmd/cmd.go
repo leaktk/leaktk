@@ -115,11 +115,10 @@ func runScan(cmd *cobra.Command, args []string) {
 	}
 
 	refresh, err := cmd.Flags().GetBool("refresh")
-  if err != nil {
+	if err != nil {
 		logger.Fatal("invalid refresh value: %v", err.Error())
-  }
-  cfg.Scanner.Patterns.Refresh = refresh
-
+	}
+	cfg.Scanner.Patterns.Refresh = refresh
 
 	if len(grepPattern) != 0 {
 		if _, err := regexp.Compile(grepPattern); err != nil {
@@ -373,6 +372,7 @@ func analyzeCommand() *cobra.Command {
 	}
 
 	return analyzeCommand
+}
 
 func buildGitleaksConfig(pattern string) string {
 	var rule struct {
