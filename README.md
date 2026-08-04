@@ -30,6 +30,7 @@ request even if there were errors. More info on the formats are in the
 - [Configuration](docs/config.md)
 - [Request/Response Formats for Listen](docs/listen.md)
 - [Git Hooks](docs/hooks.md)
+- [Redaction](docs/redact.md)
 - (Coming Soon) Analyzing Results
 - (Coming Soon) Monitoring Sources
 

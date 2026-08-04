@@ -115,6 +115,7 @@ type Response struct {
 	RequestID string    `json:"request_id"      toml:"request_id"      yaml:"request_id"`
 	Results   []*Result `json:"results"         toml:"results"         yaml:"results"`
 	Error     *Error    `json:"error,omitempty" toml:"error,omitempty" yaml:"error,omitempty"`
+	Resource  string    `json:"-"               toml:"-"               yaml:"-"`
 }
 
 // Opts for the different scan types; not all apply to each scan type
