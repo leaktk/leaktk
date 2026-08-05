@@ -172,7 +172,7 @@ func discoverFromRedirects(ctx context.Context, client *http.Client, resp *http.
 		}
 
 		_ = resp.Body.Close()
-		resp, err = client.Do(req)
+		resp, err = client.Do(req) // codeql[go/request-forgery] server URL is configured by user
 		if err != nil {
 			return nil, fmt.Errorf("error following redirect chain: %w", err)
 		}
