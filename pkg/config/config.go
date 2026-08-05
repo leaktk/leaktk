@@ -118,6 +118,11 @@ type (
 		AuthToken string `toml:"auth_token"` // #nosec G117
 		URL       string `toml:"url"`
 	}
+
+	WellKnown struct {
+		Bundles map[string]map[string]string `json:"bundles,omitempty"`
+		Patterns map[string]map[string]string `json:"patterns,omitempty"`
+	}
 )
 
 // Make sure that any config returned to the code goes through this function
