@@ -9,7 +9,8 @@ RUN \
   mkdir -p /var/lib/leaktk && \
   useradd -u 1001 -r -g 0 -d /var/lib/leaktk -c "LeakTK" leaktk && \
   chown -R 1001:0 /var/lib/leaktk && \
-  chmod -R ug=rwX,o-rwx /var/lib/leaktk
+  chmod -R ug=rwX,o-rwx /var/lib/leaktk && \
+  git config --system --add safe.directory '*'
 
 USER 1001
 ENTRYPOINT ["/usr/local/bin/leaktk"]
