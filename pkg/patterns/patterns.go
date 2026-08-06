@@ -17,6 +17,7 @@ import (
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/pkg/wellknown"
 )
 
 type parseFunc func(context.Context, string) (any, error)
@@ -27,6 +28,7 @@ type hashDgst [32]byte
 type Patterns struct {
 	client *http.Client
 	config *config.Patterns
+	wellKnownClient *wellknown.Client
 	mutex  sync.Mutex
 
 	// Gitleaks Patterns fields
@@ -43,37 +45,104 @@ func NewPatterns(patternsCfg *config.Patterns, client *http.Client) *Patterns {
 	return &Patterns{
 		client: client,
 		config: patternsCfg,
+		wellKnownClient: wellknown.NewClient(patternsCfg.Server.URL, client, patternsCfg.Server.AuthToken),
 	}
 }
 
-// fetchURLFor constructs the fetch URL for a given provider and version.
-func (p *Patterns) fetchURLFor(provider, version string) (string, error) {
-	return url.JoinPath(p.config.Server.URL, "patterns", provider, version)
+// fetchPatternFromBundle attempts to download the bundle archive and extract <provider>/<vX_Y_Z>/data.json
+func (p *Patterns) fetchPatternFromBundle(ctx context.Context, bundleURL, provider, version string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, bundleURL, nil)
+	if err != nil {
+		return "", err
+	}
+	if len(p.config.Server.AuthToken) > 0 {
+		req.Header.Add("Authorization", "Bearer "+p.config.Server.AuthToken)
+	}
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("bundle fetch failed with status: %d", resp.StatusCode)
+	}
+
+	gz, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read gzip stream: %w", err)
+	}
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+
+	// Rego/OPA package paths replace periods with underscores (e.g. 8.27.0 -> v8_27_0)
+	versionKey := "v" + strings.ReplaceAll(strings.TrimPrefix(version, "v"), ".", "_")
+	targetPath := fmt.Sprintf("%s/%s/data.json", provider, versionKey)
+
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+
+		if filepath.Clean(header.Name) == targetPath {
+			var jsonData map[string]interface{}
+			if err := json.NewDecoder(tr).Decode(&jsonData); err != nil {
+				return "", fmt.Errorf("failed to parse json in bundle: %w", err)
+			}
+
+			tomlBytes, err := toml.Marshal(jsonData)
+			if err != nil {
+				return "", fmt.Errorf("failed to encode pattern to TOML: %w", err)
+			}
+
+			return string(tomlBytes), nil
+		}
+	}
+
+	return "", fmt.Errorf("pattern %s/%s not found in bundle", provider, version)
 }
 
-// fetchAndUpdate fetches patterns from server, checks hash, and updates if changed.
-func (p *Patterns) fetchAndUpdate(ctx context.Context, parse parseFunc, fetchURL, localPath string, currentHash *hashDgst) (any, *hashDgst, error) {
-	rawPatterns, err := fetchPatterns(ctx, p.client, fetchURL, p.config.Server.AuthToken)
+func (p *Patterns) resolveAndFetch(ctx context.Context, provider, version string) (string, error) {
+	wk := p.wellKnownClient.Fetch(ctx)
+
+	if bundleURL, ok := p.wellKnownClient.BundleURL(wk, "latest", "bundle.tar.gz"); ok {
+		rawTOML, err := p.fetchPatternFromBundle(ctx, bundleURL, provider, version)
+		if err == nil {
+			logger.Debug("extracted pattern %s/%s from bundle", provider, version)
+			return rawTOML, nil
+		}
+		logger.Debug("bundle extraction skipped/failed: %v", err)
+	}
+
+	patternURL := p.wellKnownClient.PatternURL(wk, provider, version)
+	return fetchPatterns(ctx, p.client, patternURL, p.config.Server.AuthToken)
+}
+
+// fetchAndUpdate fetches patterns, checks hash, and updates if changed.
+func (p *Patterns) fetchAndUpdate(ctx context.Context, parse parseFunc, provider, version, localPath string, currentHash *hashDgst) (any, *hashDgst, error) {
+	rawPatterns, err := p.resolveAndFetch(ctx, provider, version)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// Calculate hash of fetched content
 	newHash := hashDgst(sha256.Sum256([]byte(rawPatterns)))
 
-	// Only update if hash changed
 	if newHash == *currentHash {
 		logger.Debug("skipping update: patterns hash unchanged")
 		return nil, nil, nil
 	}
 
-	// Parse before writing to disk to confirm they're good
 	newPatterns, err := parse(ctx, rawPatterns)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not parse patterns: %w", err)
 	}
 
-	// Hash changed, write to disk
 	if err := updateLocalPatterns(localPath, rawPatterns); err != nil {
 		return newPatterns, nil, err
 	}
@@ -106,15 +175,10 @@ func getOrUpdate[T any](
 	cfg := p.config
 	modTimeExceeds := fileModTimeExceeds(localPath, cfg.RefreshAfter)
 
-	if cfg.Autofetch && modTimeExceeds || cfg.Refresh == true {
+	if cfg.Autofetch && modTimeExceeds || cfg.Refresh {
 		logger.Info("fetching %s patterns", resourceName)
 
-		fetchURL, err := p.fetchURLFor(resourceName, version)
-		if err != nil {
-			return *cachedPatterns, err
-		}
-
-		newPatterns, newHash, err := p.fetchAndUpdate(ctx, parse, fetchURL, localPath, cachedHash)
+		newPatterns, newHash, err := p.fetchAndUpdate(ctx, parse, resourceName, version, localPath, cachedHash)
 		if err != nil {
 			return *cachedPatterns, err
 		}
@@ -146,8 +210,6 @@ func getOrUpdate[T any](
 	return *cachedPatterns, nil
 }
 
-// fileModTimeExceeds returns true if the local configuration file at 'path' is
-// older than 'modTimeLimit' seconds.
 func fileModTimeExceeds(path string, modTimeLimit int) bool {
 	if modTimeLimit == 0 {
 		return false
@@ -160,20 +222,16 @@ func fileModTimeExceeds(path string, modTimeLimit int) bool {
 	return true
 }
 
-// updateLocalPatterns writes the raw patterns content to the specified local
-// file path. It creates the directory if it does not exist.
 func updateLocalPatterns(localPath, rawPatterns string) error {
 	if err := os.MkdirAll(filepath.Dir(localPath), 0700); err != nil {
 		return fmt.Errorf("could not create patterns dir: %v", err)
 	}
 
-	// Open the patterns file, creating it if it doesn't already exist, but don't truncate yet
-	patternsFile, err := os.OpenFile(localPath, os.O_RDWR|os.O_CREATE, 0600) // #nosec G304
+	patternsFile, err := os.OpenFile(localPath, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return fmt.Errorf("could not open patterns file: %v path=%q", err, localPath)
 	}
 
-	// Defer the close and add logging around it since we're adding locks
 	defer func() {
 		if err := patternsFile.Close(); err != nil {
 			logger.Error("could not close patterns file: %v path=%q", err, localPath)
@@ -185,7 +243,6 @@ func updateLocalPatterns(localPath, rawPatterns string) error {
 		}
 	}()
 
-	// Establish a file lock to avoid different instances of the scanner writing to the file
 	if fs.FileLockSupported {
 		logger.Debug("locking patterns file for writes: path=%q", localPath)
 		if err = fs.LockFile(patternsFile); err != nil {
@@ -193,7 +250,6 @@ func updateLocalPatterns(localPath, rawPatterns string) error {
 		}
 	}
 
-	// Now that a lock's established if it's supported, seek to the beginning to be safe, truncate and write the file
 	if _, err := patternsFile.Seek(0, 0); err != nil {
 		return fmt.Errorf("could not seek to the beginning of the patterns file: %w path=%s", err, localPath)
 	}
@@ -206,11 +262,10 @@ func updateLocalPatterns(localPath, rawPatterns string) error {
 	return nil
 }
 
-// fetchPatterns fetches the raw patterns from the server.
 func fetchPatterns(ctx context.Context, client *http.Client, patternsURL string, authToken string) (string, error) {
-	logger.Debug("fetching patterns: url=%q", patternsURL)
+	logger.Debug("fetching resource: url=%q", patternsURL)
 
-	request, err := http.NewRequestWithContext(ctx, "GET", patternsURL, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, patternsURL, nil)
 	if err != nil {
 		return "", err
 	}
@@ -220,16 +275,16 @@ func fetchPatterns(ctx context.Context, client *http.Client, patternsURL string,
 		request.Header.Add("Authorization", "Bearer "+authToken)
 	}
 
-	response, err := client.Do(request) // #nosec G704
+	response, err := client.Do(request)
 	if err != nil {
 		return "", err
 	}
 
-	defer (func() {
+	defer func() {
 		if closeErr := response.Body.Close(); closeErr != nil {
-			logger.Debug("error closing pattern response body: %v", closeErr)
+			logger.Debug("error closing response body: %v", closeErr)
 		}
-	})()
+	}()
 
 	if response.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("unexpected status code: status_code=%d", response.StatusCode)
