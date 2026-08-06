@@ -1,13 +1,11 @@
 package wellknown
 
 import (
-	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
-
-	"github.com/leaktk/leaktk/pkg/config"
+	"encoding/json"
+	"net/url"
+	"context"
 )
 
 type WellKnown struct {
@@ -15,12 +13,10 @@ type WellKnown struct {
 	Patterns map[string]map[string]string `json:"patterns,omitempty"`
 }
 
-
-
 type Client struct {
-	BaseURL    string
-	HTTPClient *http.Client
-	CacheDir   string // Defaults to ~/.cache/leaktk
+	baseURL    string
+	httpClient *http.Client
+	authToken string
 }
 
 func NewClient(baseURL string, httpClient *http.Client, authToken string) *Client {
