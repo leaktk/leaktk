@@ -51,9 +51,6 @@ steps:
       # Inherits POSIX stdio redirection automatically
       ./run-legacy-build-pipeline.sh
 ```
-
-```
-```
 ## Planned
 
 These are the hooks we want to implement next:
