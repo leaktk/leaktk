@@ -35,7 +35,6 @@ echo "Deploying application with API_KEY=${SECRET_API_KEY}..."
 ./deploy-service.sh
 ```
 
-```
 ### 2. System-Wide in CI/CD Runners (Broad Enforcement)
 The primary use case for `leaktk install hook posix.stdio` is environments where you cannot easily modify every individual script or third-party step executed by a build system.
 
