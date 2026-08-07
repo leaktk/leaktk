@@ -44,7 +44,7 @@ By executing the installer during your CI/CD runner startup or container image b
 steps:
   - name: Install LeakTK POSIX Stdio Hook
     run: |
-      leaktk install hook posix.stdio
+      leaktk install hook posix.stdio --bashrc
       
   - name: Run Arbitrary Un-audited Build Scripts
     run: |
