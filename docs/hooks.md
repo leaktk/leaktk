@@ -21,10 +21,10 @@ LeakTK supports the following standard stream hook:
 | --------- | -------- | ------- |
 | posix.stdio | CI/CD Engineers, Automation Developers, System Administrators | Intercept and redact secrets from stdio streams |
 
-# Recommended Usage & Workflow
+### Recommended Usage & Workflow
 The `posix.stdio` hook redirects standard output (`stdout`) and standard error (`stderr`) streams through named FIFOs managed by background `leaktk redact` daemons.
 
-# 1. In Individual Scripts (Targeted Protection)
+### 1. In Individual Scripts (Targeted Protection)
 To ensure execution logs from an automated script never leak sensitive credentials into build logs or storage buckets, add the hook initialization immediately after the script's shebang line:
 ```#!/bin/sh
 #!/bin/sh
@@ -34,7 +34,9 @@ eval "$(leaktk hook posix.stdio)"
 echo "Deploying application with API_KEY=${SECRET_API_KEY}..."
 ./deploy-service.sh
 ```
-# 2. System-Wide in CI/CD Runners (Broad Enforcement)
+
+```
+### 2. System-Wide in CI/CD Runners (Broad Enforcement)
 The primary use case for `leaktk install hook posix.stdio` is environments where you cannot easily modify every individual script or third-party step executed by a build system.
 
 By executing the installer during your CI/CD runner startup or container image build process, `leaktk` automatically targets shell configuration files (such as `~/.zshrc` or `~/.bashrc`), ensuring all spawned jobs and scripts on the runner are protected by default:
