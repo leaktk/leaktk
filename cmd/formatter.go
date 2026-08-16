@@ -161,6 +161,7 @@ func flattenedResponse(response *proto.Response) ([]string, [][]string) {
 			result.Kind,
 			result.Rule.ID,
 			result.Rule.Description,
+			strings.Join(result.Rule.Tags, ", "),
 			flattenContact(result.Contact),
 			result.Secret,
 			result.Match,
@@ -170,13 +171,13 @@ func flattenedResponse(response *proto.Response) ([]string, [][]string) {
 			result.Location.Path,
 			fmt.Sprintf("L%dC%d-L%dC%d", result.Location.Start.Line,
 				result.Location.Start.Column, result.Location.End.Line, result.Location.End.Column),
-			strings.Join(result.Rule.Tags, ", "),
+			result.Location.URL,
 		})
 	}
 
-	return []string{"ID", "REQUEST.ID", "RESULT.ID", "RESULT.KIND", "RESULT.RULE.ID", "RESULT.RULE.DESCRIPTION",
+	return []string{"ID", "REQUEST.ID", "RESULT.ID", "RESULT.KIND", "RESULT.RULE.ID", "RESULT.RULE.DESCRIPTION", "RESULT.RULE.TAGS",
 		"RESULT.CONTACT", "RESULT.SECRET", "RESULT.MATCH", "RESULT.ENTROPY", "RESULT.DATE", "RESULT.LOCATION.VERSION",
-		"RESULT.LOCATION.PATH", "RESULT.LOCATION.RANGE", "RESULT.RULE.TAGS"}, flattened
+		"RESULT.LOCATION.PATH", "RESULT.LOCATION.RANGE", "RESULT.LOCATION.URL"}, flattened
 }
 
 // flattenContact creates a single string with Contact information as "Name <Email>"

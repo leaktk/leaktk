@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/betterleaks/betterleaks/config"
 	"github.com/betterleaks/betterleaks/sources"
 
 	"github.com/leaktk/leaktk/pkg/fs"
@@ -24,7 +23,7 @@ var urlRegexp = regexp.MustCompile(`^https?:\/\/\S+$`)
 // JSON is a source for yielding fragments from strings in json data
 // and from URLs contained in the data that match FetchURLPatterns
 type JSON struct {
-	Config           *config.Config
+	ShouldSkip       sources.SkipFunc
 	FetchURLPatterns []string
 	MaxArchiveDepth  int
 	Path             string
@@ -96,7 +95,7 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield sou
 					currentNode.path,
 				)
 				file := &sources.File{
-					Config:          s.Config,
+					ShouldSkip:      s.ShouldSkip,
 					Content:         strings.NewReader(obj),
 					MaxArchiveDepth: s.MaxArchiveDepth,
 					Path:            currentNode.path,
@@ -120,7 +119,7 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield sou
 				}
 
 				jsonData := &JSON{
-					Config:          s.Config,
+					ShouldSkip:      s.ShouldSkip,
 					MaxArchiveDepth: s.MaxArchiveDepth,
 					Path:            currentNode.path,
 					RawMessage:      data,

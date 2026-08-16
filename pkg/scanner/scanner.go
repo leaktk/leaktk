@@ -12,6 +12,8 @@ import (
 
 	"github.com/betterleaks/betterleaks/detect"
 	"github.com/betterleaks/betterleaks/report"
+	"github.com/betterleaks/betterleaks/sources"
+	"github.com/betterleaks/betterleaks/sources/scm"
 
 	"github.com/leaktk/leaktk/internal/git"
 
@@ -137,7 +139,9 @@ func (s *Scanner) listen() {
 			return
 		}
 
-		detector := detect.NewDetectorContext(ctx, *cfg)
+		// Copy so loadSourceConfig mutations don't affect other scans
+		cfgCopy := *cfg
+		detector := detect.NewDetectorContext(ctx, &cfgCopy, detect.ValidationOptions{})
 		detector.FollowSymlinks = false
 		detector.IgnoreGitleaksAllow = false
 		detector.MaxArchiveDepth = s.maxArchiveDepth
@@ -228,9 +232,13 @@ func (s *Scanner) listen() {
 				revisionRange = strings.Join(items, " ")
 			}
 
+			platform, remoteURL := sources.ResolveRemote(ctx, scm.UnknownPlatform, gitRepoInfo.GitDir)
+
 			findings, err = betterleaks.ScanGit(ctx, detector, gitRepoInfo.GitDir, betterleaks.GitScanOpts{
 				RevisionRange: revisionRange,
 				Depth:         scanDepth(request.Opts.Depth, s.maxScanDepth),
+				Platform:      platform,
+				RemoteURL:     remoteURL,
 				Since:         request.Opts.Since,
 				Staged:        request.Opts.Staged,
 				Unstaged:      request.Opts.Unstaged,
@@ -349,8 +357,8 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 	result := &proto.Result{
 		ID: id.ID(
 			request.Resource,
-			finding.Commit,
-			finding.File,
+			finding.Attributes[sources.AttrGitSHA],
+			finding.Attributes[sources.AttrPath],
 			strconv.Itoa(finding.StartLine),
 			strconv.Itoa(finding.StartColumn),
 			strconv.Itoa(finding.EndLine),
@@ -361,12 +369,8 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 		Match:   finding.Match,
 		Context: finding.Line,
 		Entropy: finding.Entropy,
-		Date:    finding.Date,
+		Date:    finding.Attributes[sources.AttrGitDate],
 		Notes:   map[string]string{},
-		Contact: proto.Contact{
-			Name:  finding.Author,
-			Email: finding.Email,
-		},
 		Rule: proto.Rule{
 			ID:          finding.RuleID,
 			Description: finding.Description,
@@ -375,8 +379,8 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 			Tags: finding.Tags,
 		},
 		Location: proto.Location{
-			Version: finding.Commit,
-			Path:    finding.File,
+			Path: finding.Attributes[sources.AttrPath],
+			URL:  finding.Attributes[sources.AttrURL],
 			Start: proto.Point{
 				Line:   finding.StartLine,
 				Column: finding.StartColumn,
@@ -391,10 +395,33 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 	switch request.Kind {
 	case proto.GitRepoRequestKind:
 		result.Notes["gitleaks_fingerprint"] = finding.Fingerprint
-		result.Notes["commit_message"] = finding.Message
+		result.Notes["commit_message"] = finding.Attributes[sources.AttrGitMessage]
 		result.Notes["repository"] = request.Resource
 		result.Kind = proto.GitCommitResultKind
+		result.Location.Version = finding.Attributes[sources.AttrGitSHA]
+		result.Contact = proto.Contact{
+			Name:  finding.Attributes[sources.AttrGitAuthorName],
+			Email: finding.Attributes[sources.AttrGitAuthorEmail],
+		}
 	case proto.ContainerImageRequestKind:
+		result.Location.Version = finding.Attributes[betterleaks.AttrOCIImageDigest]
+		authorName := finding.Attributes[betterleaks.AttrOCIImageAuthorName]
+		authorEmail := finding.Attributes[betterleaks.AttrOCIImageAuthorEmail]
+		maintainerName := finding.Attributes[betterleaks.AttrOCIImageMaintainerName]
+		maintainerEmail := finding.Attributes[betterleaks.AttrOCIImageMaintainerEmail]
+
+		// Prefer the one with the email else fall back on the one with the name
+		// Prefer author over maintainer for the contact
+		if len(authorEmail) > 0 {
+			result.Contact = proto.Contact{Name: authorName, Email: authorEmail}
+		} else if len(maintainerEmail) > 0 {
+			result.Contact = proto.Contact{Name: maintainerName, Email: maintainerEmail}
+		} else if len(authorName) > 0 {
+			result.Contact = proto.Contact{Name: authorName, Email: authorEmail}
+		} else if len(maintainerName) > 0 {
+			result.Contact = proto.Contact{Name: maintainerName, Email: maintainerEmail}
+		}
+
 		manifest := ""
 		parts := strings.Split(result.Location.Path, "/")
 		if len(parts) > 1 {
@@ -413,6 +440,7 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 		} else {
 			result.Notes["image"] = request.Resource
 		}
+
 	case proto.URLRequestKind:
 		result.Notes["url"] = request.Resource
 		result.Kind = proto.GenericResultKind
@@ -423,21 +451,39 @@ func findingToResult(request *proto.Request, finding *report.Finding) *proto.Res
 	return result
 }
 
+func mergeExpressions(a, b string) string {
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	return "(" + a + ") || (" + b + ")"
+}
+
 func loadSourceConfig(detector *detect.Detector, sourcePath string) {
 	if !fs.DirExists(sourcePath) {
 		logger.Debug("skipping additional config: source path does not exist: path=%q", sourcePath)
 		return
 	}
 
-	additionalConfigPath := filepath.Join(sourcePath, ".gitleaks.toml")
+	additionalConfigPath := filepath.Join(sourcePath, ".betterleaks.toml")
 	rawAdditionalConfig, err := os.ReadFile(additionalConfigPath) // #nosec G304
+	if err != nil || len(rawAdditionalConfig) == 0 {
+		additionalConfigPath = filepath.Join(sourcePath, ".gitleaks.toml")
+		rawAdditionalConfig, err = os.ReadFile(additionalConfigPath) // #nosec G304
+	}
 	if err == nil && len(rawAdditionalConfig) > 0 {
 		logger.Debug("applying additional config: path=%q", additionalConfigPath)
-		additionalConfig, err := betterleaks.ParseConfig(string(rawAdditionalConfig))
+		additionalConfig, err := betterleaks.ParseConfig(rawAdditionalConfig)
 		if err != nil {
 			logger.Error("could not parse additional config: %s", err)
 		} else {
-			detector.Config.Allowlists = append(detector.Config.Allowlists, additionalConfig.Allowlists...)
+			detector.Config.Prefilter = mergeExpressions(detector.Config.Prefilter, additionalConfig.Prefilter)
+			detector.Config.Filter = mergeExpressions(detector.Config.Filter, additionalConfig.Filter)
+			if err := detector.Config.CompileFilters(nil); err != nil {
+				logger.Error("could not compile merged filters: %s", err)
+			}
 		}
 	} else {
 		logger.Debug("no additional config")
@@ -537,7 +583,7 @@ func tempCheckoutGitSourceConfigFiles(ctx context.Context, gitDir, gitRef string
 	if len(gitRef) == 0 {
 		gitRef = "HEAD"
 	}
-	cmd := git.CommandContext(ctx, "-C", gitDir, "--work-tree", worktreePath, "restore", "--source", gitRef, ".gitleaks*")
+	cmd := git.CommandContext(ctx, "-C", gitDir, "--work-tree", worktreePath, "restore", "--source", gitRef, ".betterleaks*", ".gitleaks*")
 	logger.Debug("executing: %s", cmd)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return worktreePath, fmt.Errorf("could not checkout scanner config files: %w cmd=%q (%s)", err, cmd, string(out))
