@@ -1,14 +1,17 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/adrg/xdg"
 
+	"github.com/leaktk/leaktk/internal/git"
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/version"
@@ -22,6 +25,9 @@ const nixGlobalConfigDir = "/etc/leaktk"
 var localConfigDir string
 
 func init() {
+	// Look up safe directories before overwriting the config
+	safeDirs := git.SafeDirectories(context.Background())
+
 	localConfigDir = filepath.Join(xdg.ConfigHome, "leaktk")
 
 	// The environment variables for the scan environment
@@ -31,6 +37,15 @@ func init() {
 		"GIT_NO_REPLACE_OBJECTS": "1",
 		"GIT_CONFIG_NOSYSTEM":    "1",
 		"GIT_HTTP_USER_AGENT":    version.GlobalUserAgent,
+	}
+
+	// Configure safe dirs (and overwrite GIT_CONFIG_* vars)
+	env["GIT_CONFIG_COUNT"] = strconv.Itoa(len(safeDirs))
+	for i, safeDir := range safeDirs {
+		logger.Debug("setting safe dir: value=%q", safeDir)
+		varidx := strconv.Itoa(i)
+		env["GIT_CONFIG_KEY_"+varidx] = "safe.directory"
+		env["GIT_CONFIG_VALUE_"+varidx] = safeDir
 	}
 
 	for varname, value := range env {
@@ -53,6 +68,7 @@ func init() {
 			logger.Fatal("could not unset %s: %v", varname, err)
 		}
 	}
+
 }
 
 type (

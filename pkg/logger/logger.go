@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	bllog "github.com/betterleaks/betterleaks/logging"
@@ -17,6 +18,13 @@ func init() {
 	bllog.Logger.Level(zerolog.Disabled)
 	// Provide a custom handler to map to this logging framework
 	bllog.Logger = zlog.Output(zerologMapper{})
+
+	envLoggerLevel := os.Getenv("LEAKTK_LOGGER_LEVEL")
+	if len(envLoggerLevel) > 0 {
+		if err := SetLoggerLevel(envLoggerLevel); err != nil {
+			Warning("could not set log level to %s", envLoggerLevel)
+		}
+	}
 }
 
 // zerologMapper helps translate logs from subsystems that use zerolog

@@ -36,6 +36,8 @@ func initLogger() {
 	if err := logger.SetLoggerLevel("INFO"); err != nil {
 		logger.Warning("could not set log level to INFO")
 	}
+
+	logger.Info("starting leaktk: version=%q commit=%q", version.Version, version.Commit)
 }
 
 func runHelp(cmd *cobra.Command, args []string) {
