@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/leaktk/leaktk/internal/auths"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
@@ -11,7 +12,7 @@ type Sources []Source
 
 type Source interface {
 	ID() string
-	Kind() SourceKind
+	Kind() Kind
 }
 
 func castOptSrcField[T any](values map[string]any, field string, fallback T) T {
@@ -53,20 +54,20 @@ func (ss *Sources) UnmarshalTOML(data any) error {
 		}
 
 		switch kind {
-		case AtlassianCloudAdmin:
+		case AtlassianCloudAdminKind:
 			*ss = append(*ss, &AtlassianCloudAdmin{
 				id:      srcID,
 				OrgID:   castSrcField[string](value, "org_id"),
 				BaseURL: castOptSrcField[string](value, "base_url", "https://api.atlassian.com/admin"),
-				BearerAuth: BearerAuth{
+				BearerAuth: auths.BearerAuth{
 					Token: castSrcField[string](value, "token"),
 				},
 			})
-		case AtlassianCloudJira:
+		case AtlassianCloudJiraKind:
 			*ss = append(*ss, &AtlassianCloudJira{
 				id:      srcID,
 				BaseURL: castSrcField[string](value, "base_url"),
-				BasicAuth: BasicAuth{
+				BasicAuth: auths.BasicAuth{
 					Username: castSrcField[string](value, "username"),
 					Password: castSrcField[string](value, "password"),
 				},

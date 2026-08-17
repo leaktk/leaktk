@@ -28,7 +28,7 @@ var KindNames = []string{
 	"Username",
 }
 
-var kindNameMap map[string]Kind
+var kindNameMap = make(map[string]Kind, len(KindNames))
 
 func init() {
 	for i, name := range KindNames {
@@ -41,12 +41,13 @@ func (k Kind) ID() int {
 }
 
 func (k Kind) String() string {
-	if k < 0 || k > len(KindNames) {
+	if int(k) < 0 || int(k) > len(KindNames) {
 		return "<invalid>"
 	}
 	return KindNames[k]
 }
 
-func KindFromName(name string) (Kind, bool) {
-	return kindNameMap[name]
+func KindFromName(name string) (k Kind, ok bool) {
+	k, ok = kindNameMap[name]
+	return
 }

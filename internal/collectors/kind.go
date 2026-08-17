@@ -10,7 +10,7 @@ var KindNames = []string{
 	"AtlassianCloudUser",
 }
 
-var kindNameMap map[string]Kind
+var kindNameMap = make(map[string]Kind, len(KindNames))
 
 func init() {
 	for i, name := range KindNames {

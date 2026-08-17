@@ -12,7 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/leaktk/leaktk/pkg/config"
+	"github.com/leaktk/leaktk/internal/facts"
+	"github.com/leaktk/leaktk/internal/sources"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
@@ -109,12 +110,12 @@ func TestAtlassian(t *testing.T) {
 	defer func(level logger.LogLevel) { _ = logger.SetLoggerLevel(level.String()) }(logger.GetLoggerLevel())
 	_ = logger.SetLoggerLevel(logger.DEBUG.String())
 	var cfg struct {
-		Sources config.Sources `toml:"sources"`
+		Sources sources.Sources `toml:"sources"`
 	}
 
 	_, err := toml.Decode(sourcesConfig, &cfg)
 	require.NoError(t, err)
-	cloudAdmin := cfg.Sources[0].(*config.AtlassianCloudAdmin)
+	cloudAdmin := cfg.Sources[0].(*sources.AtlassianCloudAdmin)
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+cloudAdmin.Token {
@@ -180,38 +181,38 @@ func TestAtlassian(t *testing.T) {
 	})
 
 	t.Run("atlassianCloudAdminFacts", func(t *testing.T) {
-		var facts []Fact
+		var collectedFacts []facts.Fact
 		var actualKindNames []string
 
-		err := NewCollector().Facts(t.Context(), cfg.Sources[0:1], func(fact Fact) error {
+		err := NewCollector().Facts(t.Context(), cfg.Sources[0:1], func(f facts.Fact) error {
 			// zero entity ID facts map the fact kinds so the strings aren't repeated over and over again
-			if fact.EntityID == 0 {
-				actualKindNames = append(actualKindNames, fact.Kind.String())
+			if f.EntityID == 0 {
+				actualKindNames = append(actualKindNames, f.Kind.String())
 			} else {
-				facts = append(facts, fact)
+				collectedFacts = append(collectedFacts, f)
 			}
 			return nil
 		})
 
 		require.NoError(t, err)
-		require.Equal(t, KindNames, actualKindNames)
-		assert.Len(t, facts, 32)
+		require.Equal(t, facts.KindNames, actualKindNames)
+		assert.Len(t, collectedFacts, 32)
 
-		actual := make(map[uint32]map[string]string)
-		for _, fact := range facts {
-			eid := fact.EntityID
+		actual := make(map[int]map[string]string)
+		for _, f := range collectedFacts {
+			eid := f.EntityID
 			emap, ok := actual[eid]
 			if !ok {
 				emap = make(map[string]string)
 				actual[eid] = emap
 			}
-			emap[fact.Kind.String()] = fact.Value
+			emap[f.Kind.String()] = f.Value
 		}
 
 		john := map[string]string{
-			facts.ActiveKind.String():               FactValueTrue,
+			facts.ActiveKind.String():               facts.FactValueTrue,
 			facts.EmailAddressKind.String():         "john@example.com",
-			facts.EmailAddressVerifiedKind.String(): FactValueTrue,
+			facts.EmailAddressVerifiedKind.String(): facts.FactValueTrue,
 			facts.EntityKindKind.String():           "AtlassianCloudUser",
 			facts.IDKind.String():                   "12345678-1234-1234-1234-123456789012",
 			facts.NameKind.String():                 "John Doe",
@@ -219,9 +220,9 @@ func TestAtlassian(t *testing.T) {
 			facts.URLKind.String():                  "https://home.atlassian.com/o/1/people/12345678-1234-1234-1234-123456789012",
 		}
 		jane := map[string]string{
-			facts.ActiveKind.String():               FactValueTrue,
+			facts.ActiveKind.String():               facts.FactValueTrue,
 			facts.EmailAddressKind.String():         "jane@example.com",
-			facts.EmailAddressVerifiedKind.String(): FactValueTrue,
+			facts.EmailAddressVerifiedKind.String(): facts.FactValueTrue,
 			facts.EntityKindKind.String():           "AtlassianCloudUser",
 			facts.IDKind.String():                   "12345678-1234-1234-1234-123456789013",
 			facts.NameKind.String():                 "Jane Doe",
@@ -229,7 +230,7 @@ func TestAtlassian(t *testing.T) {
 			facts.URLKind.String():                  "https://home.atlassian.com/o/1/people/12345678-1234-1234-1234-123456789013",
 		}
 
-		expected := map[uint32]map[string]string{
+		expected := map[int]map[string]string{
 			1: john, 2: jane,
 			3: john, 4: jane,
 		}

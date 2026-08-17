@@ -128,28 +128,24 @@ func atlassianCloudAdminYieldUserFacts(ctx context.Context, src *sources.Atlassi
 		}
 
 		for _, item := range respData.Data {
-			fact.EntityID = eidOffset
-			eidOffset++
-
 			if len(item.ID) == 0 {
 				continue
 			}
+
+			eidOffset++
+			fact.EntityID = eidOffset
+			active := facts.FactBool(item.Status == "active")
+			emailVerified := facts.FactBool(item.EmailVerified)
+
 			err = facts.YieldWithKV(fact, facts.IDKind, item.ID, err, yield)
-			if item.Status == "active" {
-				err = facts.YieldWithKV(fact, facts.ActiveKind, facts.FactValueTrue, err, yield)
-			} else {
-				err = facts.YieldWithKV(fact, facts.ActiveKind, facts.FactValueFalse, err, yield)
-			}
+			err = facts.YieldWithKV(fact, facts.ActiveKind, active.String(), err, yield)
 			err = facts.YieldWithKV(fact, facts.EmailAddressKind, item.Email, err, yield)
-			if item.EmailVerified {
-				err = facts.YieldWithKV(fact, facts.EmailAddressVerifiedKind, facts.FactValueTrue, err, yield)
-			} else {
-				err = facts.YieldWithKV(fact, facts.EmailAddressVerifiedKind, facts.FactValueFalse, err, yield)
-			}
+			err = facts.YieldWithKV(fact, facts.EmailAddressVerifiedKind, emailVerified.String(), err, yield)
 			err = facts.YieldWithKV(fact, facts.EntityKindKind, AtlassianCloudUserKind.String(), err, yield)
 			err = facts.YieldWithKV(fact, facts.NameKind, item.Name, err, yield)
 			err = facts.YieldWithKV(fact, facts.SourceIDKind, src.ID(), err, yield)
 			err = facts.YieldWithKV(fact, facts.URLKind, fmt.Sprintf("https://home.atlassian.com/o/%s/people/%s", src.OrgID, item.ID), err, yield)
+
 			if err != nil {
 				goto done
 			}

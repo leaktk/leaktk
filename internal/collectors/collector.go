@@ -28,15 +28,16 @@ func (*Collector) Facts(ctx context.Context, srcs sources.Sources, yield facts.F
 		}
 	}
 
-	eidOffset := 1 // start entity IDs at this number
+	// Each function should take this and return the new eidOffset.
+	// NOTE: it is fine if EntityIDs are skipped and it may make the code easier
+	// to always increment it even if not yielding values
+	eidOffset := fact.EntityID
 	for _, src := range srcs {
 		switch src := src.(type) {
 		case *sources.AtlassianCloudAdmin:
 			eidOffset, err = atlassianCloudAdminFacts(ctx, src, eidOffset, yield)
 		case *sources.AtlassianCloudJira:
-			// TODO
-			// eidOffset, err = atlassianCloudJiraFacts(ctx, src, eidOffset, yield)
-			err = errors.New("unsupported source")
+			// valid source but nothing to collect here
 		default:
 			err = errors.New("unsupported source")
 		}
