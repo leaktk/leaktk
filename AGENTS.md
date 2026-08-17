@@ -6,10 +6,9 @@ This file provides guidance to AI coding agents when working with code in this r
 
 LeakTK is a toolkit for leak detection, mitigation, and prevention. It wraps Betterleaks (a fork of Gitleaks) to scan various sources for secrets and sensitive data.
 
-The tool operates in three modes:
+The tool operates in two modes:
 - **scan**: Ad-hoc scanning with human-readable or structured output
 - **listen**: Long-running server mode that reads JSONL requests from stdin and writes JSONL responses to stdout (logs go to stderr)
-- **collect**: Collects facts about configured sources and streams them to stdout as CSV
 
 ## Development Philosophy
 
@@ -57,7 +56,7 @@ make clean          # Clean build artifacts (git clean -dfX)
 ### Entry Point & CLI
 - `main.go` → `cmd/cmd.go`: Entry point delegates to cobra-based CLI
 - CLI framework: Uses spf13/cobra for command parsing
-- Commands defined in `cmd/cmd.go`: scan, listen, collect, login, logout, version
+- Commands defined in `cmd/cmd.go`: scan, listen, login, logout, version
 
 ### Scanner Architecture (pkg/scanner)
 The scanner uses a worker pool pattern with priority queues:
@@ -87,42 +86,6 @@ Each Request has:
 
 Responses include Results (array of findings) or Error.
 
-### Collector Architecture (internal/collector)
-The collector gathers facts about configured sources and streams them as CSV to stdout.
-
-Usage: `leaktk collect <source-id>...`
-
-**Facts** are structured as CSV rows with a header row using snake case field names. Facts are modeled after RDF triples: each has a subject (eid), predicate (kind), and object (value), plus a timestamp (ts). Entity IDs group related facts about the same entity (e.g. a user). Facts are streamed one per row so they can be produced incrementally.
-
-Entity ID 0 is reserved for metadata. Before any real facts are emitted, the collector yields rows with `eid=0` that map each numeric `kind` value to its human-readable name (e.g. `0 → "ID"`, `1 → "Active"`). This lets subsequent rows use the compact numeric kind without repeating the string in every row. See `KindNames` in `facts.go` for the canonical mapping.
-
-Fact fields:
-
-- `eid`: Groups facts about the same entity (uint32; 0 = metadata/mapping rows, 1+ = real entities)
-- `kind`: The type of fact as a numeric ID (maps to names like ID, Active, EmailAddress, EmailAddressVerified, Kind, Name, RelatedEntityID, SourceID, URL, Username — alphabetically sorted after ID)
-- `value`: The fact's value (for eid=0 rows, this is the kind's string name)
-- `ts`: Unix timestamp of when the fact was collected
-
-Key components:
-- `collector.go`: Core Collector type, dispatches to source-specific collectors
-- `facts.go`: Fact type, Kind enum (iota-based, alphabetical after ID), `factKindByName` lookup, and yield helpers (`yieldKV`)
-- `atlassian.go`: Atlassian Cloud Admin API integration (directory listing, user search with pagination)
-- `ldap.go`: LDAP source integration (connect, bind, paginated search, attribute mapping to facts)
-- `extractions.go`: Regex-based extraction of service references from text fields, creating child entities linked via `RelatedEntityID`
-
-**Entity relationships**: The `RelatedEntityID` fact kind links parent and child entities. When an extraction matches, a new child entity is created with its own facts (Kind, captured fields, SourceID), and a `RelatedEntityID` fact is yielded on the parent with the child's eid as the value. A parent can have multiple `RelatedEntityID` facts.
-
-**Sources** are configured in the TOML config under `[[sources]]`. Each source has a `kind`, `id`, and kind-specific fields (auth credentials, org IDs, base URLs). Source IDs are passed as arguments to the `collect` command. The sources concept is shared with other features (monitor, authenticated scans).
-
-Supported source kinds:
-- `AtlassianCloudAdmin`: Uses bearer token auth against the Atlassian Admin API to enumerate org directories and users
-- `AtlassianCloudJira`: Uses basic auth (not yet implemented in collector)
-- `LDAP`: Uses username/password bind auth against an LDAP server (ldap:// or ldaps://) to enumerate directory entries. Supports configurable search (base_dn, filter, scope), attribute-to-Kind mapping via `[sources.attributes]`, and regex-based extractions via `[[sources.extractions]]` for discovering references to external services (GitHub, GitLab, etc.)
-
-**Extractions** are configured per-source as a list of `{attribute, pattern, kind}`. The `pattern` is a regex with named capture groups where group names correspond to Kind names (e.g. `(?P<Username>\w+)`). Patterns are compiled to `*regexp.Regexp` at config parse time. The `kind` field is a string label for the child entity type (e.g. "GitHubAccount"). Extraction logic lives in `extractions.go` and is independent of any specific source — it takes text and compiled extractions, yielding child entity facts through a generic yield function.
-
-Source config types live in `pkg/config/sources.go`, `pkg/config/auth.go`, and `pkg/config/source_kind.go`.
-
 ### Configuration (pkg/config)
 Configuration is loaded from TOML files with this precedence:
 1. `--config` flag path
@@ -136,7 +99,6 @@ Key config sections:
 - `scanner.scan_workers`: Number of concurrent workers
 - `scanner.allow_local`: Whether to allow local filesystem scans
 - `scanner.scan_timeout`: Per-scan timeout in seconds
-- `[[sources]]`: Source definitions for the collector (kind, id, auth, and kind-specific fields)
 
 ### Git Operations
 - Uses `git` CLI commands directly (not libgit2)

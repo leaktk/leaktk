@@ -93,7 +93,6 @@ func TestLoadSources(t *testing.T) {
 	require.Len(t, ss, 3)
 	require.IsType(t, &AtlassianCloudJiraSource{}, ss[0])
 	require.IsType(t, &AtlassianCloudAdminSource{}, ss[1])
-	require.IsType(t, &LDAPSource{}, ss[2])
 
 	jira := ss[0].(*AtlassianCloudJiraSource)
 	assert.Equal(t, "cloud-jira", jira.ID())
@@ -104,34 +103,4 @@ func TestLoadSources(t *testing.T) {
 	assert.Equal(t, "cloud-admin", admin.ID())
 	assert.Equal(t, "...", admin.Token)
 	assert.Equal(t, "1", admin.OrgID)
-
-	ldapSrc := ss[2].(*LDAPSource)
-	assert.Equal(t, "corp-ldap", ldapSrc.ID())
-	assert.Equal(t, LDAPSourceKind, ldapSrc.Kind())
-	assert.Equal(t, "ldaps://ldap.example.com:636", ldapSrc.URL)
-	assert.Equal(t, "cn=admin,dc=example,dc=com", ldapSrc.Username)
-	assert.Equal(t, "...", ldapSrc.Password)
-	assert.Equal(t, "ou=people,dc=example,dc=com", ldapSrc.BaseDN)
-	assert.Equal(t, "(objectClass=person)", ldapSrc.Filter)
-	assert.Equal(t, "sub", ldapSrc.Scope)
-	assert.Equal(t, map[string]string{
-		"uuid": "ID",
-		"uid":  "Username",
-		"mail": "EmailAddress",
-		"cn":   "Name",
-	}, ldapSrc.Attributes)
-
-	require.Len(t, ldapSrc.Extractions, 3)
-
-	assert.Equal(t, "info", ldapSrc.Extractions[0].Attribute)
-	assert.Equal(t, `github\.com/(?P<Username>\w+)`, ldapSrc.Extractions[0].Pattern.String())
-	assert.Equal(t, "GitHubAccount", ldapSrc.Extractions[0].Kind)
-
-	assert.Equal(t, "info", ldapSrc.Extractions[1].Attribute)
-	assert.Equal(t, `(?P<Username>\w+)\.github\.io`, ldapSrc.Extractions[1].Pattern.String())
-	assert.Equal(t, "GitHubPagesAccount", ldapSrc.Extractions[1].Kind)
-
-	assert.Equal(t, "info", ldapSrc.Extractions[2].Attribute)
-	assert.Equal(t, `gitlab\.com/(?P<Username>[\w.-]+)`, ldapSrc.Extractions[2].Pattern.String())
-	assert.Equal(t, "GitLabAccount", ldapSrc.Extractions[2].Kind)
 }

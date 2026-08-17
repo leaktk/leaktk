@@ -1,15 +1,13 @@
-package sources
+package collectors
 
 type Kind int
 
 const (
-	AtlassianCloudAdmingcKind Kind = iota
-	AtlassianCloudJiragcKind
+	AtlassianCloudUserKind Kind = iota
 )
 
 var KindNames = []string{
-	"AtlassianCloudAdmin",
-	"AtlassianCloudJira",
+	"AtlassianCloudUser",
 }
 
 var kindNameMap map[string]Kind
@@ -25,12 +23,13 @@ func (k Kind) ID() int {
 }
 
 func (k Kind) String() string {
-	if k < 0 || k > len(KindNames) {
+	if int(k) < 0 || int(k) > len(KindNames) {
 		return "<invalid>"
 	}
 	return KindNames[k]
 }
 
-func KindFromName(name string) (Kind, bool) {
-	return kindNameMap[name]
+func KindFromName(name string) (k Kind, ok bool) {
+	k, ok = kindNameMap[name]
+	return
 }

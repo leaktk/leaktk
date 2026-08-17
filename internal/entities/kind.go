@@ -4,12 +4,10 @@ type Kind int
 
 const (
 	AtlassianCloudUserKind Kind = iota
-	LDAPRecordKind
 )
 
 var KindNames = []string{
 	"AtlassianCloudUser",
-	"LDAPRecord",
 }
 
 var kindNameMap map[string]Kind

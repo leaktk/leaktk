@@ -114,7 +114,7 @@ func TestAtlassian(t *testing.T) {
 
 	_, err := toml.Decode(sourcesConfig, &cfg)
 	require.NoError(t, err)
-	cloudAdmin := cfg.Sources[0].(*config.AtlassianCloudAdminSource)
+	cloudAdmin := cfg.Sources[0].(*config.AtlassianCloudAdmin)
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+cloudAdmin.Token {

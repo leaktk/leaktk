@@ -3,10 +3,7 @@ package sources
 import (
 	"errors"
 	"fmt"
-	"net/url"
-	"regexp"
 
-	"github.com/leaktk/leaktk/internal/facts"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
@@ -41,14 +38,6 @@ func castSrcField[T any](values map[string]any, field string) T {
 	return t
 }
 
-func cleanLDAPURL(s string) string {
-	u, err := url.Parse(s)
-	if err != nil {
-		logger.Fatal("could not parse LDAP url: %v", err)
-	}
-	return fmt.Sprintf("%s://%s", u.Scheme, u.Host)
-}
-
 func (ss *Sources) UnmarshalTOML(data any) error {
 	values, ok := data.([]map[string]any)
 	if !ok {
@@ -81,40 +70,6 @@ func (ss *Sources) UnmarshalTOML(data any) error {
 					Username: castSrcField[string](value, "username"),
 					Password: castSrcField[string](value, "password"),
 				},
-			})
-		case LDAP:
-			// [[sources.extractors.socialURL]]
-			//   entity_kind = "GitHubAccount"
-			//   patterns = [
-			//      '''https:\/\/github.com\/(?<GitHubAccount:Username>[^\/]+)''',
-			//   ]
-			extractors := make(facts.Extractors, 0)
-			if em, exists := value["extractors"]; exists {
-				es, ok := em.(map[string][]map[string]any)
-				if !ok {
-					return fmt.Errof("source extractors must be a table of tables: source_id=%q source_index=%d", srcID, i)
-				}
-				for name, e := range es {
-					patterns := castSrcField[[]string](e, "patterns")
-					patternRegexps := make([]*regexp.Regexp, len(patterns))
-					for i, p := range patterns {
-						patternRegexps[i] = regexp.MustCompile(p)
-					}
-					extractors[name] = facts.Extractor{
-						Patterns: patternRegexps,
-					}
-				}
-			}
-			*ss = append(*ss, &LDAP{
-				id:         srcID,
-				URL:        cleanLDAPURL(castSrcField[string](value, "url")),
-				Username:   castSrcField[string](value, "username"),
-				Password:   castSrcField[string](value, "password"),
-				BaseDN:     castSrcField[string](value, "base_dn"),
-				Filter:     castOptSrcField(value, "filter", "(objectClass=*)"),
-				Scope:      castOptSrcField(value, "scope", "sub"),
-				Mapper:     castSrcField[facts.Mapper](value, "mapper"),
-				Extractors: extractors,
 			})
 		default:
 			return fmt.Errorf("unknown source kind: %q index=%d", kind, i)

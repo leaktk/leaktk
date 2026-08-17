@@ -9,14 +9,13 @@ import (
 	"io"
 	nethttp "net/http"
 
-	"github.com/leaktk/leaktk/internal/entities"
 	"github.com/leaktk/leaktk/internal/facts"
-	"github.com/leaktk/leaktk/pkg/config"
+	"github.com/leaktk/leaktk/internal/sources"
 	"github.com/leaktk/leaktk/pkg/http"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
-func atlassianReq(ctx context.Context, src *config.AtlassianCloudAdminSource, client *nethttp.Client, method, url string, body io.Reader, respData any) error {
+func atlassianReq(ctx context.Context, src *sources.AtlassianCloudAdmin, client *nethttp.Client, method, url string, body io.Reader, respData any) error {
 	req, err := nethttp.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return fmt.Errorf("failed create request: %w", err)
@@ -52,7 +51,7 @@ func atlassianReq(ctx context.Context, src *config.AtlassianCloudAdminSource, cl
 	return nil
 }
 
-func atlassianCloudAdminDirIDs(ctx context.Context, src *config.AtlassianCloudAdminSource) (dirIDs []string, err error) {
+func atlassianCloudAdminDirIDs(ctx context.Context, src *sources.AtlassianCloudAdmin) (dirIDs []string, err error) {
 	nextCur := ""
 	client := http.NewClient()
 
@@ -94,7 +93,7 @@ done:
 	return dirIDs, err
 }
 
-func atlassianCloudAdminYieldUserFacts(ctx context.Context, src *config.AtlassianCloudAdminSource, eidOffset uint32, dirID string, yield FactYieldFunc) (uint32, error) {
+func atlassianCloudAdminYieldUserFacts(ctx context.Context, src *sources.AtlassianCloudAdmin, eidOffset int, dirID string, yield facts.FactYieldFunc) (int, error) {
 	var err error
 	var jsonText []byte
 	var payload struct {
@@ -102,7 +101,7 @@ func atlassianCloudAdminYieldUserFacts(ctx context.Context, src *config.Atlassia
 		Cursor string `json:"cursor,omitempty"`
 	}
 
-	fact := Fact{}
+	fact := facts.Fact{}
 	client := http.NewClient()
 	payload.Limit = 100
 
@@ -137,17 +136,17 @@ func atlassianCloudAdminYieldUserFacts(ctx context.Context, src *config.Atlassia
 			}
 			err = facts.YieldWithKV(fact, facts.IDKind, item.ID, err, yield)
 			if item.Status == "active" {
-				err = facts.YieldWithKV(fact, facts.ActiveKind, FactValueTrue, err, yield)
+				err = facts.YieldWithKV(fact, facts.ActiveKind, facts.FactValueTrue, err, yield)
 			} else {
-				err = facts.YieldWithKV(fact, facts.ActiveKind, FactValueFalse, err, yield)
+				err = facts.YieldWithKV(fact, facts.ActiveKind, facts.FactValueFalse, err, yield)
 			}
 			err = facts.YieldWithKV(fact, facts.EmailAddressKind, item.Email, err, yield)
 			if item.EmailVerified {
-				err = facts.YieldWithKV(fact, facts.EmailAddressVerifiedKind, FactValueTrue, err, yield)
+				err = facts.YieldWithKV(fact, facts.EmailAddressVerifiedKind, facts.FactValueTrue, err, yield)
 			} else {
-				err = facts.YieldWithKV(fact, facts.EmailAddressVerifiedKind, FactValueFalse, err, yield)
+				err = facts.YieldWithKV(fact, facts.EmailAddressVerifiedKind, facts.FactValueFalse, err, yield)
 			}
-			err = facts.YieldWithKV(fact, facts.EntityKindKind, entities.AtlassianCloudUserKind.String(), err, yield)
+			err = facts.YieldWithKV(fact, facts.EntityKindKind, AtlassianCloudUserKind.String(), err, yield)
 			err = facts.YieldWithKV(fact, facts.NameKind, item.Name, err, yield)
 			err = facts.YieldWithKV(fact, facts.SourceIDKind, src.ID(), err, yield)
 			err = facts.YieldWithKV(fact, facts.URLKind, fmt.Sprintf("https://home.atlassian.com/o/%s/people/%s", src.OrgID, item.ID), err, yield)
@@ -169,7 +168,7 @@ done:
 	return eidOffset, err
 }
 
-func atlassianCloudAdminFacts(ctx context.Context, src *config.AtlassianCloudAdminSource, eidOffset uint32, yield FactYieldFunc) (uint32, error) {
+func atlassianCloudAdminFacts(ctx context.Context, src *sources.AtlassianCloudAdmin, eidOffset int, yield facts.FactYieldFunc) (int, error) {
 	dirIDs, err := atlassianCloudAdminDirIDs(ctx, src)
 	if err != nil {
 		return eidOffset, fmt.Errorf("atlassian cloud admin facts: %w", err)

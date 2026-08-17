@@ -10,34 +10,3 @@ kind = "AtlassianCloudAdmin"
 id = "cloud-admin"
 token = "..." # notsecret
 org_id = "1"
-
-[[sources]]
-kind = "LDAP"
-id = "corp-ldap"
-url = "ldaps://ldap.example.com:636"
-username = "cn=admin,dc=example,dc=com"
-password = "..." # notsecret
-base_dn = "ou=people,dc=example,dc=com"
-filter = "(objectClass=person)"
-scope = "sub"
-
-[sources.attributes]
-uuid = "ID"
-uid = "Username"
-mail = "EmailAddress"
-cn = "Name"
-
-[[sources.extractions]]
-attribute = "info"
-pattern = 'github\.com/(?P<Username>\w+)'
-kind = "GitHubAccount"
-
-[[sources.extractions]]
-attribute = "info"
-pattern = '(?P<Username>\w+)\.github\.io'
-kind = "GitHubPagesAccount"
-
-[[sources.extractions]]
-attribute = "info"
-pattern = 'gitlab\.com/(?P<Username>[\w.-]+)'
-kind = "GitLabAccount"
