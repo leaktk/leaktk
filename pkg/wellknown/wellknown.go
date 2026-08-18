@@ -29,7 +29,7 @@ func NewClient(baseURL string, httpClient *http.Client, authToken string) *Clien
 
 // Fetch fetches and parses .well-known/leaktk. Returns nil if missing or unreachable.
 func (c *Client) Fetch(ctx context.Context) *WellKnown {
-	wellKnownURL, err := url.JoinPath(c.baseURL, ".well-known", "leaktk")
+	wellKnownURL, err := url.JoinPath(c.baseURL, "patterns", ".well-known", "leaktk")
 	if err != nil {
 		return nil
 	}
