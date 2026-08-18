@@ -59,7 +59,6 @@ type Scanner struct {
 // NewScanner returns a initialized and listening scanner instance that should
 // be closed when it's no longer needed.
 func NewScanner(cfg *config.Config) *Scanner {
-	p := patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient())
 	scanner := &Scanner{
 		allowLocal:       cfg.Scanner.AllowLocal,
 		scanTimeout:      time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
@@ -71,11 +70,10 @@ func NewScanner(cfg *config.Config) *Scanner {
 		responseQueue:    queue.NewPriorityQueue[*proto.Response](initQueueCapacity, cfg.Scanner.MaxResponseQueueSize),
 		scanQueue:        queue.NewPriorityQueue[*proto.Request](initQueueCapacity, cfg.Scanner.MaxScanQueueSize),
 		scanWorkers:      cfg.Scanner.ScanWorkers,
-		analyst:          analyst.NewAnalyst(p),
 		analyzeResponses: true,
 	}
 
-	if cfg.Scanner.EnableAnalysis {
+	if scanner.analyzeResponses {
 		scanner.analyst = analyst.NewAnalyst(scanner.patterns)
 	}
 
@@ -313,9 +311,6 @@ func (s *Scanner) listen() {
 			Error:     scanErr,
 			Results:   results,
 		}
-
-		leaktkCfg, err := s.patterns.LeakTK(ctx)
-		logger.Info("LeakTK: ", leaktkCfg)
 
 		if s.analyst != nil {
 			logger.Info("analyzing response: id=%q response_id=%q", request.ID, response.ID)

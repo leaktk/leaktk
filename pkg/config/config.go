@@ -100,6 +100,7 @@ type (
 	Patterns struct {
 		Autofetch    bool                `toml:"autofetch"`
 		ExpiredAfter int                 `toml:"expired_after"`
+		CacheDir     string              `toml:"cachedir"`
 		Gitleaks     ProviderPatternsRef `toml:"gitleaks"`
 		LeakTK       ProviderPatternsRef `toml:"leaktk"`
 		RefreshAfter int                 `toml:"refresh_after"`
@@ -236,15 +237,16 @@ func DefaultConfig() *Config {
 			Patterns: Patterns{
 				Autofetch:    true,
 				ExpiredAfter: 60 * 60 * 12 * 14, // 7 days
-				RefreshAfter: 60 * 60 * 12,      // 12 hours
+				CacheDir:     filepath.Join(xdg.CacheHome, "leaktk", "scanner"),
+				RefreshAfter: 60 * 60 * 12, // 12 hours
 				Gitleaks: ProviderPatternsRef{
 					Version: "8.27.0",
 				},
 				LeakTK: ProviderPatternsRef{
-					Version: "1",
+					Version: "0",
 				},
 				Server: PatternServer{
-					URL: "https://raw.githubusercontent.com/leaktk/patterns/main/target",
+					URL: "https://raw.githubusercontent.com/leaktk/patterns/refs/heads/well-known/target",
 				},
 			},
 		},

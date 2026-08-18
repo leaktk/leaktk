@@ -1,14 +1,25 @@
 package patterns
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
 
-	"github.com/leaktk/leaktk/pkg/ai"
-	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/v1/rego"
+	"github.com/pelletier/go-toml/v2"
+
+	"github.com/leaktk/leaktk/pkg/ai"
+	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/pkg/proto"
 )
 
 type LeakTKPatterns struct {
@@ -16,34 +27,169 @@ type LeakTKPatterns struct {
 	RegoQuery    rego.PreparedEvalQuery
 }
 
+// LeakTK returns the LeakTKPatterns object, handling fetch/caching/update.
+func (p *Patterns) LeakTK(ctx context.Context) (*LeakTKPatterns, error) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	cfg := p.config
+	localPath := cfg.LeakTK.LocalPath
+	modTimeExceeds := fileModTimeExceeds(localPath, cfg.RefreshAfter)
+
+	if cfg.Autofetch && modTimeExceeds || cfg.Refresh {
+		logger.Info("fetching leaktk patterns")
+
+		rawPatterns, err := p.fetchLeakTKPatterns(ctx)
+		if err != nil {
+			return p.leaktkPatterns, err
+		}
+
+		newHash := hashDgst(sha256.Sum256([]byte(rawPatterns)))
+		if newHash == p.leaktkPatternsHash {
+			logger.Debug("skipping update: leaktk patterns hash unchanged")
+			return p.leaktkPatterns, nil
+		}
+
+		newConfig, err := p.parseLeakTKConfig(ctx, rawPatterns)
+		if err != nil {
+			return nil, fmt.Errorf("could not parse leaktk patterns: %w", err)
+		}
+
+		if err := updateLocalPatterns(localPath, rawPatterns); err != nil {
+			return newConfig, err
+		}
+
+		p.leaktkPatterns = newConfig
+		p.leaktkPatternsHash = newHash
+		logger.Info("updated leaktk patterns")
+	} else if p.leaktkPatterns == nil {
+		if fileModTimeExceeds(localPath, cfg.ExpiredAfter) {
+			return nil, fmt.Errorf("leaktk config is expired and autofetch is disabled: path=%q", localPath)
+		}
+
+		rawPatternsBytes, err := os.ReadFile(filepath.Clean(localPath))
+		if err != nil {
+			return nil, err
+		}
+
+		rawPatterns := string(rawPatternsBytes)
+		newConfig, err := p.parseLeakTKConfig(ctx, rawPatterns)
+		if err != nil {
+			logger.Debug("loaded config:\n%s\n", rawPatterns)
+			return nil, fmt.Errorf("could not parse leaktk config: error=%q", err)
+		}
+
+		p.leaktkPatterns = newConfig
+		p.leaktkPatternsHash = hashDgst(sha256.Sum256(rawPatternsBytes))
+	}
+
+	return p.leaktkPatterns, nil
+}
+
 // LeakTKConfigHash returns the sha256 hash for the current leaktk config.
 func (p *Patterns) LeakTKConfigHash() string {
 	return fmt.Sprintf("%x", p.leaktkPatternsHash)
 }
 
-// LeakTK returns the LeakTKPatterns object, handling fetch/caching/update.
-func (p *Patterns) LeakTK(ctx context.Context) (*LeakTKPatterns, error) {
-	return getOrUpdate(
-		ctx, p,
-		&p.leaktkPatterns,
-		&p.leaktkPatternsHash,
-		"leaktk",
-		p.config.LeakTK.LocalPath,
-		p.config.LeakTK.Version,
-		p.parseLeakTKConfig,
-	)
+func (p *Patterns) fetchLeakTKPatterns(ctx context.Context) (string, error) {
+	wk := p.wellKnownClient.Fetch(ctx)
+	bundleURL, ok := p.wellKnownClient.BundleURL(wk, "latest", "bundle.tar.gz")
+	if !ok {
+		return "", fmt.Errorf("failed to locate bundle URL for leaktk")
+	}
+
+	bundlePath := filepath.Join(p.config.CacheDir, "bundle.tar.gz")
+	if _, err := os.Stat(bundlePath); os.IsNotExist(err) {
+		if err := p.downloadBundle(ctx, bundleURL, bundlePath); err != nil {
+			return "", fmt.Errorf("failed to download bundle: %w", err)
+		}
+	}
+
+	f, err := os.Open(bundlePath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return "", err
+	}
+	defer gz.Close()
+
+	version := p.config.LeakTK.Version
+	versionKey := "v" + strings.ReplaceAll(strings.TrimPrefix(version, "v"), ".", "_")
+	regoPath := fmt.Sprintf("/src/leaktk/%s/analyst/policy.rego", versionKey)
+
+	var modelsData interface{}
+	var regoContent string
+
+	tr := tar.NewReader(gz)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+
+		cleanName := path.Clean(header.Name)
+
+		if cleanName == "data.json" || cleanName == "/data.json" {
+			var rootData map[string]interface{}
+			if err := json.NewDecoder(tr).Decode(&rootData); err == nil {
+				if provMap, ok := rootData["leaktk"].(map[string]interface{}); ok {
+					for _, val := range provMap {
+						modelsData = val
+						break
+					}
+				}
+			}
+		}
+
+		if cleanName == regoPath {
+			b, err := io.ReadAll(tr)
+			if err == nil {
+				regoContent = string(b)
+			}
+		}
+	}
+
+	if modelsData == nil || regoContent == "" {
+		return "", fmt.Errorf("could not find both models and rego policy for leaktk %s in bundle", version)
+	}
+
+	combinedMap := map[string]interface{}{
+		"models":     sanitizeJSONMap(modelsData),
+		"opa_policy": regoContent,
+	}
+
+	tomlBytes, err := toml.Marshal(combinedMap)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal leaktk config: %w", err)
+	}
+
+	return string(tomlBytes), nil
 }
-
-// parseLeakTKConfig parses the LeakTK patterns config and compiles the Rego policy.
-func (p *Patterns) parseLeakTKConfig(ctx context.Context, rawPatterns string) (any, error) {
-	var uncompiledLeakTKPatterns struct {
-		ModelsConfig []ai.MLModelsConfig `json:"models"`
-		Rego         string              `json:"opa_policy"`
+func (p *Patterns) parseLeakTKConfig(ctx context.Context, rawPatterns string) (*LeakTKPatterns, error) {
+	// Mirror the nested TOML structure
+	var uncompiled struct {
+		Models struct {
+			Analyst struct {
+				Models struct {
+					Models []ai.MLModelsConfig `toml:"models"`
+				} `toml:"models"`
+			} `toml:"analyst"`
+		} `toml:"models"`
+		Rego string `toml:"opa_policy"`
 	}
 
-	if err := json.Unmarshal([]byte(rawPatterns), &uncompiledLeakTKPatterns); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal leaktk patterns: %w", err)
+	if err := toml.Unmarshal([]byte(rawPatterns), &uncompiled); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal leaktk patterns TOML: %w", err)
 	}
+
+	modelsConfig := uncompiled.Models.Analyst.Models.Models
 
 	runModelProvider := func(bctx rego.BuiltinContext, arg1 *ast.Term, arg2 *ast.Term) (*ast.Term, error) {
 		var modelName string
@@ -66,7 +212,7 @@ func (p *Patterns) parseLeakTKConfig(ctx context.Context, rawPatterns string) (a
 			return nil, fmt.Errorf("leaktk.ai.RunModel: failed to parse finding into proto.Result: %w", err)
 		}
 
-		analyst := ai.NewAnalyst(uncompiledLeakTKPatterns.ModelsConfig)
+		analyst := ai.NewAnalyst(modelsConfig)
 		analysis, err := analyst.Analyze(modelName, &result)
 		if err != nil {
 			return nil, fmt.Errorf("leaktk.ai.RunModel: analysis failed: %w", err)
@@ -83,7 +229,7 @@ func (p *Patterns) parseLeakTKConfig(ctx context.Context, rawPatterns string) (a
 
 	query, err := rego.New(
 		rego.Query("data.leaktk.analyst.analyzed_response"),
-		rego.Module("leaktk.analyst.rego", uncompiledLeakTKPatterns.Rego),
+		rego.Module("leaktk.analyst.rego", uncompiled.Rego),
 		rego.Function2(ai.RunModelBuiltIn, runModelProvider),
 	).PrepareForEval(ctx)
 
@@ -91,10 +237,8 @@ func (p *Patterns) parseLeakTKConfig(ctx context.Context, rawPatterns string) (a
 		return nil, fmt.Errorf("could not compile rego query: %w", err)
 	}
 
-	leaktkPatterns := &LeakTKPatterns{
-		ModelsConfig: uncompiledLeakTKPatterns.ModelsConfig,
+	return &LeakTKPatterns{
+		ModelsConfig: modelsConfig,
 		RegoQuery:    query,
-	}
-
-	return leaktkPatterns, nil
+	}, nil
 }
