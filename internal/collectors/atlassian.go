@@ -1,7 +1,6 @@
 package collectors
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -15,14 +14,14 @@ import (
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
-func atlassianReq(ctx context.Context, src *sources.AtlassianCloudAdmin, client *nethttp.Client, method, url string, body io.Reader, respData any) error {
-	req, err := nethttp.NewRequestWithContext(ctx, method, url, body)
+func atlassianReq(ctx context.Context, src *sources.AtlassianCloudAdmin, client *nethttp.Client, method, url string, reqBody io.Reader, respData any) error {
+	req, err := nethttp.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
 		return fmt.Errorf("failed create request: %w", err)
 	}
 
 	req.Header.Set("Accept", "application/json")
-	if body != nil {
+	if reqBody != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	if err = src.SetHeader(req.Header); err != nil {
@@ -33,22 +32,38 @@ func atlassianReq(ctx context.Context, src *sources.AtlassianCloudAdmin, client 
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		logger.Debug("atlassian admin API response body: %s", string(body))
+	respBody, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		return fmt.Errorf("could not read complete resp body: %w", err)
+	}
+
+	// Run this regardless of the status so it can handle auto adjustments on
+	// good responses too.
+	if err := src.RateLimit.Limit(ctx, resp); err != nil {
+		logger.Debug("atlassian admin API response body: %s", string(respBody))
+		return fmt.Errorf("error rate limiting requests: %w url=%s", err, req.URL)
+	}
+
+	switch resp.StatusCode {
+	case 200:
+		if err = json.Unmarshal(respBody, respData); err != nil {
+			logger.Trace("atlassian admin API response body: %s", string(respBody))
+			return fmt.Errorf("decode response: %w", err)
+		}
+		logger.Trace("atlassian admin API response data: %+v", respData)
+		return nil
+	case 429:
+		if err := src.RateLimit.Limit(ctx, resp); err != nil {
+			logger.Trace("atlassian admin API response body: %s", string(respBody))
+			return fmt.Errorf("error rate limiting requests: %w url=%s", err, req.URL)
+		}
+		return atlassianReq(ctx, src, client, method, url, reqBody, respData)
+	default:
+		logger.Trace("atlassian admin API response body: %s", string(respBody))
 		return fmt.Errorf("unexpected status status_code=%d url=%s", resp.StatusCode, req.URL)
 	}
-
-	decoder := json.NewDecoder(bufio.NewReader(resp.Body))
-	if err = decoder.Decode(respData); err != nil {
-		return fmt.Errorf("decode response: %w", err)
-	}
-
-	logger.Trace("atlassian admin API response data: %+v", respData)
-
-	return nil
 }
 
 func atlassianCloudAdminDirIDs(ctx context.Context, src *sources.AtlassianCloudAdmin) (dirIDs []string, err error) {
