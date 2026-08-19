@@ -47,7 +47,7 @@ func (c *Client) Fetch(ctx context.Context) *WellKnown {
 	if err != nil || resp.StatusCode != http.StatusOK {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var wk WellKnown
 	if err := json.NewDecoder(resp.Body).Decode(&wk); err != nil {

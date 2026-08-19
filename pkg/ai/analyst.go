@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/open-policy-agent/opa/rego"
-	"github.com/open-policy-agent/opa/types"
+	"github.com/open-policy-agent/opa/v1/rego"
+	"github.com/open-policy-agent/opa/v1/types"
 
 	"github.com/leaktk/leaktk/pkg/proto"
 )

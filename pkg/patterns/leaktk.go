@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,7 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/rego"
 	"github.com/pelletier/go-toml/v2"
 
@@ -51,7 +52,7 @@ func (p *Patterns) fetchLeakTKPatterns(ctx context.Context) (string, error) {
 	wk := p.wellKnownClient.Fetch(ctx)
 	bundleURL, ok := p.wellKnownClient.BundleURL(wk, "latest", "bundle.tar.gz")
 	if !ok {
-		return "", fmt.Errorf("failed to locate bundle URL for leaktk")
+		return "", errors.New("failed to locate bundle URL for leaktk")
 	}
 
 	bundlePath := filepath.Join(p.config.CacheDir, "bundle.tar.gz")
@@ -61,17 +62,18 @@ func (p *Patterns) fetchLeakTKPatterns(ctx context.Context) (string, error) {
 		}
 	}
 
-	f, err := os.Open(bundlePath)
+	cleanPath := filepath.Clean(bundlePath)
+	f, err := os.Open(cleanPath)
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gz, err := gzip.NewReader(f)
 	if err != nil {
 		return "", err
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	version := p.config.LeakTK.Version
 	versionKey := "v" + strings.ReplaceAll(strings.TrimPrefix(version, "v"), ".", "_")

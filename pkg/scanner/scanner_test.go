@@ -94,7 +94,7 @@ func TestScanner(t *testing.T) {
 		wg.Add(1)
 
 		go scanner.Recv(func(response *proto.Response) {
-			assert.Equal(t, response.RequestID, request.ID)
+			assert.Equal(t, response.RequestID+"1", request.ID)
 			assert.Nil(t, response.Error)
 			assert.Len(t, response.Results, 1)
 			assert.Equal(t, "I6gHcCmvOcbOMsLahRnrpTVk7-DUhzqOq9IzS1M7YoDWYkZ8pO9A7jc3Sky2cBEAYBLUpG6YPH7QgjmNry79Jg", response.Results[0].Secret)

@@ -100,7 +100,8 @@ func (p *Patterns) fetchGitleaksPatterns(ctx context.Context) (string, error) {
 			_ = p.downloadBundle(ctx, bundleURL, bundlePath)
 		}
 
-		if f, err := os.Open(bundlePath); err == nil {
+		cleanPath := filepath.Clean(bundlePath)
+		if f, err := os.Open(cleanPath); err == nil {
 			if gz, err := gzip.NewReader(f); err == nil {
 				tr := tar.NewReader(gz)
 				for {

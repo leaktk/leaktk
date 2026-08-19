@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -162,11 +163,12 @@ func GetLineFromFile(filePath string, lineNumber int) (string, error) {
 	if lineNumber <= 0 {
 		return "", fmt.Errorf("line number must be a positive integer, got %d", lineNumber)
 	}
-	f, err := os.Open(filePath)
+	cleanPath := filepath.Clean(filePath)
+	f, err := os.Open(cleanPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open file %s: %w", filePath, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	scanner := bufio.NewScanner(f)
 	currentLine := 0
 	for scanner.Scan() {

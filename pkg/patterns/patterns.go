@@ -30,8 +30,7 @@ type Patterns struct {
 	gitleaksPatterns     *betterleaksconfig.Config
 	gitleaksPatternsHash hashDgst
 
-	leaktkPatterns     *LeakTKPatterns
-	leaktkPatternsHash hashDgst
+	leaktkPatterns *LeakTKPatterns
 }
 
 func NewPatterns(patternsCfg *config.Patterns, client *http.Client) *Patterns {
@@ -80,13 +79,13 @@ func (p *Patterns) downloadBundle(ctx context.Context, bundleURL, bundlePath str
 	if err != nil {
 		return fmt.Errorf("failed to download bundle: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("bundle download failed with status: %d", resp.StatusCode)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(bundlePath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(bundlePath), 0750); err != nil {
 		return fmt.Errorf("failed to create cache dir: %w", err)
 	}
 
@@ -125,7 +124,7 @@ func fetchPatterns(ctx context.Context, client *http.Client, patternsURL, authTo
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -145,7 +144,8 @@ func updateLocalPatterns(localPath, rawPatterns string) error {
 		return fmt.Errorf("could not create patterns dir: %w", err)
 	}
 
-	patternsFile, err := os.OpenFile(localPath, os.O_RDWR|os.O_CREATE, 0600)
+	cleanPath := filepath.Clean(localPath)
+	patternsFile, err := os.OpenFile(cleanPath, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return fmt.Errorf("could not open patterns file: %w path=%q", err, localPath)
 	}
