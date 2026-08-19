@@ -13,25 +13,19 @@ import (
 )
 
 type Analyst struct {
-	patterns *patterns.Patterns
+	Patterns *patterns.Patterns
 }
 
 // NewAnalyst initializes the Analyst with patterns.
 func NewAnalyst(p *patterns.Patterns) *Analyst {
 	return &Analyst{
-		patterns: p,
+		Patterns: p,
 	}
 }
 
-func (a *Analyst) Analyze(ctx context.Context, response *proto.Response) (*proto.Response, error) {
-	// Get the latest LeakTK patterns
-	leaktkPatterns, err := a.patterns.LeakTK(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("could not get leaktk patterns: %w", err)
-	}
-
+func (a *Analyst) Analyze(ctx context.Context, response *proto.Response, patterns *patterns.LeakTKPatterns) (*proto.Response, error) {
 	// Evaluate the Rego policy
-	results, err := leaktkPatterns.RegoQuery.Eval(ctx, rego.EvalInput(response))
+	results, err := patterns.RegoQuery.Eval(ctx, rego.EvalInput(response))
 	if err != nil {
 		return nil, fmt.Errorf("could not evaluate rego query: %w", err)
 	}

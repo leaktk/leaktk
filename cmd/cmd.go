@@ -309,7 +309,7 @@ func scanCommand() *cobra.Command {
 	return scanCommand
 }
 
-func analyzeResponses(ctx context.Context, a *analyst.Analyst, f *Formatter, r *bufio.Reader) {
+func analyzeResponses(ctx context.Context, a *analyst.Analyst, f *Formatter, r *bufio.Reader, patterns *patterns.LeakTKPatterns) {
 	for {
 		line, err := readLine(r)
 		if err != nil {
@@ -326,7 +326,7 @@ func analyzeResponses(ctx context.Context, a *analyst.Analyst, f *Formatter, r *
 			continue
 		}
 
-		if analyzedResponse, err := a.Analyze(ctx, response); err != nil {
+		if analyzedResponse, err := a.Analyze(ctx, response, patterns); err != nil {
 			logger.Error("error analyzing response: %v response_id=%q", err, response.ID)
 		} else {
 			response = analyzedResponse
@@ -345,19 +345,23 @@ func runAnalyze(cmd *cobra.Command, paths []string) {
 
 	p := patterns.NewPatterns(&cfg.Scanner.Patterns, http.NewClient())
 	a := analyst.NewAnalyst(p)
-
-	if len(paths) == 0 {
-		analyzeResponses(ctx, a, f, bufio.NewReader(os.Stdin))
+	analystPatterns, err := p.LeakTK(ctx)
+	if err != nil {
+		logger.Error("unable to fetch leaktk patterns")
 	} else {
-		for _, path := range paths {
-			r, err := os.Open(filepath.Clean(path))
-			if err != nil {
-				logger.Error("could not open path: %v path=%q", err, path)
-				continue
-			}
-			analyzeResponses(ctx, a, f, bufio.NewReader(r))
-			if err := r.Close(); err != nil {
-				logger.Error("could not close file: %v path=%q", err, path)
+		if len(paths) == 0 {
+			analyzeResponses(ctx, a, f, bufio.NewReader(os.Stdin), analystPatterns)
+		} else {
+			for _, path := range paths {
+				r, err := os.Open(filepath.Clean(path))
+				if err != nil {
+					logger.Error("could not open path: %v path=%q", err, path)
+					continue
+				}
+				analyzeResponses(ctx, a, f, bufio.NewReader(r), analystPatterns)
+				if err := r.Close(); err != nil {
+					logger.Error("could not close file: %v path=%q", err, path)
+				}
 			}
 		}
 	}

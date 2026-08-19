@@ -312,9 +312,12 @@ func (s *Scanner) listen() {
 			Results:   results,
 		}
 
-		if s.analyst != nil {
+		analystPatterns, err := s.analyst.Patterns.LeakTK(ctx)
+		if err != nil {
+			logger.Error("unable to fetch leaktk patterns: %s", err)
+		} else {
 			logger.Info("analyzing response: id=%q response_id=%q", request.ID, response.ID)
-			if analyzedResponse, err := s.analyst.Analyze(ctx, response); err != nil {
+			if analyzedResponse, err := s.analyst.Analyze(ctx, response, analystPatterns); err != nil {
 				logger.Error("response analysis failed: %v id=%q response_id=%q", err, request.ID, response.ID)
 			} else {
 				response = analyzedResponse

@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,63 +31,20 @@ func (p *Patterns) LeakTK(ctx context.Context) (*LeakTKPatterns, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	cfg := p.config
-	localPath := cfg.LeakTK.LocalPath
-	modTimeExceeds := fileModTimeExceeds(localPath, cfg.RefreshAfter)
-
-	if cfg.Autofetch && modTimeExceeds || cfg.Refresh {
-		logger.Info("fetching leaktk patterns")
-
-		rawPatterns, err := p.fetchLeakTKPatterns(ctx)
-		if err != nil {
-			return p.leaktkPatterns, err
-		}
-
-		newHash := hashDgst(sha256.Sum256([]byte(rawPatterns)))
-		if newHash == p.leaktkPatternsHash {
-			logger.Debug("skipping update: leaktk patterns hash unchanged")
-			return p.leaktkPatterns, nil
-		}
-
-		newConfig, err := p.parseLeakTKConfig(ctx, rawPatterns)
-		if err != nil {
-			return nil, fmt.Errorf("could not parse leaktk patterns: %w", err)
-		}
-
-		if err := updateLocalPatterns(localPath, rawPatterns); err != nil {
-			return newConfig, err
-		}
-
-		p.leaktkPatterns = newConfig
-		p.leaktkPatternsHash = newHash
-		logger.Info("updated leaktk patterns")
-	} else if p.leaktkPatterns == nil {
-		if fileModTimeExceeds(localPath, cfg.ExpiredAfter) {
-			return nil, fmt.Errorf("leaktk config is expired and autofetch is disabled: path=%q", localPath)
-		}
-
-		rawPatternsBytes, err := os.ReadFile(filepath.Clean(localPath))
-		if err != nil {
-			return nil, err
-		}
-
-		rawPatterns := string(rawPatternsBytes)
-		newConfig, err := p.parseLeakTKConfig(ctx, rawPatterns)
-		if err != nil {
-			logger.Debug("loaded config:\n%s\n", rawPatterns)
-			return nil, fmt.Errorf("could not parse leaktk config: error=%q", err)
-		}
-
-		p.leaktkPatterns = newConfig
-		p.leaktkPatternsHash = hashDgst(sha256.Sum256(rawPatternsBytes))
+	rawPatterns, err := p.fetchLeakTKPatterns(ctx)
+	if err != nil {
+		return p.leaktkPatterns, err
 	}
 
-	return p.leaktkPatterns, nil
-}
+	config, err := p.parseLeakTKConfig(ctx, rawPatterns)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse leaktk patterns: %w", err)
+	}
 
-// LeakTKConfigHash returns the sha256 hash for the current leaktk config.
-func (p *Patterns) LeakTKConfigHash() string {
-	return fmt.Sprintf("%x", p.leaktkPatternsHash)
+	p.leaktkPatterns = config
+	logger.Info("fetched leaktk patterns")
+
+	return p.leaktkPatterns, nil
 }
 
 func (p *Patterns) fetchLeakTKPatterns(ctx context.Context) (string, error) {
