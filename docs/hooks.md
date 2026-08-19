@@ -11,7 +11,7 @@ LeakTK supports the following [Git hooks](https://git-scm.com/docs/githooks):
 | git.pre-commit  | Developers                | Block creating new commits containing secrets |
 | git.pre-receive | Git Server Administrators | Block Git pushes containing secrets           |
 
-See the Git hook specific [install guide](install_git_hooks.md) to get started.
+See the hook specific [install guide](install_git_hooks.md) to get started.
 
 ## Standard Input/Output Hook
 
@@ -21,8 +21,7 @@ LeakTK supports the following standard stream hook:
 | --------- | -------- | ------- |
 | posix.stdio | CI/CD Engineers, Automation Developers, System Administrators | Intercept and redact secrets from stdio streams |
 
-### Recommended Usage & Workflow
-The `posix.stdio` hook redirects standard output (`stdout`) and standard error (`stderr`) streams through named FIFOs managed by background `leaktk redact` daemons.
+See the hook specific [install guide](install_posix_hooks.md) to get started.
 
 ### 1. In Individual Scripts (Targeted Protection)
 To ensure execution logs from an automated script never leak sensitive credentials into build logs or storage buckets, add the hook initialization immediately after the script's shebang line:
