@@ -56,13 +56,23 @@ func TestPatternsGitleaks(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Success", func(t *testing.T) {
-		ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mux := http.NewServeMux()
+
+		mux.HandleFunc("/patterns/.well-known/leaktk", func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "GET", r.Method)
-			assert.Equal(t, "/patterns/gitleaks/x.y.z", r.URL.Path)
 			w.WriteHeader(http.StatusOK)
 			_, err := io.WriteString(w, mockConfig)
 			assert.NoError(t, err)
-		}))
+		})
+
+		mux.HandleFunc("/patterns/gitleaks/x.y.z", func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "GET", r.Method)
+			w.WriteHeader(http.StatusOK)
+			_, err := io.WriteString(w, mockConfig)
+			assert.NoError(t, err)
+		})
+
+		ts := httptest.NewUnstartedServer(mux)
 		ts.Start()
 		defer ts.Close()
 
@@ -115,15 +125,25 @@ func TestPatternsGitleaks(t *testing.T) {
 	})
 
 	t.Run("WithAuthToken", func(t *testing.T) {
-		ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mux := http.NewServeMux()
+
+		mux.HandleFunc("/patterns/.well-known/leaktk", func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "GET", r.Method)
-			assert.Equal(t, "/patterns/gitleaks/x.y.z", r.URL.Path)
-			// Assert that the Authorization header was correctly set
 			assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 			w.WriteHeader(http.StatusOK)
 			_, err := io.WriteString(w, mockConfig)
 			assert.NoError(t, err)
-		}))
+		})
+
+		mux.HandleFunc("/patterns/gitleaks/x.y.z", func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "GET", r.Method)
+			assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+			w.WriteHeader(http.StatusOK)
+			_, err := io.WriteString(w, mockConfig)
+			assert.NoError(t, err)
+		})
+
+		ts := httptest.NewUnstartedServer(mux)
 		ts.Start()
 		defer ts.Close()
 
@@ -138,6 +158,7 @@ func TestPatternsGitleaks(t *testing.T) {
 		_, err := p.Gitleaks(ctx)
 		require.NoError(t, err)
 	})
+
 }
 
 func TestGitleaksConfigModTimeExceeds(t *testing.T) {

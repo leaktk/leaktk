@@ -30,14 +30,12 @@ func (a *Analyst) Analyze(ctx context.Context, response *proto.Response, pattern
 		return nil, fmt.Errorf("could not evaluate rego query: %w", err)
 	}
 
-	// Convert the analyzed response to a proto.Response
 	if len(results) == 0 || results[0].Expressions == nil || len(results[0].Expressions) == 0 {
 		return nil, fmt.Errorf("could not analyze response: %w", err)
 	}
-	analyzedResponse := new(proto.Response)
-	if err := mapstructure.Decode(results[0].Expressions[0].Value, &analyzedResponse); err != nil {
+	if err := mapstructure.Decode(results[0].Expressions[0].Value, &response.Results); err != nil {
 		return nil, fmt.Errorf("could not bind analyzed response: %w", err)
 	}
 
-	return analyzedResponse, nil
+	return response, nil
 }
