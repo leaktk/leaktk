@@ -21,6 +21,8 @@ settings if they're set:
 - `LEAKTK_SCANNER_AUTOFETCH` - whether the scanner can auto fetch patterns or
   any other items it may need to do the scan (except for the resource being
   scanned)
+- `LEAKTK_AUTOLOGIN` - whether the scanner should automatically attempt a
+  browser-based login when a custom pattern server returns a 401 (default: false)
 
 ## Example Config
 
@@ -65,6 +67,10 @@ allow_local = true
 [scanner.patterns]
 # Tells the scanner if it can fetch pattenrs or not
 autofetch = true
+# Automatically attempt browser-based login when a custom pattern server
+# returns 401. Defaults to false to avoid impacting hooks and not interactive
+# use cases. Can also be set via LEAKTK_AUTOLOGIN env var.
+autologin = false
 # How long until the scanner refuses to use the cached patterns
 expired_after = 604800 # 7 days
 # How long until the scanner tries to fetch patterns if autofetch is allowed
