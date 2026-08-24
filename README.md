@@ -13,6 +13,10 @@ leaktk scan --kind JSONData '@/path/to/some-file.json'
 # Listen for requests
 leaktk listen < ./examples/requests.jsonl
 
+# Check project defaults that help prevent credential leaks
+leaktk healthcheck
+leaktk healthcheck --fix /path/to/project
+
 # See more options
 leaktk help
 ```
@@ -31,6 +35,7 @@ request even if there were errors. More info on the formats are in the
 - [Request/Response Formats for Listen](docs/listen.md)
 - [Git Hooks](docs/hooks.md)
 - [Redaction](docs/redact.md)
+- [Health Checks](docs/healthcheck.md)
 - (Coming Soon) Analyzing Results
 - (Coming Soon) Monitoring Sources
 

@@ -8,7 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
+	"github.com/leaktk/leaktk/pkg/healthcheck"
 	"github.com/leaktk/leaktk/pkg/proto"
 )
 
@@ -54,4 +56,40 @@ func TestScanCommandToRequest(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, request)
 	assert.Equal(t, fmt.Sprintf("resource path does not exist: path=%q", dataPath+".invalid"), err.Error())
+}
+
+func TestHealthcheckCommand(t *testing.T) {
+	cmd := healthcheckCommand()
+
+	assert.Equal(t, "healthcheck [flags] [project]", cmd.Use)
+	assert.Equal(t, "Check project settings that help prevent credential leaks", cmd.Short)
+	assert.NotNil(t, cmd.Flags().Lookup("fix"))
+	assert.NotNil(t, cmd.Flags().Lookup("exit-code"))
+}
+
+func TestFormatHealthcheck(t *testing.T) {
+	result := &healthcheck.Result{
+		Project: "/tmp/project",
+		Findings: []healthcheck.Finding{{
+			Policy:      "gitignore.env",
+			Path:        "/tmp/project/.gitignore",
+			Summary:     ".env is not ignored by .gitignore",
+			Remediation: "add .env to .gitignore",
+		}},
+	}
+
+	t.Run("JSON", func(t *testing.T) {
+		formatter, err := NewFormatter(config.Formatter{Format: "JSON"})
+		require.NoError(t, err)
+
+		assert.JSONEq(t, `{"project":"/tmp/project","findings":[{"policy":"gitignore.env","path":"/tmp/project/.gitignore","summary":".env is not ignored by .gitignore","remediation":"add .env to .gitignore","fixed":false}]}`,
+			formatter.FormatHealthcheck(result))
+	})
+
+	t.Run("Human", func(t *testing.T) {
+		formatter, err := NewFormatter(config.Formatter{Format: "HUMAN"})
+		require.NoError(t, err)
+
+		assert.Contains(t, formatter.FormatHealthcheck(result), "Status: needs action")
+	})
 }

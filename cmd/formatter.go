@@ -5,12 +5,14 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
 	"gopkg.in/yaml.v3"
 
 	"github.com/leaktk/leaktk/pkg/config"
+	"github.com/leaktk/leaktk/pkg/healthcheck"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/proto"
 )
@@ -182,4 +184,100 @@ func flattenedResponse(response *proto.Response) ([]string, [][]string) {
 // flattenContact creates a single string with Contact information as "Name <Email>"
 func flattenContact(contact proto.Contact) string {
 	return fmt.Sprintf("%s <%s>", contact.Name, contact.Email)
+}
+
+func (f *Formatter) FormatHealthcheck(result *healthcheck.Result) string {
+	switch f.format {
+	case JSON:
+		return formatHealthcheckJSON(result)
+	case HUMAN:
+		return formatHealthcheckHuman(result)
+	case TOML:
+		return formatHealthcheckToml(result)
+	case YAML:
+		return formatHealthcheckYaml(result)
+	case CSV:
+		return formatHealthcheckCsv(result)
+	default:
+		return formatHealthcheckJSON(result)
+	}
+}
+
+func formatHealthcheckJSON(result *healthcheck.Result) string {
+	out, err := json.Marshal(result)
+	if err != nil {
+		logger.Error("could not marshal health check result: error=%q", err)
+	}
+
+	return string(out)
+}
+
+func formatHealthcheckHuman(result *healthcheck.Result) string {
+	if len(result.Findings) == 0 {
+		return fmt.Sprintf("No healthcheck issues found: project=%s", result.Project)
+	}
+
+	var out []string
+	for _, finding := range result.Findings {
+		status := "needs action"
+		if finding.Fixed {
+			status = "fixed"
+		}
+
+		out = append(out, fmt.Sprintf("Policy: %s\nPath: %s\nIssue: %s\nRemediation: %s\nStatus: %s",
+			finding.Policy,
+			finding.Path,
+			finding.Summary,
+			finding.Remediation,
+			status,
+		))
+	}
+
+	return strings.Join(out, "\n\n")
+}
+
+func formatHealthcheckToml(result *healthcheck.Result) string {
+	var buf bytes.Buffer
+
+	if err := toml.NewEncoder(&buf).Encode(result); err != nil {
+		logger.Error("could not marshal health check result: error=%q", err)
+	}
+
+	return buf.String()
+}
+
+func formatHealthcheckYaml(result *healthcheck.Result) string {
+	out, err := yaml.Marshal(result)
+	if err != nil {
+		logger.Error("could not marshal health check result: error=%q", err)
+	}
+
+	return string(out)
+}
+
+func formatHealthcheckCsv(result *healthcheck.Result) string {
+	var buf bytes.Buffer
+	writer := csv.NewWriter(&buf)
+	if err := writer.Write([]string{"PROJECT", "POLICY", "PATH", "SUMMARY", "REMEDIATION", "FIXED"}); err != nil {
+		logger.Error("could not write health check response: error=%q", err)
+	}
+
+	for _, finding := range result.Findings {
+		if err := writer.Write([]string{
+			result.Project,
+			finding.Policy,
+			finding.Path,
+			finding.Summary,
+			finding.Remediation,
+			strconv.FormatBool(finding.Fixed),
+		}); err != nil {
+			logger.Error("could not write health check response: error=%q", err)
+		}
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		logger.Error("could not write health check response: error=%q", err)
+	}
+
+	return buf.String()
 }
