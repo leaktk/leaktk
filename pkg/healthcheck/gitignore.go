@@ -94,7 +94,7 @@ func addEnvIgnore(path string) error {
 		mode = info.Mode().Perm()
 	}
 	if err := os.WriteFile(path, data, mode); err != nil {
-		return fmt.Errorf("could not update .gitignore: %w path=%q", err, path)
+		return fmt.Errorf(".gitignore couldn't be updated: %w path=%q", err, path)
 	}
 
 	return nil
