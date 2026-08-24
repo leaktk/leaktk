@@ -21,6 +21,7 @@ import (
 
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
+	"github.com/leaktk/leaktk/pkg/healthcheck"
 	"github.com/leaktk/leaktk/pkg/hooks"
 	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
@@ -504,6 +505,49 @@ func redactCommand() *cobra.Command {
 	return cmd
 }
 
+func runHealthcheck(cmd *cobra.Command, args []string) {
+	project := "."
+	if len(args) == 1 {
+		project = args[0]
+	}
+
+	exitCode, err := cmd.Flags().GetInt("exit-code")
+	if err != nil {
+		logger.Fatal("invalid exit-code: %v", err)
+	}
+
+	result, err := healthcheck.Run(project, mustGetBool(cmd.Flags(), "fix"))
+	if err != nil {
+		logger.Fatal("couldn't run healthcheck: %v", err)
+	}
+
+	formatter, err := NewFormatter(cfg.Formatter)
+	if err != nil {
+		logger.Fatal("%v", err)
+	}
+	fmt.Println(formatter.FormatHealthcheck(result))
+
+	if result.NeedsAction() && exitCode != 0 {
+		os.Exit(exitCode)
+	}
+}
+
+func healthcheckCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:                   "healthcheck [flags] [project]",
+		DisableFlagsInUseLine: true,
+		Short:                 "Check project settings that help prevent credential leaks",
+		Args:                  cobra.MaximumNArgs(1),
+		Run:                   runHealthcheck,
+	}
+
+	flags := cmd.Flags()
+	flags.Bool("fix", false, "Apply the fixes for the reported issues")
+	flags.Int("exit-code", 0, "Exit with this code when issues still need action (default 0)")
+
+	return cmd
+}
+
 func configure(cmd *cobra.Command, args []string) error {
 	switch cmd.Use {
 	case "listen":
@@ -566,6 +610,7 @@ func rootCommand() *cobra.Command {
 	rootCommand.AddCommand(listenCommand())
 	rootCommand.AddCommand(versionCommand())
 	rootCommand.AddCommand(redactCommand())
+	rootCommand.AddCommand(healthcheckCommand())
 
 	return rootCommand
 }
