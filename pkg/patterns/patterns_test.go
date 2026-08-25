@@ -37,16 +37,10 @@ func setupPatterns(t *testing.T, patternsCfg *config.Patterns, client *http.Clie
 	if len(patternsCfg.Gitleaks.LocalPath) == 0 {
 		patternsCfg.Gitleaks.LocalPath = filepath.Join(tmpDir, "patterns", "gitleaks", patternsCfg.Gitleaks.Version)
 	}
-	if len(patternsCfg.LeakTK.LocalPath) == 0 {
-		patternsCfg.LeakTK.LocalPath = filepath.Join(tmpDir, "patterns", "leaktk", patternsCfg.LeakTK.Version)
-	}
 
 	// Clean up any local files to ensure fetching occurs (ignore error if doesn't exist)
 	if len(patternsCfg.Gitleaks.LocalPath) > 0 {
 		_ = os.Remove(patternsCfg.Gitleaks.LocalPath)
-	}
-	if len(patternsCfg.LeakTK.LocalPath) > 0 {
-		_ = os.Remove(patternsCfg.LeakTK.LocalPath)
 	}
 
 	return NewPatterns(patternsCfg, client)

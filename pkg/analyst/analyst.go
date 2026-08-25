@@ -33,8 +33,8 @@ func (a *Analyst) Analyze(ctx context.Context, response *proto.Response, pattern
 	if len(results) == 0 || results[0].Expressions == nil || len(results[0].Expressions) == 0 {
 		return nil, fmt.Errorf("could not analyze response: %w", err)
 	}
-	if err := mapstructure.Decode(results[0].Expressions[0].Value, &response.Results); err != nil {
-		return nil, fmt.Errorf("could not bind analyzed response: %w", err)
+	if err = mapstructure.Decode(results[0].Expressions[0].Value.(map[string]interface{})["results"], &response.Results); err != nil {
+		return nil, err
 	}
 
 	return response, nil

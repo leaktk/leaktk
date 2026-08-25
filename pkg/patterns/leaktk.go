@@ -75,7 +75,7 @@ func (p *Patterns) fetchLeakTKPatterns(ctx context.Context) (string, error) {
 	}
 	defer func() { _ = gz.Close() }()
 
-	version := p.config.LeakTK.Version
+	version := "1"
 	versionKey := "v" + strings.ReplaceAll(strings.TrimPrefix(version, "v"), ".", "_")
 	regoPath := fmt.Sprintf("/src/leaktk/%s/analyst/policy.rego", versionKey)
 

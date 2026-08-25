@@ -102,7 +102,6 @@ type (
 		ExpiredAfter int                 `toml:"expired_after"`
 		CacheDir     string              `toml:"cachedir"`
 		Gitleaks     ProviderPatternsRef `toml:"gitleaks"`
-		LeakTK       ProviderPatternsRef `toml:"leaktk"`
 		RefreshAfter int                 `toml:"refresh_after"`
 		Refresh      bool                `toml:"refresh"`
 		Server       PatternServer       `toml:"server"`
@@ -150,13 +149,6 @@ func setMissingValues(cfg *Config) *Config {
 		cfg.Scanner.Patterns.Gitleaks.LocalPath = filepath.Join(
 			cfg.Scanner.Workdir, "patterns", "gitleaks",
 			cfg.Scanner.Patterns.Gitleaks.Version,
-		)
-	}
-
-	if len(cfg.Scanner.Patterns.LeakTK.LocalPath) == 0 {
-		cfg.Scanner.Patterns.LeakTK.LocalPath = filepath.Join(
-			cfg.Scanner.Workdir, "patterns", "leaktk",
-			cfg.Scanner.Patterns.LeakTK.Version,
 		)
 	}
 
@@ -241,9 +233,6 @@ func DefaultConfig() *Config {
 				RefreshAfter: 60 * 60 * 12, // 12 hours
 				Gitleaks: ProviderPatternsRef{
 					Version: "8.27.0",
-				},
-				LeakTK: ProviderPatternsRef{
-					Version: "0",
 				},
 				Server: PatternServer{
 					URL: "https://raw.githubusercontent.com/leaktk/patterns/refs/heads/well-known/target",
