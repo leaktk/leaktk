@@ -21,7 +21,7 @@ func TestScanner(t *testing.T) {
 	cfg.Scanner.MaxArchiveDepth = 5
 	cfg.Scanner.ScanWorkers = 2
 	cfg.Scanner.Workdir = tempDir
-	cfg.Scanner.Patterns.Gitleaks.ConfigPath = filepath.Join(tempDir, "gitleaks.toml")
+	cfg.Scanner.Patterns.Gitleaks.LocalPath = filepath.Join(tempDir, "gitleaks.toml")
 
 	t.Run("RemoteScanSuccess", func(t *testing.T) {
 		scanner := NewScanner(cfg)
@@ -93,7 +93,7 @@ func TestScanner(t *testing.T) {
 		wg.Add(1)
 
 		go scanner.Recv(func(response *proto.Response) {
-			assert.Equal(t, response.RequestID, request.ID)
+			assert.Equal(t, request.ID, response.RequestID)
 			assert.Nil(t, response.Error)
 			assert.Len(t, response.Results, 1)
 			assert.Equal(t, "I6gHcCmvOcbOMsLahRnrpTVk7-DUhzqOq9IzS1M7YoDWYkZ8pO9A7jc3Sky2cBEAYBLUpG6YPH7QgjmNry79Jg", response.Results[0].Secret)
@@ -146,7 +146,7 @@ func TestScanner(t *testing.T) {
 		wg.Add(1)
 
 		go scanner.Recv(func(response *proto.Response) {
-			assert.Equal(t, response.RequestID, request.ID)
+			assert.Equal(t, request.ID, response.RequestID)
 			assert.Nil(t, response.Error)
 			assert.Len(t, response.Results, 1)
 			assert.Equal(t, "YXBpVmVyc2lvbjogdjEKZGF0YToKICBhd3NfYWNjZXNzX2tleV9pZDogUVV0SlFWaFlXRmhZV0ZoWVdGaFlXRmhZV0ZnPQogIGF3c19zZWNyZXRfYWNjZXNzX2tleTogVURSc1JqUlFlalprWjFwaFlsRjBLM0JrVWxCUUsyczNkbk01Um1GMFFWWnVkR2hZU3pkakNnPT0Ka2luZDogU2VjcmV0Cm1ldGFkYXRhOgogIG5hbWVzcGFjZTogZXhhbXBsZQogIG5hbWU6IGF3cy1jcmVkcwo=", response.Results[0].Secret)

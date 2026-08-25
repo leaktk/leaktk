@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -19,11 +20,14 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/spf13/cobra"
 
+	"github.com/leaktk/leaktk/pkg/analyst"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/hooks"
+	"github.com/leaktk/leaktk/pkg/http"
 	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/pkg/patterns"
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/redactor"
 	"github.com/leaktk/leaktk/pkg/scanner"
@@ -35,6 +39,13 @@ var cfg *config.Config
 func initLogger() {
 	if err := logger.SetLoggerLevel("INFO"); err != nil {
 		logger.Warning("could not set log level to INFO")
+	}
+}
+
+func displayResponse(formatter *Formatter, response *proto.Response) {
+	fmt.Println(formatter.Format(response))
+	if response.Error != nil {
+		logger.Fatal("response contains error: %w", response.Error)
 	}
 }
 
@@ -103,6 +114,12 @@ func runScan(cmd *cobra.Command, args []string) {
 		logger.Fatal("invalid gitleaks-config: %v", err.Error())
 	}
 
+	refresh, err := cmd.Flags().GetBool("refresh")
+	if err != nil {
+		logger.Fatal("invalid refresh value: %v", err.Error())
+	}
+	cfg.Scanner.Patterns.Refresh = refresh
+
 	if len(grepPattern) != 0 {
 		if _, err := regexp.Compile(grepPattern); err != nil {
 			logger.Fatal("invalid grep pattern: %v", err)
@@ -126,7 +143,7 @@ func runScan(cmd *cobra.Command, args []string) {
 	// Providing a gitleaks-config via command line arguments takes
 	// precedence over gitleaks config set in the leaktk config file
 	if len(gitleaksConfig) != 0 {
-		cfg.Scanner.Patterns.Gitleaks.ConfigPath = gitleaksConfig
+		cfg.Scanner.Patterns.Gitleaks.LocalPath = gitleaksConfig
 		logger.Debug("using provided gitleaks config: path=%s", gitleaksConfig)
 
 		// Providing a config automatically disables pattern autofetch
@@ -158,10 +175,7 @@ func runScan(cmd *cobra.Command, args []string) {
 		if !leaksFound && len(response.Results) > 0 {
 			leaksFound = true
 		}
-		fmt.Println(formatter.Format(response))
-		if response.Error != nil {
-			logger.Fatal("response contains error: %w", response.Error)
-		}
+		displayResponse(formatter, response)
 		wg.Done()
 	})
 
@@ -286,12 +300,82 @@ func scanCommand() *cobra.Command {
 	flags.StringP("options", "o", "{}", "Provide scan specific options formatted as JSON")
 	flags.Int("leak-exit-code", 0, "Exit with this code when leaks are detected (default 0)")
 	flags.String("gitleaks-config", "", "Load a custom gitleaks config")
+	flags.BoolP("refresh", "r", false, "Refresh patterns")
 	flags.StringP("grep", "g", "", "Scan using ad-hoc regex instead of the configured patterns")
 
 	// Ensure incompatible flags can't be combined
 	scanCommand.MarkFlagsMutuallyExclusive("grep", "gitleaks-config")
 
 	return scanCommand
+}
+
+func analyzeResponses(ctx context.Context, a *analyst.Analyst, f *Formatter, r *bufio.Reader, patterns *patterns.LeakTKPatterns) {
+	for {
+		line, err := readLine(r)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			logger.Error("error reading line: %v", err)
+			continue
+		}
+
+		response := new(proto.Response)
+		if err := json.Unmarshal(line, response); err != nil {
+			logger.Error("error unmarshaling response: %v", err)
+			continue
+		}
+
+		if analyzedResponse, err := a.Analyze(ctx, response, patterns); err != nil {
+			logger.Error("error analyzing response: %v response_id=%q", err, response.ID)
+		} else {
+			response = analyzedResponse
+		}
+
+		displayResponse(f, response)
+	}
+}
+
+func runAnalyze(cmd *cobra.Command, paths []string) {
+	ctx := cmd.Context()
+	f, err := NewFormatter(cfg.Formatter)
+	if err != nil {
+		logger.Fatal("could not create formatter: %v", err)
+	}
+
+	p := patterns.NewPatterns(&cfg.Scanner.Patterns, http.NewClient())
+	a := analyst.NewAnalyst(p)
+	analystPatterns, err := p.LeakTK(ctx)
+	if err != nil {
+		logger.Error("unable to fetch leaktk patterns")
+	} else {
+		if len(paths) == 0 {
+			analyzeResponses(ctx, a, f, bufio.NewReader(os.Stdin), analystPatterns)
+		} else {
+			for _, path := range paths {
+				r, err := os.Open(filepath.Clean(path))
+				if err != nil {
+					logger.Error("could not open path: %v path=%q", err, path)
+					continue
+				}
+				analyzeResponses(ctx, a, f, bufio.NewReader(r), analystPatterns)
+				if err := r.Close(); err != nil {
+					logger.Error("could not close file: %v path=%q", err, path)
+				}
+			}
+		}
+	}
+}
+
+func analyzeCommand() *cobra.Command {
+	analyzeCommand := &cobra.Command{
+		Use:                   "analyze [flags] [path...]",
+		DisableFlagsInUseLine: true,
+		Short:                 "Analyze response JSONLs from provided paths (or stdin if no provided paths)",
+		Run:                   runAnalyze,
+	}
+
+	return analyzeCommand
 }
 
 func buildGitleaksConfig(pattern string) string {
@@ -564,6 +648,7 @@ func rootCommand() *cobra.Command {
 	rootCommand.AddCommand(logoutCommand())
 	rootCommand.AddCommand(hookCommand())
 	rootCommand.AddCommand(listenCommand())
+	rootCommand.AddCommand(analyzeCommand())
 	rootCommand.AddCommand(versionCommand())
 	rootCommand.AddCommand(redactCommand())
 

@@ -27,7 +27,7 @@ func TestGitPreReceive(t *testing.T) {
 	cfg.Scanner.Patterns.Autofetch = false
 	cfg.Scanner.Patterns.ExpiredAfter = 0
 	cfg.Scanner.Patterns.RefreshAfter = 0
-	cfg.Scanner.Patterns.Gitleaks.ConfigPath = filepath.Join(tempDir, ".git/gitleaks.toml")
+	cfg.Scanner.Patterns.Gitleaks.LocalPath = filepath.Join(tempDir, ".git/gitleaks.toml")
 
 	ctx := t.Context()
 
@@ -51,7 +51,7 @@ func TestGitPreReceive(t *testing.T) {
 	require.NoError(t, exec.CommandContext(ctx, "git", "-C", tempDir, "config", "user.name", "LeakTK").Run())              // #nosec G204
 
 	// Setup the betterleaks config
-	file, err := os.Create(cfg.Scanner.Patterns.Gitleaks.ConfigPath)
+	file, err := os.Create(cfg.Scanner.Patterns.Gitleaks.LocalPath)
 	require.NoError(t, err)
 	_, err = file.Write([]byte(betterleaksPreReceiveTestConfig))
 	_ = file.Close()
