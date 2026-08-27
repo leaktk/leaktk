@@ -9,6 +9,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/adrg/xdg"
 
+	"github.com/leaktk/leaktk/internal/sources"
 	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/version"
@@ -60,10 +61,11 @@ type (
 	// for the toolchain. This may be abstracted out to a common library in
 	// the future as more components are added to the toolchain.
 	Config struct {
-		Logger    Logger    `toml:"logger"`
-		Scanner   Scanner   `toml:"scanner"`
-		Formatter Formatter `toml:"formatter"`
-		Redactor  Redactor  `toml:"Redactor"`
+		Formatter Formatter       `toml:"formatter"`
+		Logger    Logger          `toml:"logger"`
+		Redactor  Redactor        `toml:"Redactor"`
+		Scanner   Scanner         `toml:"scanner"`
+		Sources   sources.Sources `toml:"sources"`
 	}
 
 	// Formatter provides a general output format config

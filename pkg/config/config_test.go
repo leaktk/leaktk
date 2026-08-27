@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/leaktk/leaktk/internal/sources"
 )
 
 func TestPartialLoadConfigFromFile(t *testing.T) {
@@ -83,4 +85,24 @@ func TestLocateAndLoadConfig(t *testing.T) {
 		assert.Equal(t, "test-3", cfg.Scanner.Patterns.Gitleaks.Version)
 	})
 
+}
+
+func TestLoadSources(t *testing.T) {
+	cfg, err := LoadConfigFromFile("../../testdata/sources-config.toml")
+	require.NoError(t, err)
+
+	ss := cfg.Sources
+	require.Len(t, ss, 2)
+	require.IsType(t, &sources.AtlassianCloudJira{}, ss[0])
+	require.IsType(t, &sources.AtlassianCloudAdmin{}, ss[1])
+
+	jira := ss[0].(*sources.AtlassianCloudJira)
+	assert.Equal(t, "cloud-jira", jira.ID())
+	assert.Equal(t, "jimbo", jira.Username)
+	assert.Equal(t, "...", jira.Password)
+
+	admin := ss[1].(*sources.AtlassianCloudAdmin)
+	assert.Equal(t, "cloud-admin", admin.ID())
+	assert.Equal(t, "...", admin.Token)
+	assert.Equal(t, "1", admin.OrgID)
 }
