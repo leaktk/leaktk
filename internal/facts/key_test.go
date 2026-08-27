@@ -7,17 +7,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestKindFromName(t *testing.T) {
-	for i, name := range KindNames {
+func TestKeyFromName(t *testing.T) {
+	for i, name := range KeyNames {
 		t.Run(name, func(t *testing.T) {
-			fk, ok := KindFromName(name)
+			fk, ok := KeyFromName(name)
 			require.True(t, ok)
-			assert.Equal(t, Kind(i), fk)
+			assert.Equal(t, Key(i), fk)
 		})
 	}
 
 	t.Run("unknown", func(t *testing.T) {
-		_, ok := KindFromName("DoesNotExist")
+		_, ok := KeyFromName("DoesNotExist")
 		assert.False(t, ok)
 	})
 }

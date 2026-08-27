@@ -16,7 +16,7 @@ Collect facts about given source ids in the config and stream them to stdout.
 
 Facts are structured as a CSV with a header row and one fact per line. Facts
 are similar to RDF triples in that they have a subject (the eid), predicate
-(kind), and object (value).
+(key), and object (value).
 
 An entity ID should be treated as ephemeral between runs and is solely for
 grouping facts. Entity ID 0 is a special ID used for mapping enum IDs to
@@ -51,7 +51,7 @@ leaktk collect example-atlassian-cloud-admin
 Example output:
 
 ```csv
-eid,kind,value
+eid,key,value
 0,0,"ID"
 0,1,"Active"
 0,2,"EmailAddress"
@@ -84,7 +84,7 @@ eid,kind,value
 The entity ID (eid) column is ephemeral and can change between runs. It's only
 meant for grouping facts together as a single record.
 
-The CSV will _always_ start with `0` eids that map kind enum numbers to their
+The CSV will _always_ start with `0` eids that map key enum numbers to their
 string representations.
 
 For example in the line:
@@ -113,7 +113,7 @@ import io
 import json
 
 data = """
-eid,kind,value
+eid,key,value
 ...snipped for brevity...
 """.strip()
 
@@ -122,10 +122,10 @@ fields = {}
 
 for fact in csv.DictReader(io.StringIO(data)):
     if fact["eid"] == '0':
-        fields[fact["kind"]] = fact["value"]
+        fields[fact["key"]] = fact["value"]
     else:
         entity = records.setdefault(fact["eid"], {})
-        field = fields[fact["kind"]]
+        field = fields[fact["key"]]
         entity[field] = fact["value"]
 
 print(json.dumps(list(records.values()), indent=2))

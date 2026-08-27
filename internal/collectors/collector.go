@@ -17,11 +17,11 @@ func NewCollector() *Collector {
 }
 
 func (*Collector) Facts(ctx context.Context, srcs sources.Sources, yield facts.FactYieldFunc) (err error) {
-	// Yield fact kind mapping first (entity_id = 0) to avoid passing the strings
-	// along for each fact kind
+	// Yield fact key mapping first (entity_id = 0) to avoid passing the strings
+	// along for each fact key
 	fact := facts.Fact{EntityID: 0}
-	for fk, name := range facts.KindNames {
-		fact.Kind = facts.Kind(fk)
+	for fk, name := range facts.KeyNames {
+		fact.Key = facts.Key(fk)
 		fact.Value = name
 		if err = yield(fact); err != nil {
 			return err

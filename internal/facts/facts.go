@@ -18,13 +18,13 @@ var (
 			return new(bytes.Buffer)
 		},
 	}
-	FactCSVHeader = []string{"eid", "kind", "value"}
+	FactCSVHeader = []string{"eid", "key", "value"}
 )
 
 type (
 	Fact struct {
 		EntityID int    `json:"eid"   csv:"eid"`
-		Kind     Kind   `json:"kind"  csv:"kind"`
+		Key      Key    `json:"key"  csv:"key"`
 		Value    string `json:"value" csv:"value"`
 	}
 
@@ -51,7 +51,7 @@ func (f Fact) MarshalCSV() ([]byte, error) {
 	buf.Reset()
 	buf.WriteString(strconv.Itoa(f.EntityID))
 	buf.WriteByte(',')
-	buf.WriteString(strconv.Itoa(f.Kind.ID()))
+	buf.WriteString(strconv.Itoa(f.Key.ID()))
 	buf.WriteString(`,"`)
 	buf.WriteString(escaped)
 	buf.WriteString("\"\n")
@@ -62,11 +62,11 @@ func (f Fact) MarshalCSV() ([]byte, error) {
 	return result, nil
 }
 
-func YieldWithKV(f Fact, k Kind, v string, err error, yield FactYieldFunc) error {
+func YieldWithKV(f Fact, k Key, v string, err error, yield FactYieldFunc) error {
 	if err != nil {
 		return err
 	}
-	f.Kind = k
+	f.Key = k
 	f.Value = v
 	return yield(f)
 }

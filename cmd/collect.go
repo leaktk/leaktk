@@ -32,7 +32,7 @@ func runCollect(cmd *cobra.Command, srcIDs []string) {
 	err := leaktCollector.Facts(ctx, srcs, func(f facts.Fact) error {
 		row, err := f.MarshalCSV()
 		if err != nil {
-			return fmt.Errorf("could not marshal fact: %w eid=%d kind=%q", err, f.EntityID, f.Kind)
+			return fmt.Errorf("could not marshal fact: %w eid=%d key=%q", err, f.EntityID, f.Key)
 		}
 		fmt.Print(string(row))
 		return nil
@@ -51,7 +51,7 @@ func collectCommand() *cobra.Command {
 
 Facts are structured as a CSV with a header row and one fact per line. Facts
 are similar to RDF triples in that they have a subject (the eid), predicate
-(kind), and object (value).
+(key), and object (value).
 
 An entity ID should be treated as ephemeral between runs and is solely for
 grouping facts. Entity ID 0 is a special ID used for mapping enum IDs to
