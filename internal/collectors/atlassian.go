@@ -156,7 +156,7 @@ func atlassianCloudAdminYieldUserFacts(ctx context.Context, src *sources.Atlassi
 			err = facts.YieldWithKV(fact, facts.ActiveKind, active.String(), err, yield)
 			err = facts.YieldWithKV(fact, facts.EmailAddressKind, item.Email, err, yield)
 			err = facts.YieldWithKV(fact, facts.EmailAddressVerifiedKind, emailVerified.String(), err, yield)
-			err = facts.YieldWithKV(fact, facts.EntityKindKind, AtlassianCloudUserKind.String(), err, yield)
+			err = facts.YieldWithKV(fact, facts.KindKind, AtlassianCloudUserKind.String(), err, yield)
 			err = facts.YieldWithKV(fact, facts.NameKind, item.Name, err, yield)
 			err = facts.YieldWithKV(fact, facts.SourceIDKind, src.ID(), err, yield)
 			err = facts.YieldWithKV(fact, facts.URLKind, fmt.Sprintf("https://home.atlassian.com/o/%s/people/%s", src.OrgID, item.ID), err, yield)

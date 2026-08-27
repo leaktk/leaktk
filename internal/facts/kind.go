@@ -7,9 +7,8 @@ const (
 	ActiveKind
 	EmailAddressKind
 	EmailAddressVerifiedKind
-	EntityKindKind
+	KindKind
 	NameKind
-	RelatedEntityIDKind
 	SourceIDKind
 	URLKind
 	UsernameKind
@@ -20,9 +19,8 @@ var KindNames = []string{
 	"Active",
 	"EmailAddress",
 	"EmailAddressVerified",
-	"EntityKind",
+	"Kind",
 	"Name",
-	"RelatedEntityID",
 	"SourceID",
 	"URL",
 	"Username",

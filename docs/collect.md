@@ -56,28 +56,27 @@ eid,kind,value
 0,1,"Active"
 0,2,"EmailAddress"
 0,3,"EmailAddressVerified"
-0,4,"EntityKind"
+0,4,"Kind"
 0,5,"Name"
-0,6,"RelatedEntityID"
-0,7,"SourceID"
-0,8,"URL"
-0,9,"Username"
-1,0,"123456:1234abcd-12ab-34de-5678-12345abcdef0"
+0,6,"SourceID"
+0,7,"URL"
+0,8,"Username"
+1,0,"123456:1234abcd-12ab-34de-5667-12345abcdef0"
 1,1,"true"
 1,2,"user1@example.com"
 1,3,"true"
 1,4,"AtlassianCloudUser"
 1,5,"John Smith"
-1,7,"example-atlassian-org"
-1,8,"https://home.atlassian.com/o/1234abcd-12ab-34de-5678-12345abcdef0/people/123456:2234abcd-12ab-34de-5678-12345abcdef0"
-2,0,"123456:2234abcd-12ab-34de-5678-12345abcdef0"
+1,6,"example-atlassian-org"
+1,7,"https://home.atlassian.com/o/1234abcd-12ab-34de-5668-12345abcdef0/people/123456:2234abcd-12ab-34de-5678-12345abcdef0"
+2,0,"123456:2234abcd-12ab-34de-5667-12345abcdef0"
 2,1,"true"
 2,2,"user2@example.com"
 2,3,"true"
 2,4,"AtlassianCloudUser"
 2,5,"Jane Doe"
-2,7,"example-atlassian-org"
-2,8,"https://home.atlassian.com/o/2234abcd-12ab-34de-5678-12345abcdef0/people/123456:2234abcd-12ab-34de-5678-12345abcdef0"
+2,6,"example-atlassian-org"
+2,7,"https://home.atlassian.com/o/2234abcd-12ab-34de-5668-12345abcdef0/people/123456:2234abcd-12ab-34de-5678-12345abcdef0"
 ```
 
 ## ID Mapping
@@ -141,7 +140,7 @@ Result:
     "Active": "true",
     "EmailAddress": "user1@example.com",
     "EmailAddressVerified": "true",
-    "EntityKind": "AtlassianCloudUser",
+    "Kind": "AtlassianCloudUser",
     "Name": "John Smith",
     "SourceID": "example-atlassian-org",
     "URL": "https://home.atlassian.com/o/1234abcd-12ab-34de-5678-12345abcdef0/people/123456:2234abcd-12ab-34de-5678-12345abcdef0"
@@ -151,7 +150,7 @@ Result:
     "Active": "true",
     "EmailAddress": "user2@example.com",
     "EmailAddressVerified": "true",
-    "EntityKind": "AtlassianCloudUser",
+    "Kind": "AtlassianCloudUser",
     "Name": "Jane Doe",
     "SourceID": "example-atlassian-org",
     "URL": "https://home.atlassian.com/o/2234abcd-12ab-34de-5678-12345abcdef0/people/123456:2234abcd-12ab-34de-5678-12345abcdef0"
