@@ -8,8 +8,8 @@ import (
 
 	"github.com/leaktk/leaktk/internal/collectors"
 	"github.com/leaktk/leaktk/internal/facts"
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/internal/sources"
-	"github.com/leaktk/leaktk/pkg/logger"
 )
 
 func runCollect(cmd *cobra.Command, srcIDs []string) {

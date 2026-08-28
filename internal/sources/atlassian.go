@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/leaktk/leaktk/internal/auths"
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/pkg/http"
-	"github.com/leaktk/leaktk/pkg/logger"
 )
 
 type AtlassianCloudAdmin struct {

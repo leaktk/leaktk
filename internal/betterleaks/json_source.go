@@ -15,9 +15,9 @@ import (
 	blsources "github.com/betterleaks/betterleaks/sources"
 
 	"github.com/leaktk/leaktk/internal/fs"
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/internal/sources"
 	httpclient "github.com/leaktk/leaktk/pkg/http"
-	"github.com/leaktk/leaktk/pkg/logger"
 )
 
 var urlRegexp = regexp.MustCompile(`^https?:\/\/\S+$`)

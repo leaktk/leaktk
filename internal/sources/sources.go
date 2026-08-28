@@ -7,7 +7,7 @@ import (
 	"net/url"
 
 	"github.com/leaktk/leaktk/internal/auths"
-	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/internal/logger"
 )
 
 type Sources []Source

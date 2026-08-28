@@ -1,9 +1,9 @@
 package installer
 
 import (
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/hooks"
-	"github.com/leaktk/leaktk/pkg/logger"
 
 	"bufio"
 	"context"

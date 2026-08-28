@@ -5,9 +5,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/pkg/hooks"
 	"github.com/leaktk/leaktk/pkg/installer"
-	"github.com/leaktk/leaktk/pkg/logger"
 )
 
 func installCommand() *cobra.Command {

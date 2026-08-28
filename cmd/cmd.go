@@ -20,10 +20,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/leaktk/leaktk/internal/fs"
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/hooks"
 	"github.com/leaktk/leaktk/pkg/id"
-	"github.com/leaktk/leaktk/pkg/logger"
+	idutil "github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/redactor"
 	"github.com/leaktk/leaktk/pkg/scanner"
@@ -31,12 +32,6 @@ import (
 )
 
 var cfg *config.Config
-
-func initLogger() {
-	if err := logger.SetLoggerLevel("INFO"); err != nil {
-		logger.Warning("could not set log level to INFO")
-	}
-}
 
 func runHelp(cmd *cobra.Command, args []string) {
 	if err := cmd.Help(); err != nil {
@@ -177,13 +172,18 @@ func runScan(cmd *cobra.Command, args []string) {
 func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, error) {
 	flags := cmd.Flags()
 
-	id, err := flags.GetString("id")
-	if err != nil || len(id) == 0 {
-		return nil, errors.New("missing required field: field=\"id\"")
+	// If a format is specified on the command line update the application config.
+	if format := mustGetString(flags, "format"); format != "" {
+		cfg.Formatter = config.Formatter{Format: format}
 	}
 
-	kind, err := flags.GetString("kind")
-	if err != nil || len(kind) == 0 {
+	id := mustGetString(flags, "id")
+	if len(id) == 0 {
+		id = idutil.ID()
+	}
+
+	kind := mustGetString(flags, "kind")
+	if len(kind) == 0 {
 		return nil, errors.New("missing required field: field=\"kind\"")
 	}
 
@@ -281,12 +281,13 @@ func scanCommand() *cobra.Command {
 	}
 
 	flags := scanCommand.Flags()
-	flags.String("id", id.ID(), "Set the ID request ID that will be displayed in the response and logs")
-	flags.StringP("kind", "k", "GitRepo", "Specify the kind of resource being scanned (ContainerImage, Files, GitRepo, JSONData, Text, URL)")
+	flags.String("id", "", "Set the request ID that to display in the response and logs (default <random>)")
+	flags.StringP("kind", "k", "GitRepo", "Specify the kind of resource being scanned (ContainerImage|Files|GitRepo|JSONData|Text|URL)")
 	flags.StringP("options", "o", "{}", "Provide scan specific options formatted as JSON")
 	flags.Int("leak-exit-code", 0, "Exit with this code when leaks are detected (default 0)")
 	flags.String("gitleaks-config", "", "Load a custom gitleaks config")
 	flags.StringP("grep", "g", "", "Scan using ad-hoc regex instead of the configured patterns")
+	flags.StringP("format", "f", "", "Change the output format (json|human|csv|toml|yaml) (default \"json\")")
 
 	// Ensure incompatible flags can't be combined
 	scanCommand.MarkFlagsMutuallyExclusive("grep", "gitleaks-config")
@@ -504,49 +505,38 @@ func redactCommand() *cobra.Command {
 	return cmd
 }
 
-func configure(cmd *cobra.Command, args []string) error {
+func configure(cmd *cobra.Command, args []string) (err error) {
+	flags := cmd.Flags()
+
 	switch cmd.Use {
 	case "listen":
-		if err := logger.SetLoggerFormat(logger.JSON); err != nil {
+		if err = logger.SetLoggerFormatString(logger.JSON.String()); err != nil {
 			return err
 		}
 	default:
-		if err := logger.SetLoggerFormat(logger.HUMAN); err != nil {
-			return err
-		}
-	}
-	path, err := cmd.Flags().GetString("config")
-
-	if err == nil {
-		// If path == "", this will look other places
-		cfg, err = config.LocateAndLoadConfig(path)
-
-		if err == nil {
-			err = logger.SetLoggerLevel(cfg.Logger.Level)
-		}
-		if err != nil {
+		if err = logger.SetLoggerFormatString(mustGetString(flags, "logger-format")); err != nil {
 			return err
 		}
 	}
 
-	// If a format is specified on the command line update the application config.
-	format, err := cmd.Flags().GetString("format")
-	if err == nil && format != "" {
-		cfg.Formatter = config.Formatter{Format: format}
-	}
-
-	// Check if the OutputFormat is valid
-	_, err = getOutputFormat(cfg.Formatter.Format)
+	// If path is empty, this will look other places
+	cfg, err = config.LocateAndLoadConfig(mustGetString(flags, "config"))
 	if err != nil {
-		logger.Fatal("%v", err)
+		return err
+	}
+
+	// If a logger-level is specified on the command line update the application config.
+	if loggerLevel := mustGetString(flags, "logger-level"); len(loggerLevel) > 0 {
+		cfg.Logger.Level = loggerLevel
+	}
+	if err = logger.SetLoggerLevelString(cfg.Logger.Level); err != nil {
+		return err
 	}
 
 	return err
 }
 
 func rootCommand() *cobra.Command {
-	cobra.OnInitialize(initLogger)
-
 	rootCommand := &cobra.Command{
 		Use:               "leaktk",
 		Short:             "LeakTK: The Leak ToolKit",
@@ -556,7 +546,8 @@ func rootCommand() *cobra.Command {
 
 	flags := rootCommand.PersistentFlags()
 	flags.StringP("config", "c", "", "Load a custom leaktk config")
-	flags.StringP("format", "f", "", "Change the output format [json, human, csv, toml, yaml] (default \"json\")")
+	flags.String("logger-level", "", "Change the log level (trace|debug|info|warning|error|critical) (default \"info\")")
+	flags.String("logger-format", "human", "Change the log format (json|human)")
 
 	rootCommand.AddCommand(scanCommand())
 	rootCommand.AddCommand(installCommand())

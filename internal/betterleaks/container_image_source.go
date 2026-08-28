@@ -15,7 +15,7 @@ import (
 	"github.com/fatih/semgroup"
 	"github.com/mholt/archives"
 
-	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/pkg/version"
 
 	"github.com/betterleaks/betterleaks/config"

@@ -9,9 +9,9 @@ import (
 	nethttp "net/http"
 
 	"github.com/leaktk/leaktk/internal/facts"
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/internal/sources"
 	"github.com/leaktk/leaktk/pkg/http"
-	"github.com/leaktk/leaktk/pkg/logger"
 )
 
 func atlassianReq(ctx context.Context, src *sources.AtlassianCloudAdmin, client *nethttp.Client, method, url string, reqBody io.Reader, respData any) error {

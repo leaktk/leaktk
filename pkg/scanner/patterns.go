@@ -16,8 +16,8 @@ import (
 
 	"github.com/leaktk/leaktk/internal/betterleaks"
 	"github.com/leaktk/leaktk/internal/fs"
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/pkg/config"
-	"github.com/leaktk/leaktk/pkg/logger"
 )
 
 // Patterns acts as an abstraction for fetching different scanner patterns

@@ -11,9 +11,9 @@ import (
 	blconfig "github.com/betterleaks/betterleaks/config"
 	blsources "github.com/betterleaks/betterleaks/sources"
 
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/internal/sources"
 	httpclient "github.com/leaktk/leaktk/pkg/http"
-	"github.com/leaktk/leaktk/pkg/logger"
 )
 
 type URL struct {

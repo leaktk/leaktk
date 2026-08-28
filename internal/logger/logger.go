@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	bllog "github.com/betterleaks/betterleaks/logging"
@@ -57,9 +58,6 @@ func (m zerologMapper) Write(data []byte) (int, error) {
 // LogLevel is used to determine which log severities should actually log
 type LogLevel int
 
-// LogFormat is used to set the how the log messages should be displayed
-type LogFormat int
-
 const (
 	// NOTSET will log everything
 	NOTSET LogLevel = 0
@@ -77,14 +75,7 @@ const (
 	CRITICAL LogLevel = 60
 )
 
-const (
-	// JSON displays the logs as JSON dicts
-	JSON LogFormat = 0
-	// HUMAN displays the logs in a way that's nice for humans to read
-	HUMAN LogFormat = 1
-)
-
-// String renders a LogLevel as its string value
+// String renders a LogLevel name as its string value
 func (l LogLevel) String() string {
 	switch l {
 	case NOTSET:
@@ -101,6 +92,28 @@ func (l LogLevel) String() string {
 		return "WARNING"
 	case CRITICAL:
 		return "CRITICAL"
+	default:
+		return "INVALID"
+	}
+}
+
+// LogFormat is used to set the how the log messages should be displayed
+type LogFormat int
+
+const (
+	// JSON displays the logs as JSON dicts
+	JSON LogFormat = 0
+	// HUMAN displays the logs in a way that's nice for humans to read
+	HUMAN LogFormat = 1
+)
+
+// String renders a LogFormat name as its string value
+func (l LogFormat) String() string {
+	switch l {
+	case JSON:
+		return "JSON"
+	case HUMAN:
+		return "HUMAN"
 	default:
 		return "INVALID"
 	}
@@ -126,16 +139,12 @@ func (e Entry) String() string {
 	switch currentLogFormat {
 	case HUMAN:
 		return fmt.Sprintf("[%s] %s", e.Severity, e.Message)
-
 	case JSON:
 		out, err := json.Marshal(e)
-
 		if err != nil {
 			log.Printf("json.Marshal: %v", err)
 		}
-
 		return string(out)
-
 	default:
 		return e.Message
 	}
@@ -149,23 +158,22 @@ func init() {
 	log.SetFlags(0)
 }
 
-// SetLoggerFormat adjusts the format Entry uses when calling String() on it
-func SetLoggerFormat(logFormat LogFormat) error {
-	switch logFormat {
-	case JSON:
+func SetLoggerFormatString(formatName string) error {
+	switch strings.ToUpper(formatName) {
+	case "JSON":
 		currentLogFormat = JSON
-	case HUMAN:
+	case "HUMAN":
 		currentLogFormat = HUMAN
 	default:
-		return fmt.Errorf("invalid log format: log_format=%v", logFormat)
+		return fmt.Errorf("invalid log format: log_format=%q", formatName)
 	}
 
 	return nil
 }
 
-// SetLoggerLevel takes the string version of the name and sets the current level
-func SetLoggerLevel(levelName string) error {
-	switch levelName {
+// SetLoggerLevelString takes the string version of the name and sets the current level
+func SetLoggerLevelString(levelName string) error {
+	switch strings.ToUpper(levelName) {
 	case "TRACE":
 		currentLogLevel = TRACE
 		bllog.Logger.Level(zerolog.TraceLevel)

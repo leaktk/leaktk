@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/spf13/pflag"
 
-	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/internal/logger"
 )
 
 func mustGetBool(flags *pflag.FlagSet, name string) bool {

@@ -12,8 +12,8 @@ func TestGetAndSetLoggerLevel(t *testing.T) {
 	assert.Equal(t, INFO.String(), GetLoggerLevel().String())
 
 	// It should be changeable
-	require.NoError(t, SetLoggerLevel(DEBUG.String()))
+	require.NoError(t, SetLoggerLevelString(DEBUG.String()))
 	assert.Equal(t, DEBUG.String(), GetLoggerLevel().String())
-	require.NoError(t, SetLoggerLevel(INFO.String()))
+	require.NoError(t, SetLoggerLevelString(INFO.String()))
 	assert.Equal(t, INFO.String(), GetLoggerLevel().String())
 }
