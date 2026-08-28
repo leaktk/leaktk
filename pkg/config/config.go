@@ -9,8 +9,8 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/adrg/xdg"
 
+	"github.com/leaktk/leaktk/internal/fs"
 	"github.com/leaktk/leaktk/internal/sources"
-	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/version"
 )

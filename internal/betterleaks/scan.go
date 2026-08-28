@@ -11,18 +11,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/betterleaks/betterleaks/detect"
-	"github.com/betterleaks/betterleaks/report"
-	"github.com/betterleaks/betterleaks/sources"
+	bldetect "github.com/betterleaks/betterleaks/detect"
+	blreport "github.com/betterleaks/betterleaks/report"
+	blsources "github.com/betterleaks/betterleaks/sources"
+
+	"github.com/leaktk/leaktk/internal/sources"
 )
 
-var defaultRemote = &sources.RemoteInfo{}
+var defaultRemote = &blsources.RemoteInfo{}
 
 // GitScanOpts configures ScanGit
 type GitScanOpts struct {
 	RevisionRange string
 	Depth         int
-	Remote        *sources.RemoteInfo
+	Remote        *blsources.RemoteInfo
 	Since         string
 	Staged        bool
 	Unstaged      bool
@@ -39,17 +41,19 @@ type ContainerImageScanOpts struct {
 // JSONScanOpts configures ScanJSON
 type JSONScanOpts struct {
 	FetchURLPatterns []string
+	Sources          sources.Sources
 }
 
 // URLScanOpts configures ScanURL
 type URLScanOpts struct {
 	FetchURLPatterns []string
+	Sources          sources.Sources
 }
 
-func ScanReader(ctx context.Context, detector *detect.Detector, reader io.Reader) ([]report.Finding, error) {
+func ScanReader(ctx context.Context, detector *bldetect.Detector, reader io.Reader) ([]blreport.Finding, error) {
 	return detector.DetectSource(
 		ctx,
-		&sources.File{
+		&blsources.File{
 			Config:          &detector.Config,
 			Content:         reader,
 			MaxArchiveDepth: detector.MaxArchiveDepth,
@@ -57,7 +61,7 @@ func ScanReader(ctx context.Context, detector *detect.Detector, reader io.Reader
 	)
 }
 
-func ScanURL(ctx context.Context, detector *detect.Detector, rawURL string, opts URLScanOpts) ([]report.Finding, error) {
+func ScanURL(ctx context.Context, detector *bldetect.Detector, rawURL string, opts URLScanOpts) ([]blreport.Finding, error) {
 	return detector.DetectSource(
 		ctx,
 		&URL{
@@ -65,11 +69,12 @@ func ScanURL(ctx context.Context, detector *detect.Detector, rawURL string, opts
 			FetchURLPatterns: opts.FetchURLPatterns,
 			MaxArchiveDepth:  detector.MaxArchiveDepth,
 			RawURL:           rawURL,
+			Sources:          opts.Sources,
 		},
 	)
 }
 
-func ScanJSON(ctx context.Context, detector *detect.Detector, data string, opts JSONScanOpts) ([]report.Finding, error) {
+func ScanJSON(ctx context.Context, detector *bldetect.Detector, data string, opts JSONScanOpts) ([]blreport.Finding, error) {
 	return detector.DetectSource(
 		ctx,
 		&JSON{
@@ -77,14 +82,15 @@ func ScanJSON(ctx context.Context, detector *detect.Detector, data string, opts 
 			FetchURLPatterns: opts.FetchURLPatterns,
 			MaxArchiveDepth:  detector.MaxArchiveDepth,
 			RawMessage:       json.RawMessage(data),
+			Sources:          opts.Sources,
 		},
 	)
 }
 
-func ScanFiles(ctx context.Context, detector *detect.Detector, path string) ([]report.Finding, error) {
+func ScanFiles(ctx context.Context, detector *bldetect.Detector, path string) ([]blreport.Finding, error) {
 	return detector.DetectSource(
 		ctx,
-		&sources.Files{
+		&blsources.Files{
 			Config:          &detector.Config,
 			FollowSymlinks:  detector.FollowSymlinks,
 			Path:            path,
@@ -94,7 +100,7 @@ func ScanFiles(ctx context.Context, detector *detect.Detector, path string) ([]r
 	)
 }
 
-func ScanContainerImage(ctx context.Context, detector *detect.Detector, rawImageRef string, opts ContainerImageScanOpts) ([]report.Finding, error) {
+func ScanContainerImage(ctx context.Context, detector *bldetect.Detector, rawImageRef string, opts ContainerImageScanOpts) ([]blreport.Finding, error) {
 	source := &ContainerImage{
 		Arch:            opts.Arch,
 		Config:          &detector.Config,
@@ -118,13 +124,13 @@ func ScanContainerImage(ctx context.Context, detector *detect.Detector, rawImage
 	return detector.DetectSource(ctx, source)
 }
 
-func ScanGit(ctx context.Context, detector *detect.Detector, gitDir string, opts GitScanOpts) ([]report.Finding, error) {
+func ScanGit(ctx context.Context, detector *bldetect.Detector, gitDir string, opts GitScanOpts) ([]blreport.Finding, error) {
 	gitCmd, err := newGitCmd(ctx, gitDir, opts)
 	if err != nil {
 		return nil, fmt.Errorf("could not create git command: %w", err)
 	}
 
-	var remote *sources.RemoteInfo
+	var remote *blsources.RemoteInfo
 	if opts.Remote != nil {
 		remote = opts.Remote
 	} else {
@@ -133,7 +139,7 @@ func ScanGit(ctx context.Context, detector *detect.Detector, gitDir string, opts
 
 	return detector.DetectSource(
 		ctx,
-		&sources.Git{
+		&blsources.Git{
 			Cmd:             gitCmd,
 			Config:          &detector.Config,
 			Remote:          remote,
@@ -160,9 +166,9 @@ func shallowCommits(gitDir string) []string {
 	return shallowCommits
 }
 
-func newGitCmd(ctx context.Context, gitDir string, opts GitScanOpts) (gitCmd *sources.GitCmd, err error) {
+func newGitCmd(ctx context.Context, gitDir string, opts GitScanOpts) (gitCmd *blsources.GitCmd, err error) {
 	if opts.Unstaged || opts.Staged {
-		if gitCmd, err = sources.NewGitDiffCmdContext(ctx, gitDir, opts.Staged); err != nil {
+		if gitCmd, err = blsources.NewGitDiffCmdContext(ctx, gitDir, opts.Staged); err != nil {
 			return nil, fmt.Errorf("could not create git diff cmd: %w", err)
 		}
 
@@ -192,7 +198,7 @@ func newGitCmd(ctx context.Context, gitDir string, opts GitScanOpts) (gitCmd *so
 		logOpts = append(logOpts, shallowCommits...)
 	}
 
-	if gitCmd, err = sources.NewGitLogCmdContext(ctx, gitDir, strings.Join(logOpts, " ")); err != nil {
+	if gitCmd, err = blsources.NewGitLogCmdContext(ctx, gitDir, strings.Join(logOpts, " ")); err != nil {
 		return nil, fmt.Errorf("could not create git log cmd: %w", err)
 	}
 

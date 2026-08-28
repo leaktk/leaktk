@@ -3,6 +3,8 @@ package sources
 import (
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 
 	"github.com/leaktk/leaktk/internal/auths"
 	"github.com/leaktk/leaktk/pkg/logger"
@@ -13,6 +15,35 @@ type Sources []Source
 type Source interface {
 	ID() string
 	Kind() Kind
+}
+
+type httpHeaderSetter interface {
+	SetHeader(h http.Header) error
+	AppliesTo(url *url.URL) bool
+}
+
+// SetHeader runs source.SetHeader(req.Header) for each applicable source in order that they apper in the config.
+// NOTE: If more than one source sets the same header, the last one wins.
+func (ss Sources) SetHeader(req *http.Request) error {
+	for _, s := range ss {
+		hs, isHeaderSetter := s.(httpHeaderSetter)
+
+		if !isHeaderSetter {
+			logger.Debug("skipping source: cannot set headers: source_id=%q", s.ID())
+			continue
+		}
+
+		if !hs.AppliesTo(req.URL) {
+			logger.Debug("skipping source: not applicable: source_id=%q", s.ID())
+			continue
+		}
+
+		if err := hs.SetHeader(req.Header); err != nil {
+			return fmt.Errorf("source could not set header: %w source_id=%q", err, s.ID())
+		}
+	}
+
+	return nil
 }
 
 func castOptSrcField[T any](values map[string]any, field string, fallback T) T {

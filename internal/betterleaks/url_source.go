@@ -8,21 +8,23 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/betterleaks/betterleaks/config"
-	"github.com/betterleaks/betterleaks/sources"
+	blconfig "github.com/betterleaks/betterleaks/config"
+	blsources "github.com/betterleaks/betterleaks/sources"
 
+	"github.com/leaktk/leaktk/internal/sources"
 	httpclient "github.com/leaktk/leaktk/pkg/http"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
 type URL struct {
-	Config           *config.Config
+	Config           *blconfig.Config
+	Sources          sources.Sources
 	FetchURLPatterns []string
 	MaxArchiveDepth  int
 	RawURL           string
 }
 
-func (s *URL) Fragments(ctx context.Context, yield sources.FragmentsFunc) error {
+func (s *URL) Fragments(ctx context.Context, yield blsources.FragmentsFunc) error {
 	parsedURL, err := url.Parse(s.RawURL)
 	if err != nil {
 		return fmt.Errorf("could not parse URL: %w", err)
@@ -32,6 +34,9 @@ func (s *URL) Fragments(ctx context.Context, yield sources.FragmentsFunc) error 
 	req, err := http.NewRequestWithContext(ctx, "GET", s.RawURL, nil)
 	if err != nil {
 		return fmt.Errorf("error creating HTTP GET request: %w", err)
+	}
+	if err := s.Sources.SetHeader(req); err != nil {
+		return fmt.Errorf("set header error: %w", err)
 	}
 	resp, err := client.Do(req) // #nosec G704
 	if err != nil {
@@ -55,6 +60,7 @@ func (s *URL) Fragments(ctx context.Context, yield sources.FragmentsFunc) error 
 
 		json := &JSON{
 			Config:           s.Config,
+			Sources:          s.Sources,
 			FetchURLPatterns: s.FetchURLPatterns,
 			MaxArchiveDepth:  s.MaxArchiveDepth,
 			Path:             parsedURL.Path,
@@ -64,7 +70,7 @@ func (s *URL) Fragments(ctx context.Context, yield sources.FragmentsFunc) error 
 		return json.Fragments(ctx, yield)
 	}
 
-	file := &sources.File{
+	file := &blsources.File{
 		Config:          s.Config,
 		Content:         resp.Body,
 		MaxArchiveDepth: s.MaxArchiveDepth,

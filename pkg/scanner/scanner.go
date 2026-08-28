@@ -14,14 +14,15 @@ import (
 	"github.com/betterleaks/betterleaks/report"
 
 	"github.com/leaktk/leaktk/internal/git"
+	"github.com/leaktk/leaktk/internal/sources"
 
+	"github.com/leaktk/leaktk/internal/betterleaks"
+	"github.com/leaktk/leaktk/internal/fs"
 	"github.com/leaktk/leaktk/pkg/config"
-	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/queue"
-	"github.com/leaktk/leaktk/pkg/scanner/betterleaks"
 
 	httpclient "github.com/leaktk/leaktk/pkg/http"
 )
@@ -51,6 +52,7 @@ type Scanner struct {
 	responseQueue   *queue.PriorityQueue[*proto.Response]
 	scanQueue       *queue.PriorityQueue[*proto.Request]
 	scanWorkers     int
+	sources         sources.Sources
 }
 
 // NewScanner returns a initialized and listening scanner instance that should
@@ -67,10 +69,10 @@ func NewScanner(cfg *config.Config) *Scanner {
 		responseQueue:   queue.NewPriorityQueue[*proto.Response](initQueueCapacity, cfg.Scanner.MaxResponseQueueSize),
 		scanQueue:       queue.NewPriorityQueue[*proto.Request](initQueueCapacity, cfg.Scanner.MaxScanQueueSize),
 		scanWorkers:     cfg.Scanner.ScanWorkers,
+		sources:         cfg.Sources,
 	}
 
 	scanner.start()
-
 	return scanner
 }
 
@@ -241,10 +243,12 @@ func (s *Scanner) listen() {
 		case proto.URLRequestKind:
 			findings, err = betterleaks.ScanURL(ctx, detector, request.Resource, betterleaks.URLScanOpts{
 				FetchURLPatterns: splitFetchURLPatterns(request.Opts.FetchURLs),
+				Sources:          s.sources,
 			})
 		case proto.JSONDataRequestKind:
 			findings, err = betterleaks.ScanJSON(ctx, detector, request.Resource, betterleaks.JSONScanOpts{
 				FetchURLPatterns: splitFetchURLPatterns(request.Opts.FetchURLs),
+				Sources:          s.sources,
 			})
 		case proto.TextRequestKind:
 			findings, err = betterleaks.ScanReader(ctx, detector, strings.NewReader(request.Resource))

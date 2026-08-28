@@ -3,7 +3,7 @@
 package installer
 
 import (
-	"github.com/leaktk/leaktk/pkg/fs"
+	"github.com/leaktk/leaktk/internal/fs"
 )
 
 // gitHookExists reports whether an existing git hook exists at a given path for determining if

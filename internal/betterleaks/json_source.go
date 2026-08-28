@@ -11,10 +11,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/betterleaks/betterleaks/config"
-	"github.com/betterleaks/betterleaks/sources"
+	blconfig "github.com/betterleaks/betterleaks/config"
+	blsources "github.com/betterleaks/betterleaks/sources"
 
-	"github.com/leaktk/leaktk/pkg/fs"
+	"github.com/leaktk/leaktk/internal/fs"
+	"github.com/leaktk/leaktk/internal/sources"
 	httpclient "github.com/leaktk/leaktk/pkg/http"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
@@ -24,7 +25,8 @@ var urlRegexp = regexp.MustCompile(`^https?:\/\/\S+$`)
 // JSON is a source for yielding fragments from strings in json data
 // and from URLs contained in the data that match FetchURLPatterns
 type JSON struct {
-	Config           *config.Config
+	Config           *blconfig.Config
+	Sources          sources.Sources
 	FetchURLPatterns []string
 	MaxArchiveDepth  int
 	Path             string
@@ -38,7 +40,7 @@ type jsonNode struct {
 }
 
 // Fragments yields the fragments contained in this resource
-func (s *JSON) Fragments(ctx context.Context, yield sources.FragmentsFunc) error {
+func (s *JSON) Fragments(ctx context.Context, yield blsources.FragmentsFunc) error {
 	if s.data == nil {
 		if err := json.Unmarshal([]byte(s.RawMessage), &s.data); err != nil {
 			return fmt.Errorf("could not unmarshal json data: %w", err)
@@ -48,7 +50,7 @@ func (s *JSON) Fragments(ctx context.Context, yield sources.FragmentsFunc) error
 	return s.walkAndYield(ctx, jsonNode{path: s.Path, value: s.data}, yield)
 }
 
-func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield sources.FragmentsFunc) error {
+func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield blsources.FragmentsFunc) error {
 	switch obj := currentNode.value.(type) {
 	case map[string]any:
 		for key, value := range obj {
@@ -83,9 +85,13 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield sou
 
 				return nil
 			}
+			if err := s.Sources.SetHeader(req); err != nil {
+				logger.Error("json fetch url failed: set header: %v path=%q", err, currentNode.path)
+				return nil
+			}
 			resp, err := client.Do(req) // #nosec G704
 			if err != nil {
-				logger.Error("json fetch url failed: %v path=%q", err, currentNode.path)
+				logger.Error("json fetch url failed: request: %v path=%q", err, currentNode.path)
 
 				return nil
 			}
@@ -95,7 +101,7 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield sou
 					resp.StatusCode,
 					currentNode.path,
 				)
-				file := &sources.File{
+				file := &blsources.File{
 					Config:          s.Config,
 					Content:         strings.NewReader(obj),
 					MaxArchiveDepth: s.MaxArchiveDepth,
@@ -129,7 +135,7 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield sou
 				return jsonData.Fragments(ctx, yield)
 			}
 
-			file := &sources.File{
+			file := &blsources.File{
 				Path:    currentNode.path,
 				Content: resp.Body,
 			}
@@ -137,7 +143,7 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield sou
 			return file.Fragments(ctx, yield)
 		}
 
-		file := &sources.File{
+		file := &blsources.File{
 			Path:    currentNode.path,
 			Content: strings.NewReader(obj),
 		}
@@ -150,7 +156,7 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield sou
 
 func (s *JSON) JoinPath(root, child string) string {
 	if len(s.Path) > 0 && s.Path == root {
-		return root + sources.InnerPathSeparator + child
+		return root + blsources.InnerPathSeparator + child
 	}
 
 	return filepath.Join(root, child)
