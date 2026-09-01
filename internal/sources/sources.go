@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/leaktk/leaktk/internal/auths"
 	"github.com/leaktk/leaktk/internal/httpclient"
@@ -90,7 +91,7 @@ func (ss *Sources) UnmarshalTOML(data any) error {
 			*ss = append(*ss, &AtlassianCloudAdmin{
 				id:        srcID,
 				OrgID:     castSrcField[string](value, "org_id"),
-				BaseURL:   castOptSrcField[string](value, "base_url", "https://api.atlassian.com/admin"),
+				BaseURL:   strings.TrimRight(castOptSrcField[string](value, "base_url", "https://api.atlassian.com/admin"), "/"),
 				RateLimit: httpclient.NewRateLimit(),
 				BearerAuth: auths.BearerAuth{
 					Token: castSrcField[string](value, "token"),
@@ -99,7 +100,7 @@ func (ss *Sources) UnmarshalTOML(data any) error {
 		case AtlassianCloudJiraKind:
 			*ss = append(*ss, &AtlassianCloudJira{
 				id:        srcID,
-				BaseURL:   castSrcField[string](value, "base_url"),
+				BaseURL:   strings.TrimRight(castSrcField[string](value, "base_url"), "/"),
 				RateLimit: httpclient.NewRateLimit(),
 				BasicAuth: auths.BasicAuth{
 					Username: castSrcField[string](value, "username"),
