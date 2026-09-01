@@ -4,7 +4,7 @@ Provides a consistent API around some existing scanning tools to integrate them
 with the rest of the toolkit.
 
 The scanner leverages
-[Gitleaks](https://github.com/gitleaks/gitleaks)
+[Betterleaks](https://github.com/betterleaks/betterleaks)
 internally because Gitleaks is an awesome tool, and we already have quite a few
 [patterns](https://github.com/leaktk/patterns)
 for it.
@@ -54,3 +54,20 @@ supported kinds are:
 More information about each kind and specific options can be found in the docs
 for [listen mode](listen.md). The options listed in that doc can be provided
 with the `--options` flag and should be formatted as a JSON string.
+
+## Auth
+
+Current authentication support by resource kind:
+
+| Resource Kind  | Support                                                    |
+| -------------- | ---------------------------------------------------------- |
+| ContainerImage | Local [containers-auth.json(5)][containers-auth]           |
+| Files          | N/A                                                        |
+| GitRepo        | Local [git credentials][git-credentials]                   |
+| JSONData       | [Sources][sources] for `fetch_urls` option when applicable |
+| Text           | N/A                                                        |
+| URL            | [Sources][sources] when applicable                         |
+
+[containers-auth]: https://github.com/podman-container-tools/container-libs/blob/HEAD/image/docs/containers-auth.json.5.md
+[git-credentials]: https://git-scm.com/book/en/v2/Git-Tools-Credential-Storage
+[sources]: config.md#sources
