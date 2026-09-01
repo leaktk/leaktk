@@ -42,14 +42,15 @@ const (
 // Scanner holds the config and state for the scanner processes
 type Scanner struct {
 	allowLocal      bool
-	scanTimeout     time.Duration
 	clonesDir       string
 	maxArchiveDepth int
 	maxDecodeDepth  int
 	maxScanDepth    int
 	patterns        *Patterns
+	rateLimit       *httpclient.RateLimit
 	responseQueue   *queue.PriorityQueue[*proto.Response]
 	scanQueue       *queue.PriorityQueue[*proto.Request]
+	scanTimeout     time.Duration
 	scanWorkers     int
 	sources         sources.Sources
 }
@@ -59,14 +60,15 @@ type Scanner struct {
 func NewScanner(cfg *config.Config) *Scanner {
 	scanner := &Scanner{
 		allowLocal:      cfg.Scanner.AllowLocal,
-		scanTimeout:     time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
 		clonesDir:       filepath.Join(cfg.Scanner.Workdir, "clones"),
 		maxArchiveDepth: cfg.Scanner.MaxArchiveDepth,
 		maxDecodeDepth:  cfg.Scanner.MaxDecodeDepth,
 		maxScanDepth:    cfg.Scanner.MaxScanDepth,
 		patterns:        NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
+		rateLimit:       httpclient.NewRateLimit(),
 		responseQueue:   queue.NewPriorityQueue[*proto.Response](initQueueCapacity, cfg.Scanner.MaxResponseQueueSize),
 		scanQueue:       queue.NewPriorityQueue[*proto.Request](initQueueCapacity, cfg.Scanner.MaxScanQueueSize),
+		scanTimeout:     time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
 		scanWorkers:     cfg.Scanner.ScanWorkers,
 		sources:         cfg.Sources,
 	}
@@ -243,11 +245,13 @@ func (s *Scanner) listen() {
 			findings, err = betterleaks.ScanURL(ctx, detector, request.Resource, betterleaks.URLScanOpts{
 				FetchURLPatterns: splitFetchURLPatterns(request.Opts.FetchURLs),
 				Sources:          s.sources,
+				RateLimit:        s.rateLimit,
 			})
 		case proto.JSONDataRequestKind:
 			findings, err = betterleaks.ScanJSON(ctx, detector, request.Resource, betterleaks.JSONScanOpts{
 				FetchURLPatterns: splitFetchURLPatterns(request.Opts.FetchURLs),
 				Sources:          s.sources,
+				RateLimit:        s.rateLimit,
 			})
 		case proto.TextRequestKind:
 			findings, err = betterleaks.ScanReader(ctx, detector, strings.NewReader(request.Resource))

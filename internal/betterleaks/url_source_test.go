@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/leaktk/leaktk/internal/auths"
+	"github.com/leaktk/leaktk/internal/httpclient"
 	"github.com/leaktk/leaktk/internal/sources"
 )
 
@@ -53,7 +54,8 @@ func TestURL(t *testing.T) {
 		require.NoError(t, err)
 
 		source := URL{
-			RawURL: generalURL,
+			RateLimit: httpclient.NewRateLimit(),
+			RawURL:    generalURL,
 		}
 
 		fragments := []blsources.Fragment{}
@@ -73,7 +75,8 @@ func TestURL(t *testing.T) {
 		jsonDataURL, err := url.JoinPath(ts.URL, "data.json")
 		require.NoError(t, err)
 		source := URL{
-			RawURL: jsonDataURL,
+			RateLimit: httpclient.NewRateLimit(),
+			RawURL:    jsonDataURL,
 		}
 
 		fragments := []blsources.Fragment{}
@@ -95,7 +98,8 @@ func TestURL(t *testing.T) {
 
 		// This one doesn't have any sources configured for it so it'll fail auth
 		source := URL{
-			RawURL: secureURL,
+			RateLimit: httpclient.NewRateLimit(),
+			RawURL:    secureURL,
 		}
 		fragments := []blsources.Fragment{}
 		err = source.Fragments(context.Background(), func(fragment blsources.Fragment, err error) error {

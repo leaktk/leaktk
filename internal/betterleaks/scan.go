@@ -15,6 +15,7 @@ import (
 	blreport "github.com/betterleaks/betterleaks/report"
 	blsources "github.com/betterleaks/betterleaks/sources"
 
+	"github.com/leaktk/leaktk/internal/httpclient"
 	"github.com/leaktk/leaktk/internal/sources"
 )
 
@@ -42,12 +43,14 @@ type ContainerImageScanOpts struct {
 type JSONScanOpts struct {
 	FetchURLPatterns []string
 	Sources          sources.Sources
+	RateLimit        *httpclient.RateLimit
 }
 
 // URLScanOpts configures ScanURL
 type URLScanOpts struct {
 	FetchURLPatterns []string
 	Sources          sources.Sources
+	RateLimit        *httpclient.RateLimit
 }
 
 func ScanReader(ctx context.Context, detector *bldetect.Detector, reader io.Reader) ([]blreport.Finding, error) {
@@ -68,6 +71,7 @@ func ScanURL(ctx context.Context, detector *bldetect.Detector, rawURL string, op
 			Config:           &detector.Config,
 			FetchURLPatterns: opts.FetchURLPatterns,
 			MaxArchiveDepth:  detector.MaxArchiveDepth,
+			RateLimit:        opts.RateLimit,
 			RawURL:           rawURL,
 			Sources:          opts.Sources,
 		},
@@ -81,6 +85,7 @@ func ScanJSON(ctx context.Context, detector *bldetect.Detector, data string, opt
 			Config:           &detector.Config,
 			FetchURLPatterns: opts.FetchURLPatterns,
 			MaxArchiveDepth:  detector.MaxArchiveDepth,
+			RateLimit:        opts.RateLimit,
 			RawMessage:       json.RawMessage(data),
 			Sources:          opts.Sources,
 		},

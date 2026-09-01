@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	"github.com/leaktk/leaktk/internal/auths"
+	"github.com/leaktk/leaktk/internal/httpclient"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
@@ -86,31 +87,25 @@ func (ss *Sources) UnmarshalTOML(data any) error {
 
 		switch kind {
 		case AtlassianCloudAdminKind:
-			s := &AtlassianCloudAdmin{
-				id:      srcID,
-				OrgID:   castSrcField[string](value, "org_id"),
-				BaseURL: castOptSrcField[string](value, "base_url", "https://api.atlassian.com/admin"),
+			*ss = append(*ss, &AtlassianCloudAdmin{
+				id:        srcID,
+				OrgID:     castSrcField[string](value, "org_id"),
+				BaseURL:   castOptSrcField[string](value, "base_url", "https://api.atlassian.com/admin"),
+				RateLimit: httpclient.NewRateLimit(),
 				BearerAuth: auths.BearerAuth{
 					Token: castSrcField[string](value, "token"),
 				},
-			}
-
-			// Make sure it's rate limit is fully initialized
-			s.RateLimit.Init()
-			*ss = append(*ss, s)
+			})
 		case AtlassianCloudJiraKind:
-			s := &AtlassianCloudJira{
-				id:      srcID,
-				BaseURL: castSrcField[string](value, "base_url"),
+			*ss = append(*ss, &AtlassianCloudJira{
+				id:        srcID,
+				BaseURL:   castSrcField[string](value, "base_url"),
+				RateLimit: httpclient.NewRateLimit(),
 				BasicAuth: auths.BasicAuth{
 					Username: castSrcField[string](value, "username"),
 					Password: castSrcField[string](value, "password"),
 				},
-			}
-
-			// Make sure it's rate limit is fully initialized
-			s.RateLimit.Init()
-			*ss = append(*ss, s)
+			})
 		default:
 			return fmt.Errorf("unknown source kind: %q index=%d", kind, i)
 		}

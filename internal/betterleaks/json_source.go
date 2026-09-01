@@ -26,12 +26,12 @@ var urlRegexp = regexp.MustCompile(`^https?:\/\/\S+$`)
 // and from URLs contained in the data that match FetchURLPatterns
 type JSON struct {
 	Config           *blconfig.Config
-	Sources          sources.Sources
-	RateLimit        httpclient.RateLimit
 	FetchURLPatterns []string
 	MaxArchiveDepth  int
 	Path             string
+	RateLimit        *httpclient.RateLimit
 	RawMessage       json.RawMessage
+	Sources          sources.Sources
 	data             any
 }
 
@@ -42,8 +42,6 @@ type jsonNode struct {
 
 // Fragments yields the fragments contained in this resource
 func (s *JSON) Fragments(ctx context.Context, yield blsources.FragmentsFunc) error {
-	s.RateLimit.Init()
-
 	if s.data == nil {
 		if err := json.Unmarshal([]byte(s.RawMessage), &s.data); err != nil {
 			return fmt.Errorf("could not unmarshal json data: %w", err)

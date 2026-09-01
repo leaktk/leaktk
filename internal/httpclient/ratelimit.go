@@ -5,6 +5,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/leaktk/leaktk/pkg/logger"
@@ -15,14 +16,29 @@ const (
 	minRPS = float64(1.0 / 1024.0) // ~ 17 min wait
 )
 
+type RateLimit struct {
+	hostLimits map[string]*hostLimit
+	m          sync.Mutex
+}
+
+var (
+	rateLimitOnce sync.Once
+	rateLimit     *RateLimit
+)
+
 type hostLimit struct {
 	rps   float64   // allowed requests per second
 	after time.Time // time after which the next request is allowed
 }
 
-type RateLimit struct {
-	initialized bool
-	hostLimits  map[string]*hostLimit
+func NewRateLimit() *RateLimit {
+	rateLimitOnce.Do(func() {
+		rateLimit = &RateLimit{
+			hostLimits: make(map[string]*hostLimit, 1),
+		}
+	})
+
+	return rateLimit
 }
 
 func parseRetryAfter(retryAfter string) (time.Duration, bool) {
@@ -44,14 +60,6 @@ func rpsToDelay(rps float64) time.Duration {
 	return time.Duration((1.0/rps)+jitter) * time.Second
 }
 
-// Init sets fields like New would but on an existing rate limit
-func (r *RateLimit) Init() {
-	if !r.initialized {
-		r.hostLimits = make(map[string]*hostLimit, 1)
-		r.initialized = true
-	}
-}
-
 func (r *RateLimit) loadHostLimits(host string) *hostLimit {
 	hl, ok := r.hostLimits[host]
 	if !ok {
@@ -63,7 +71,10 @@ func (r *RateLimit) loadHostLimits(host string) *hostLimit {
 
 func (r *RateLimit) Wait(ctx context.Context, req *http.Request) error {
 	// Calc delay between now and the time after which the next request is allowed
+	r.m.Lock()
 	delay := time.Until(r.loadHostLimits(req.URL.Host).after)
+	r.m.Unlock()
+
 	logger.Debug("waiting duration: milliseconds=%v", delay.Milliseconds())
 
 	select {
@@ -75,6 +86,9 @@ func (r *RateLimit) Wait(ctx context.Context, req *http.Request) error {
 }
 
 func (r *RateLimit) Update(resp *http.Response) {
+	r.m.Lock()
+	defer r.m.Unlock()
+
 	// Get a pointer to the current host limits
 	hl := r.loadHostLimits(resp.Request.URL.Host)
 

@@ -18,16 +18,14 @@ import (
 
 type URL struct {
 	Config           *blconfig.Config
-	Sources          sources.Sources
-	RateLimit        httpclient.RateLimit
 	FetchURLPatterns []string
 	MaxArchiveDepth  int
+	RateLimit        *httpclient.RateLimit
 	RawURL           string
+	Sources          sources.Sources
 }
 
 func (s *URL) Fragments(ctx context.Context, yield blsources.FragmentsFunc) error {
-	s.RateLimit.Init()
-
 	parsedURL, err := url.Parse(s.RawURL)
 	if err != nil {
 		return fmt.Errorf("could not parse URL: %w", err)
