@@ -75,6 +75,10 @@ func (r *RateLimit) Wait(ctx context.Context, req *http.Request) error {
 	delay := time.Until(r.loadHostLimits(req.URL.Host).after)
 	r.m.Unlock()
 
+	if delay < 0 {
+		return nil
+	}
+
 	logger.Debug("waiting duration: milliseconds=%v", delay.Milliseconds())
 
 	select {
