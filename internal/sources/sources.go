@@ -86,23 +86,31 @@ func (ss *Sources) UnmarshalTOML(data any) error {
 
 		switch kind {
 		case AtlassianCloudAdminKind:
-			*ss = append(*ss, &AtlassianCloudAdmin{
+			s := &AtlassianCloudAdmin{
 				id:      srcID,
 				OrgID:   castSrcField[string](value, "org_id"),
 				BaseURL: castOptSrcField[string](value, "base_url", "https://api.atlassian.com/admin"),
 				BearerAuth: auths.BearerAuth{
 					Token: castSrcField[string](value, "token"),
 				},
-			})
+			}
+
+			// Make sure it's rate limit is fully initialized
+			s.RateLimit.Init()
+			*ss = append(*ss, s)
 		case AtlassianCloudJiraKind:
-			*ss = append(*ss, &AtlassianCloudJira{
+			s := &AtlassianCloudJira{
 				id:      srcID,
 				BaseURL: castSrcField[string](value, "base_url"),
 				BasicAuth: auths.BasicAuth{
 					Username: castSrcField[string](value, "username"),
 					Password: castSrcField[string](value, "password"),
 				},
-			})
+			}
+
+			// Make sure it's rate limit is fully initialized
+			s.RateLimit.Init()
+			*ss = append(*ss, s)
 		default:
 			return fmt.Errorf("unknown source kind: %q index=%d", kind, i)
 		}

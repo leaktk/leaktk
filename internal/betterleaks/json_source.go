@@ -15,8 +15,8 @@ import (
 	blsources "github.com/betterleaks/betterleaks/sources"
 
 	"github.com/leaktk/leaktk/internal/fs"
+	"github.com/leaktk/leaktk/internal/httpclient"
 	"github.com/leaktk/leaktk/internal/sources"
-	httpclient "github.com/leaktk/leaktk/pkg/http"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
@@ -27,6 +27,7 @@ var urlRegexp = regexp.MustCompile(`^https?:\/\/\S+$`)
 type JSON struct {
 	Config           *blconfig.Config
 	Sources          sources.Sources
+	RateLimit        httpclient.RateLimit
 	FetchURLPatterns []string
 	MaxArchiveDepth  int
 	Path             string
@@ -41,6 +42,8 @@ type jsonNode struct {
 
 // Fragments yields the fragments contained in this resource
 func (s *JSON) Fragments(ctx context.Context, yield blsources.FragmentsFunc) error {
+	s.RateLimit.Init()
+
 	if s.data == nil {
 		if err := json.Unmarshal([]byte(s.RawMessage), &s.data); err != nil {
 			return fmt.Errorf("could not unmarshal json data: %w", err)
@@ -79,22 +82,36 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield bls
 	case string:
 		if s.shouldFetchURL(currentNode.path) && urlRegexp.MatchString(obj) {
 			client := httpclient.NewClient()
-			req, err := http.NewRequestWithContext(ctx, "GET", obj, nil)
-			if err != nil {
-				logger.Error("json fetch url failed: %v path=%q", err, currentNode.path)
+			var resp *http.Response
+			for resp == nil || resp.StatusCode == http.StatusTooManyRequests {
+				req, err := http.NewRequestWithContext(ctx, "GET", obj, nil)
+				if err != nil {
+					logger.Error("json fetch url failed: %v path=%q", err, currentNode.path)
 
-				return nil
-			}
-			if err := s.Sources.SetHeader(req); err != nil {
-				logger.Error("json fetch url failed: set header: %v path=%q", err, currentNode.path)
-				return nil
-			}
-			resp, err := client.Do(req) // #nosec G704
-			if err != nil {
-				logger.Error("json fetch url failed: request: %v path=%q", err, currentNode.path)
+					return nil
+				}
 
-				return nil
+				if err := s.Sources.SetHeader(req); err != nil {
+					logger.Error("json fetch url failed: set header: %v path=%q", err, currentNode.path)
+					return nil
+				}
+
+				// Wait if needed
+				if err := s.RateLimit.Wait(ctx, req); err != nil {
+					return fmt.Errorf("error rate limiting requests: %w url=%s", err, req.URL)
+				}
+
+				resp, err = client.Do(req) // #nosec G704
+				if err != nil {
+					logger.Error("json fetch url failed: request: %v path=%q", err, currentNode.path)
+
+					return nil
+				}
+
+				// Update the rate limit based on the server's response
+				s.RateLimit.Update(resp)
 			}
+
 			if resp.StatusCode != http.StatusOK {
 				logger.Error(
 					"json fetch url failed with an unexpected status code: status_code=%d path=%q",

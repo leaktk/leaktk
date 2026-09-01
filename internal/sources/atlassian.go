@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/leaktk/leaktk/internal/auths"
-	"github.com/leaktk/leaktk/pkg/http"
+	"github.com/leaktk/leaktk/internal/httpclient"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
@@ -14,7 +14,7 @@ type AtlassianCloudAdmin struct {
 	bURL             url.URL // stores a parsed version of the URL
 	OrgID            string
 	BaseURL          string
-	RateLimit        http.RateLimit
+	RateLimit        httpclient.RateLimit
 	auths.BearerAuth // imlements httpHeaderSetter
 }
 
@@ -55,7 +55,7 @@ type AtlassianCloudJira struct {
 	id              string
 	bURL            url.URL // stores a parsed version of the URL
 	BaseURL         string
-	RateLimit       http.RateLimit
+	RateLimit       httpclient.RateLimit
 	auths.BasicAuth // imlements httpHeaderSetter
 }
 

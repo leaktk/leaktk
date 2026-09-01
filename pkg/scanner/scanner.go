@@ -18,13 +18,12 @@ import (
 
 	"github.com/leaktk/leaktk/internal/betterleaks"
 	"github.com/leaktk/leaktk/internal/fs"
+	"github.com/leaktk/leaktk/internal/httpclient"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/queue"
-
-	httpclient "github.com/leaktk/leaktk/pkg/http"
 )
 
 // Set initial queue capacity. The queue can grow over time if needed
