@@ -97,7 +97,7 @@ func (r *RateLimit) Update(resp *http.Response) {
 	hl := r.loadHostLimits(resp.Request.URL.Host)
 
 	switch resp.StatusCode {
-	case 429:
+	case http.StatusTooManyRequests:
 		// Multiplicative Decrease: Cut the rate by 50% (by default unless Retry-After is set)
 		hl.rps = max(minRPS, hl.rps*0.5)
 
@@ -110,10 +110,9 @@ func (r *RateLimit) Update(resp *http.Response) {
 				return
 			} else {
 				logger.Error("could not parse Retry-After header, falling back calculated rate limit")
-
 			}
 		}
-	case 200:
+	case http.StatusOK | http.StatusNoContent:
 		// Additive Increase: Gain ~1.0 RPS for every second of successful resps
 		hl.rps = min(maxRPS, hl.rps+(1.0/hl.rps))
 	}
