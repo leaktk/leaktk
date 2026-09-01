@@ -85,7 +85,6 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield bls
 				req, err := http.NewRequestWithContext(ctx, "GET", obj, nil)
 				if err != nil {
 					logger.Error("json fetch url failed: %v path=%q", err, currentNode.path)
-
 					return nil
 				}
 
@@ -102,7 +101,6 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield bls
 				resp, err = client.Do(req) // #nosec G704
 				if err != nil {
 					logger.Error("json fetch url failed: request: %v path=%q", err, currentNode.path)
-
 					return nil
 				}
 
@@ -136,7 +134,6 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield bls
 				data, err := io.ReadAll(resp.Body)
 				if err != nil {
 					logger.Error("could not read fetched json response body: %s path=%q", err, currentNode.path)
-
 					return nil
 				}
 

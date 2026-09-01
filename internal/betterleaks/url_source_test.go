@@ -61,7 +61,6 @@ func TestURL(t *testing.T) {
 		fragments := []blsources.Fragment{}
 		err = source.Fragments(context.Background(), func(fragment blsources.Fragment, err error) error {
 			fragments = append(fragments, fragment)
-
 			return nil
 		})
 
@@ -82,7 +81,6 @@ func TestURL(t *testing.T) {
 		fragments := []blsources.Fragment{}
 		err = source.Fragments(context.Background(), func(fragment blsources.Fragment, err error) error {
 			fragments = append(fragments, fragment)
-
 			return nil
 		})
 

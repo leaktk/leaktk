@@ -17,7 +17,7 @@ const (
 )
 
 type RateLimit struct {
-	hostLimits map[string]*hostLimit
+	hostLimits map[string]*hostLimits
 	m          sync.Mutex
 }
 
@@ -26,7 +26,7 @@ var (
 	rateLimit     *RateLimit
 )
 
-type hostLimit struct {
+type hostLimits struct {
 	rps   float64   // allowed requests per second
 	after time.Time // time after which the next request is allowed
 }
@@ -34,7 +34,7 @@ type hostLimit struct {
 func NewRateLimit() *RateLimit {
 	rateLimitOnce.Do(func() {
 		rateLimit = &RateLimit{
-			hostLimits: make(map[string]*hostLimit, 1),
+			hostLimits: make(map[string]*hostLimits, 1),
 		}
 	})
 
@@ -60,10 +60,10 @@ func rpsToDelay(rps float64) time.Duration {
 	return time.Duration((1.0/rps)+jitter) * time.Second
 }
 
-func (r *RateLimit) loadHostLimits(host string) *hostLimit {
+func (r *RateLimit) loadHostLimits(host string) *hostLimits {
 	hl, ok := r.hostLimits[host]
 	if !ok {
-		hl = &hostLimit{rps: maxRPS}
+		hl = &hostLimits{rps: maxRPS}
 		r.hostLimits[host] = hl
 	}
 	return hl
