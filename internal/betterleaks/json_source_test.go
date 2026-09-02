@@ -11,6 +11,8 @@ import (
 	"github.com/betterleaks/betterleaks/sources"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/leaktk/leaktk/internal/httpclient"
 )
 
 func TestJSON(t *testing.T) {
@@ -53,8 +55,9 @@ func TestJSON(t *testing.T) {
 	}`
 
 	jsonData := &JSON{
-		RawMessage:       json.RawMessage(data),
 		FetchURLPatterns: []string{"url", "nested/*", "invalid", "jsonurl"},
+		RateLimit:        httpclient.NewRateLimit(),
+		RawMessage:       json.RawMessage(data),
 	}
 
 	fragments := []sources.Fragment{}

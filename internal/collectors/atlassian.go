@@ -6,31 +6,47 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	nethttp "net/http"
+	"net/http"
 
 	"github.com/leaktk/leaktk/internal/facts"
+	"github.com/leaktk/leaktk/internal/httpclient"
 	"github.com/leaktk/leaktk/internal/sources"
-	"github.com/leaktk/leaktk/pkg/http"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
-func atlassianReq(ctx context.Context, src *sources.AtlassianCloudAdmin, client *nethttp.Client, method, url string, reqBody io.Reader, respData any) error {
-	req, err := nethttp.NewRequestWithContext(ctx, method, url, reqBody)
-	if err != nil {
-		return fmt.Errorf("failed create request: %w", err)
-	}
+func atlassianReq(ctx context.Context, src *sources.AtlassianCloudAdmin, client *http.Client, method, url string, reqBody io.Reader, respData any) error {
+	var (
+		err  error
+		req  *http.Request
+		resp *http.Response
+	)
 
-	req.Header.Set("Accept", "application/json")
-	if reqBody != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	if err = src.SetHeader(req.Header); err != nil {
-		return err
-	}
+	for resp == nil || resp.StatusCode == http.StatusTooManyRequests {
+		req, err = http.NewRequestWithContext(ctx, method, url, reqBody)
+		if err != nil {
+			return fmt.Errorf("failed create request: %w", err)
+		}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		req.Header.Set("Accept", "application/json")
+		if reqBody != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if err = src.SetHeader(req.Header); err != nil {
+			return err
+		}
+
+		// Wait if needed
+		if err := src.RateLimit.Wait(ctx, req); err != nil {
+			return fmt.Errorf("error rate limiting requests: %w url=%s", err, req.URL)
+		}
+
+		resp, err = client.Do(req)
+		if err != nil {
+			return fmt.Errorf("request failed: %w", err)
+		}
+
+		// Update the rate limit based on the server's response
+		src.RateLimit.Update(resp)
 	}
 
 	respBody, err := io.ReadAll(resp.Body)
@@ -39,36 +55,22 @@ func atlassianReq(ctx context.Context, src *sources.AtlassianCloudAdmin, client 
 		return fmt.Errorf("could not read complete resp body: %w", err)
 	}
 
-	// Run this regardless of the status so it can handle auto adjustments on
-	// good responses too.
-	if err := src.RateLimit.Limit(ctx, resp); err != nil {
-		logger.Debug("atlassian admin API response body: %s", string(respBody))
-		return fmt.Errorf("error rate limiting requests: %w url=%s", err, req.URL)
-	}
-
-	switch resp.StatusCode {
-	case 200:
+	if resp.StatusCode == 200 {
 		if err = json.Unmarshal(respBody, respData); err != nil {
 			logger.Trace("atlassian admin API response body: %s", string(respBody))
 			return fmt.Errorf("decode response: %w", err)
 		}
 		logger.Trace("atlassian admin API response data: %+v", respData)
 		return nil
-	case 429:
-		if err := src.RateLimit.Limit(ctx, resp); err != nil {
-			logger.Trace("atlassian admin API response body: %s", string(respBody))
-			return fmt.Errorf("error rate limiting requests: %w url=%s", err, req.URL)
-		}
-		return atlassianReq(ctx, src, client, method, url, reqBody, respData)
-	default:
-		logger.Trace("atlassian admin API response body: %s", string(respBody))
-		return fmt.Errorf("unexpected status status_code=%d url=%s", resp.StatusCode, req.URL)
 	}
+
+	logger.Trace("atlassian admin API response body: %s", string(respBody))
+	return fmt.Errorf("unexpected status status_code=%d url=%s", resp.StatusCode, req.URL)
 }
 
 func atlassianCloudAdminDirIDs(ctx context.Context, src *sources.AtlassianCloudAdmin) (dirIDs []string, err error) {
 	nextCur := ""
-	client := http.NewClient()
+	client := httpclient.NewClient()
 
 	for {
 		url := fmt.Sprintf("%s/v2/orgs/%s/directories?limit=100", src.BaseURL, src.OrgID)
@@ -117,7 +119,7 @@ func atlassianCloudAdminYieldUserFacts(ctx context.Context, src *sources.Atlassi
 	}
 
 	fact := facts.Fact{}
-	client := http.NewClient()
+	client := httpclient.NewClient()
 	payload.Limit = 100
 
 	for {

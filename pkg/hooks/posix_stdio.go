@@ -28,7 +28,7 @@ leaktk redact --kind Stdio < "${_leaktk_hook_posix_stdio_stderr_fifo}" 1>&2 2>"$
 exec 1> "${_leaktk_hook_posix_stdio_stdout_fifo}"
 exec 2> "${_leaktk_hook_posix_stdio_stderr_fifo}"
 
-# Cleanup files from disk immediately. The open file descriptors in memory 
+# Cleanup files from disk immediately. The open file descriptors in memory
 # keep the pipes active until the background processes terminate.
 rm    "${_leaktk_hook_posix_stdio_stdout_fifo}"
 rm    "${_leaktk_hook_posix_stdio_stderr_fifo}"

@@ -14,16 +14,16 @@ import (
 	"github.com/betterleaks/betterleaks/report"
 
 	"github.com/leaktk/leaktk/internal/git"
+	"github.com/leaktk/leaktk/internal/sources"
 
+	"github.com/leaktk/leaktk/internal/betterleaks"
+	"github.com/leaktk/leaktk/internal/fs"
+	"github.com/leaktk/leaktk/internal/httpclient"
 	"github.com/leaktk/leaktk/pkg/config"
-	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/queue"
-	"github.com/leaktk/leaktk/pkg/scanner/betterleaks"
-
-	httpclient "github.com/leaktk/leaktk/pkg/http"
 )
 
 // Set initial queue capacity. The queue can grow over time if needed
@@ -42,15 +42,17 @@ const (
 // Scanner holds the config and state for the scanner processes
 type Scanner struct {
 	allowLocal      bool
-	scanTimeout     time.Duration
 	clonesDir       string
 	maxArchiveDepth int
 	maxDecodeDepth  int
 	maxScanDepth    int
 	patterns        *Patterns
+	rateLimit       *httpclient.RateLimit
 	responseQueue   *queue.PriorityQueue[*proto.Response]
 	scanQueue       *queue.PriorityQueue[*proto.Request]
+	scanTimeout     time.Duration
 	scanWorkers     int
+	sources         sources.Sources
 }
 
 // NewScanner returns a initialized and listening scanner instance that should
@@ -58,19 +60,20 @@ type Scanner struct {
 func NewScanner(cfg *config.Config) *Scanner {
 	scanner := &Scanner{
 		allowLocal:      cfg.Scanner.AllowLocal,
-		scanTimeout:     time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
 		clonesDir:       filepath.Join(cfg.Scanner.Workdir, "clones"),
 		maxArchiveDepth: cfg.Scanner.MaxArchiveDepth,
 		maxDecodeDepth:  cfg.Scanner.MaxDecodeDepth,
 		maxScanDepth:    cfg.Scanner.MaxScanDepth,
 		patterns:        NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
+		rateLimit:       httpclient.NewRateLimit(),
 		responseQueue:   queue.NewPriorityQueue[*proto.Response](initQueueCapacity, cfg.Scanner.MaxResponseQueueSize),
 		scanQueue:       queue.NewPriorityQueue[*proto.Request](initQueueCapacity, cfg.Scanner.MaxScanQueueSize),
+		scanTimeout:     time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
 		scanWorkers:     cfg.Scanner.ScanWorkers,
+		sources:         cfg.Sources,
 	}
 
 	scanner.start()
-
 	return scanner
 }
 
@@ -241,10 +244,14 @@ func (s *Scanner) listen() {
 		case proto.URLRequestKind:
 			findings, err = betterleaks.ScanURL(ctx, detector, request.Resource, betterleaks.URLScanOpts{
 				FetchURLPatterns: splitFetchURLPatterns(request.Opts.FetchURLs),
+				Sources:          s.sources,
+				RateLimit:        s.rateLimit,
 			})
 		case proto.JSONDataRequestKind:
 			findings, err = betterleaks.ScanJSON(ctx, detector, request.Resource, betterleaks.JSONScanOpts{
 				FetchURLPatterns: splitFetchURLPatterns(request.Opts.FetchURLs),
+				Sources:          s.sources,
+				RateLimit:        s.rateLimit,
 			})
 		case proto.TextRequestKind:
 			findings, err = betterleaks.ScanReader(ctx, detector, strings.NewReader(request.Resource))

@@ -7,7 +7,7 @@ for gathering information needed for remediation and analysis.
 
 - `AtlassianCloudAdmin`
 
-Planned: GitHubOrganization GitHubEnterpriseAccount, LDAP, TBD...
+Planned: GitHub GitLab, LDAP, URL, TBD...
 
 ## Usage
 
@@ -157,3 +157,48 @@ Result:
   }
 ]
 ```
+
+Here's another example as a [DuckDB][duckdb] SQL query:
+
+```sql
+WITH
+  raw_data AS (SELECT * FROM read_csv_auto('example.csv', header=True)),
+  kmap AS (SELECT key, value FROM raw_data WHERE eid = 0)
+SELECT json_group_object(k.value, d.value) AS entity
+    FROM raw_data d
+    JOIN kmap k ON d.key = k.key
+    WHERE d.eid > 0 GROUP BY d.eid ORDER BY d.eid;
+```
+
+Result:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                  entity                                     │
+│                                   json                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ {                                                                           │
+│   "ID": "123456:1234abcd-12ab-34de-5667-12345abcdef0",                      │
+│   "Active": "true",                                                         │
+│   "EmailAddress": "user1@example.com",                                      │
+│   "EmailAddressVerified": "true",                                           │
+│   "Kind": "AtlassianCloudUser",                                             │
+│   "Name": "John Smith",                                                     │
+│   "SourceID": "example-atlassian-org",                                      │
+│   "URL": "https://home.atlassian.com/o/1234abcd-12ab-34de-5668-1...snip..." │
+│ }                                                                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ {                                                                           │
+│   "ID": "123456:2234abcd-12ab-34de-5667-12345abcdef0",                      │
+│   "Active": "true",                                                         │
+│   "EmailAddress": "user2@example.com",                                      │
+│   "EmailAddressVerified": "true",                                           │
+│   "Kind": "AtlassianCloudUser",                                             │
+│   "Name": "Jane Doe",                                                       │
+│   "SourceID": "example-atlassian-org",                                      │
+│   "URL": "https://home.atlassian.com/o/2234abcd-12ab-34de-5668-1...snip..." │
+│ }                                                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+[duckdb]: https://duckdb.org/
