@@ -7,7 +7,7 @@ for gathering information needed for remediation and analysis.
 
 - `AtlassianCloudAdmin`
 
-Planned: GitHub GitLab, LDAP, URL, TBD...
+Planned: GitHub, GitLab, LDAP, URL, TBD...
 
 ## Usage
 
