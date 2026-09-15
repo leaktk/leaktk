@@ -187,6 +187,20 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 		return nil, errors.New("missing required field: field=\"kind\"")
 	}
 
+	// Convert kind string to enum
+	requestKind, isValidKind := proto.GetRequestKind(kind)
+	if !isValidKind {
+		return nil, fmt.Errorf("unsupported request kind: kind=%q", kind)
+	}
+
+	if requestKind == proto.StdinRequestKind {
+		if len(args) == 0 {
+			args = append(args, "-")
+		} else {
+			return nil, errors.New("resource field should not be set for this kind")
+		}
+	}
+
 	if len(args) == 0 || len(args[0]) == 0 {
 		return nil, errors.New("missing required field: field=\"resource\"")
 	}
@@ -208,12 +222,6 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 	rawOpts, err := flags.GetString("options")
 	if err != nil {
 		return nil, fmt.Errorf("there was an issue with the options flag: %w", err)
-	}
-
-	// Convert kind string to enum
-	requestKind, isValidKind := proto.GetRequestKind(kind)
-	if !isValidKind {
-		return nil, fmt.Errorf("unsupported request kind: kind=%q", kind)
 	}
 
 	// Parse options once directly into proto.Opts struct
@@ -273,7 +281,7 @@ func hookCommand() *cobra.Command {
 
 func scanCommand() *cobra.Command {
 	scanCommand := &cobra.Command{
-		Use:                   "scan [flags] <resource>",
+		Use:                   "scan [flags] { <resource> | --kind=Stdin }",
 		DisableFlagsInUseLine: true,
 		Short:                 "Perform ad-hoc scans",
 		Args:                  cobra.MaximumNArgs(1),
@@ -282,7 +290,7 @@ func scanCommand() *cobra.Command {
 
 	flags := scanCommand.Flags()
 	flags.String("id", id.ID(), "Set the ID request ID that will be displayed in the response and logs")
-	flags.StringP("kind", "k", "GitRepo", "Specify the kind of resource being scanned (ContainerImage, Files, GitRepo, JSONData, Text, URL)")
+	flags.StringP("kind", "k", "GitRepo", "Specify the kind of resource being scanned (ContainerImage, Files, GitRepo, JSONData, Stdin, Text, URL)")
 	flags.StringP("options", "o", "{}", "Provide scan specific options formatted as JSON")
 	flags.Int("leak-exit-code", 0, "Exit with this code when leaks are detected (default 0)")
 	flags.String("gitleaks-config", "", "Load a custom gitleaks config")
@@ -353,16 +361,16 @@ func runListen(cmd *cobra.Command, args []string) {
 
 		var request proto.Request
 		err = json.Unmarshal(line, &request)
-
 		if err != nil {
 			logger.Error("could not unmarshal request: %v", err)
-
 			continue
 		}
-
+		if request.Kind == proto.StdinRequestKind {
+			logger.Error("invalid kind for listen: kind=%q request_id=%q", request.Kind, request.ID)
+			continue
+		}
 		if len(request.Resource) == 0 {
 			logger.Error("no resource provided: request_id=%q", request.ID)
-
 			continue
 		}
 

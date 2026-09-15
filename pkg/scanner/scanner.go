@@ -255,6 +255,8 @@ func (s *Scanner) listen() {
 			})
 		case proto.TextRequestKind:
 			findings, err = betterleaks.ScanReader(ctx, detector, strings.NewReader(request.Resource))
+		case proto.StdinRequestKind:
+			findings, err = betterleaks.ScanReader(ctx, detector, os.Stdin)
 		case proto.FilesRequestKind:
 			if !s.allowLocal {
 				logger.Critical("scan failed: local scans not allowed: id=%q", request.ID)
