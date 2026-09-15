@@ -20,6 +20,7 @@ const (
 	FilesRequestKind
 	GitRepoRequestKind
 	JSONDataRequestKind
+	StdinRequestKind
 	TextRequestKind
 	URLRequestKind
 )
@@ -29,6 +30,7 @@ var requestKindNames = []string{
 	"Files",
 	"GitRepo",
 	"JSONData",
+	"Stdin",
 	"Text",
 	"URL",
 }
@@ -46,6 +48,7 @@ var requestKindNameMap = map[string]RequestKind{
 	"Files":          FilesRequestKind,
 	"GitRepo":        GitRepoRequestKind,
 	"JSONData":       JSONDataRequestKind,
+	"Stdin":          StdinRequestKind,
 	"Text":           TextRequestKind,
 	"URL":            URLRequestKind,
 }
