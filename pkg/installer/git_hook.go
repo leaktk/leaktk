@@ -14,10 +14,10 @@ import (
 
 	"github.com/adrg/xdg"
 
+	"github.com/leaktk/leaktk/internal/fs"
 	"github.com/leaktk/leaktk/internal/git"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/docs"
-	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/hooks"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/version"

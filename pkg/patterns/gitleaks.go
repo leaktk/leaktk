@@ -14,8 +14,8 @@ import (
 	betterleaksconfig "github.com/betterleaks/betterleaks/config"
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/leaktk/leaktk/internal/betterleaks"
 	"github.com/leaktk/leaktk/pkg/logger"
-	"github.com/leaktk/leaktk/pkg/scanner/betterleaks"
 )
 
 // Gitleaks returns a Gitleaks config object, fetching/caching/updating as necessary.

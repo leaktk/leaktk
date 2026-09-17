@@ -95,8 +95,11 @@ paths = [
 # Ignore anything that has the value '# nosec' at the end of the line
 [[allowlists]]
 # This sets the regex matcher to match against the "line" field rather than the
-# finding's "match" field or the "secret" field.
+# finding's "match" field or the "secret" field. If unset, "secret" is the
+# default, and "match" is not recommended for global allowlists because it
+# can be fragile if the rules change.
 regexTarget = 'line'
+
 regexes = [
     # The '\s*' matches zero or more spaces
     '''#\s*nosec\s*$''',

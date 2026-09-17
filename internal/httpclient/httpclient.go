@@ -1,4 +1,4 @@
-package http
+package httpclient
 
 import (
 	"net/http"
@@ -7,12 +7,12 @@ import (
 	"github.com/leaktk/leaktk/pkg/version"
 )
 
-var once sync.Once
+var clientOnce sync.Once
 var client *http.Client
 
 // NewClient creates an http client with preferred configuration
 func NewClient() *http.Client {
-	once.Do(func() {
+	clientOnce.Do(func() {
 		client = &http.Client{
 			Transport: &customRoundTripper{
 				rt: http.DefaultTransport,

@@ -1,0 +1,12 @@
+[[sources]]
+kind = "AtlassianCloudJira"
+id = "cloud-jira"
+base_url = "https://example.atlassian.net"
+username = "jimbo"
+password = "..." # notsecret
+
+[[sources]]
+kind = "AtlassianCloudAdmin"
+id = "cloud-admin"
+token = "..." # notsecret
+org_id = "1"

@@ -58,13 +58,13 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 		logger.Debug("error parsing image reference %q: %v adding transport and trying again", s.RawImageRef, err)
 		imageRef, err = alltransports.ParseImageName("docker://" + s.RawImageRef)
 		if err != nil {
-			return fmt.Errorf("could not parse image reference: %v image=%q", err, s.RawImageRef)
+			return fmt.Errorf("could not parse image reference: %w image=%q", err, s.RawImageRef)
 		}
 	}
 
 	imageSource, err := imageRef.NewImageSource(ctx, sysCtx)
 	if err != nil {
-		return fmt.Errorf("could not create image source: %v image=%q", err, s.RawImageRef)
+		return fmt.Errorf("could not create image source: %w image=%q", err, s.RawImageRef)
 	}
 
 	defer (func() {
@@ -76,7 +76,7 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 	logger.Debug("fetching manifest: image=%q", s.RawImageRef)
 	rawManifest, manifestMIMEType, err := imageSource.GetManifest(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("could not fetch manifest: %v", err)
+		return fmt.Errorf("could not fetch manifest: %w", err)
 	}
 
 	var indexManifest *manifest.Schema2List
@@ -86,17 +86,17 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 		var oci1Index manifest.OCI1Index
 		err := json.Unmarshal(rawManifest, &oci1Index)
 		if err != nil {
-			return fmt.Errorf("could not unmarshal manifest: %v", err)
+			return fmt.Errorf("could not unmarshal manifest: %w", err)
 		}
 		indexManifest, err = oci1Index.ToSchema2List()
 		if err != nil {
-			return fmt.Errorf("could not convert oci index manifest to schema2list: %v", err)
+			return fmt.Errorf("could not convert oci index manifest to schema2list: %w", err)
 		}
 	case manifest.DockerV2ListMediaType:
 		var schema2List manifest.Schema2List
 		err := json.Unmarshal(rawManifest, &schema2List)
 		if err != nil {
-			return fmt.Errorf("could not unmarshal manifest: %v", err)
+			return fmt.Errorf("could not unmarshal manifest: %w", err)
 		}
 		indexManifest = &schema2List
 	}
@@ -129,7 +129,7 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 
 	image, err := imageRef.NewImage(ctx, sysCtx)
 	if err != nil {
-		return fmt.Errorf("could not load image to retrieve labels: %v", err)
+		return fmt.Errorf("could not load image to retrieve labels: %w", err)
 	}
 
 	defer (func() {
@@ -140,12 +140,12 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 
 	imageManifest, err := manifest.FromBlob(rawManifest, manifestMIMEType)
 	if err != nil {
-		return fmt.Errorf("could not parse manifest: %v image=%q", err, s.RawImageRef)
+		return fmt.Errorf("could not parse manifest: %w image=%q", err, s.RawImageRef)
 	}
 
 	ociConfig, err := image.OCIConfig(ctx)
 	if err != nil {
-		return fmt.Errorf("could not get OCI config: %v image=%q", err, s.RawImageRef)
+		return fmt.Errorf("could not get OCI config: %w image=%q", err, s.RawImageRef)
 	}
 
 	configHistories := make([]imagespecv1.History, 0, len(ociConfig.History))

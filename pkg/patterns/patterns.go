@@ -12,8 +12,8 @@ import (
 
 	betterleaksconfig "github.com/betterleaks/betterleaks/config"
 
+	"github.com/leaktk/leaktk/internal/fs"
 	"github.com/leaktk/leaktk/pkg/config"
-	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/wellknown"
 )

@@ -8,35 +8,55 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/betterleaks/betterleaks/config"
-	"github.com/betterleaks/betterleaks/sources"
+	blconfig "github.com/betterleaks/betterleaks/config"
+	blsources "github.com/betterleaks/betterleaks/sources"
 
-	httpclient "github.com/leaktk/leaktk/pkg/http"
+	"github.com/leaktk/leaktk/internal/httpclient"
+	"github.com/leaktk/leaktk/internal/sources"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
 type URL struct {
-	Config           *config.Config
+	Config           *blconfig.Config
 	FetchURLPatterns []string
 	MaxArchiveDepth  int
+	RateLimit        *httpclient.RateLimit
 	RawURL           string
+	Sources          sources.Sources
 }
 
-func (s *URL) Fragments(ctx context.Context, yield sources.FragmentsFunc) error {
+func (s *URL) Fragments(ctx context.Context, yield blsources.FragmentsFunc) error {
 	parsedURL, err := url.Parse(s.RawURL)
 	if err != nil {
 		return fmt.Errorf("could not parse URL: %w", err)
 	}
 
 	client := httpclient.NewClient()
-	req, err := http.NewRequestWithContext(ctx, "GET", s.RawURL, nil)
-	if err != nil {
-		return fmt.Errorf("error creating HTTP GET request: %w", err)
+
+	var resp *http.Response
+	for resp == nil || resp.StatusCode == http.StatusTooManyRequests {
+		req, err := http.NewRequestWithContext(ctx, "GET", s.RawURL, nil)
+		if err != nil {
+			return fmt.Errorf("error creating HTTP GET request: %w", err)
+		}
+		if err := s.Sources.SetHeader(req); err != nil {
+			return fmt.Errorf("set header error: %w", err)
+		}
+
+		// Wait if needed
+		if err := s.RateLimit.Wait(ctx, req); err != nil {
+			return fmt.Errorf("error rate limiting requests: %w url=%s", err, req.URL)
+		}
+
+		resp, err = client.Do(req) // #nosec G704
+		if err != nil {
+			return fmt.Errorf("HTTP GET error: %w", err)
+		}
+
+		// Update the rate limit based on the server's response
+		s.RateLimit.Update(resp)
 	}
-	resp, err := client.Do(req) // #nosec G704
-	if err != nil {
-		return fmt.Errorf("HTTP GET error: %w", err)
-	}
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: status_code=%d", resp.StatusCode)
 	}
@@ -55,6 +75,8 @@ func (s *URL) Fragments(ctx context.Context, yield sources.FragmentsFunc) error 
 
 		json := &JSON{
 			Config:           s.Config,
+			Sources:          s.Sources,
+			RateLimit:        s.RateLimit,
 			FetchURLPatterns: s.FetchURLPatterns,
 			MaxArchiveDepth:  s.MaxArchiveDepth,
 			Path:             parsedURL.Path,
@@ -64,7 +86,7 @@ func (s *URL) Fragments(ctx context.Context, yield sources.FragmentsFunc) error 
 		return json.Fragments(ctx, yield)
 	}
 
-	file := &sources.File{
+	file := &blsources.File{
 		Config:          s.Config,
 		Content:         resp.Body,
 		MaxArchiveDepth: s.MaxArchiveDepth,

@@ -31,6 +31,7 @@ request even if there were errors. More info on the formats are in the
 - [Request/Response Formats for Listen](docs/listen.md)
 - [Git Hooks](docs/hooks.md)
 - [Redaction](docs/redact.md)
+- [Source Fact Collector](docs/collect.md)
 - (Coming Soon) Analyzing Results
 - (Coming Soon) Monitoring Sources
 

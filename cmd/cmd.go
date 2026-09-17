@@ -20,11 +20,11 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/spf13/cobra"
 
+	"github.com/leaktk/leaktk/internal/fs"
+	"github.com/leaktk/leaktk/internal/httpclient"
 	"github.com/leaktk/leaktk/pkg/analyst"
 	"github.com/leaktk/leaktk/pkg/config"
-	"github.com/leaktk/leaktk/pkg/fs"
 	"github.com/leaktk/leaktk/pkg/hooks"
-	"github.com/leaktk/leaktk/pkg/http"
 	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/patterns"
@@ -201,6 +201,20 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 		return nil, errors.New("missing required field: field=\"kind\"")
 	}
 
+	// Convert kind string to enum
+	requestKind, isValidKind := proto.GetRequestKind(kind)
+	if !isValidKind {
+		return nil, fmt.Errorf("unsupported request kind: kind=%q", kind)
+	}
+
+	if requestKind == proto.StdinRequestKind {
+		if len(args) == 0 {
+			args = append(args, "-")
+		} else {
+			return nil, errors.New("resource field should not be set for this kind")
+		}
+	}
+
 	if len(args) == 0 || len(args[0]) == 0 {
 		return nil, errors.New("missing required field: field=\"resource\"")
 	}
@@ -222,12 +236,6 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 	rawOpts, err := flags.GetString("options")
 	if err != nil {
 		return nil, fmt.Errorf("there was an issue with the options flag: %w", err)
-	}
-
-	// Convert kind string to enum
-	requestKind, isValidKind := proto.GetRequestKind(kind)
-	if !isValidKind {
-		return nil, fmt.Errorf("unsupported request kind: kind=%q", kind)
 	}
 
 	// Parse options once directly into proto.Opts struct
@@ -343,7 +351,7 @@ func runAnalyze(cmd *cobra.Command, paths []string) {
 		logger.Fatal("could not create formatter: %v", err)
 	}
 
-	p := patterns.NewPatterns(&cfg.Scanner.Patterns, http.NewClient())
+	p := patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient())
 	a := analyst.NewAnalyst(p)
 	analystPatterns, err := p.LeakTK(ctx)
 	if err != nil {
@@ -441,6 +449,11 @@ func runListen(cmd *cobra.Command, args []string) {
 		if err != nil {
 			logger.Error("could not unmarshal request: %v", err)
 
+			continue
+		}
+
+		if request.Kind == proto.StdinRequestKind {
+			logger.Error("invalid kind for listen: kind=%q request_id=%q", request.Kind, request.ID)
 			continue
 		}
 
@@ -651,6 +664,7 @@ func rootCommand() *cobra.Command {
 	rootCommand.AddCommand(analyzeCommand())
 	rootCommand.AddCommand(versionCommand())
 	rootCommand.AddCommand(redactCommand())
+	rootCommand.AddCommand(collectCommand())
 
 	return rootCommand
 }

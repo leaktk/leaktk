@@ -28,9 +28,10 @@ available in the shell environment.
    unsure how, do a web search for "Set PATH variable on YOUR\_OS", replacing
    YOUR\_OS with the name of your operating system (e.g. Linux, Mac, Windows).
 
-   After updating your PATH env variable, you may need to reload the environment
-   that you were running the Git commands in for the changes to apply. Or if
-   working from a terminal, you can source your terminal's config file:
+   After updating your PATH environment variable, you may need to reload the
+   environment that you were running the Git commands in for the changes to
+   apply. Or if working from a terminal, you can source your terminal's config
+   file:
 
    ```sh
    if [ -n "${BASH_VERSION}" ]; then source ~/.bashrc; else source ~/.zshrc; fi
