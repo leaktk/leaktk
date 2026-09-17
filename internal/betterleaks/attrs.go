@@ -3,11 +3,11 @@ package betterleaks
 import blsources "github.com/betterleaks/betterleaks/sources"
 
 const (
-	AttrGitSHA         = blsources.AttrGitSHA
-	AttrGitAuthorName  = blsources.AttrGitAuthorName
 	AttrGitAuthorEmail = blsources.AttrGitAuthorEmail
+	AttrGitAuthorName  = blsources.AttrGitAuthorName
 	AttrGitDate        = blsources.AttrGitDate
 	AttrGitMessage     = blsources.AttrGitMessage
+	AttrGitSHA         = blsources.AttrGitSHA
 	AttrPath           = blsources.AttrPath
 	AttrURL            = blsources.AttrURL
 

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/id"
-	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/scanner"
 )
