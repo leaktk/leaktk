@@ -4,26 +4,40 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/adrg/xdg"
 
 	"github.com/leaktk/leaktk/internal/fs"
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/internal/sources"
-	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/version"
 )
 
-// GitConfigGlobalOverride helps normalize things in the scanner
-// it is a variable here so other code can check if it's been set
-const GitConfigGlobalOverride = "/dev/null"
-const nixGlobalConfigDir = "/etc/leaktk"
+var (
+	// GitConfigGlobalOverride helps normalize things in the scanner
+	// it is a variable here so other code can check if it's been set
+	GitConfigGlobalOverride string
+	localConfigDir          string
+)
 
-var localConfigDir string
+const nixGlobalConfigDir = "/etc/leaktk"
 
 func init() {
 	localConfigDir = filepath.Join(xdg.ConfigHome, "leaktk")
+
+	// TODO: Document this
+	if systemLeaktkGitConfig := filepath.Join(nixGlobalConfigDir, "gitconfig"); fs.FileExists(systemLeaktkGitConfig) {
+		GitConfigGlobalOverride = systemLeaktkGitConfig
+	} else if userLeaktkGitConfig := filepath.Join(localConfigDir, "gitconfig"); fs.FileExists(userLeaktkGitConfig) {
+		GitConfigGlobalOverride = userLeaktkGitConfig
+	} else if runtime.GOOS == "windows" {
+		GitConfigGlobalOverride = "NUL"
+	} else {
+		GitConfigGlobalOverride = "/dev/null"
+	}
 
 	// The environment variables for the scan environment
 	env := map[string]string{

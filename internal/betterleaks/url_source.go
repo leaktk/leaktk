@@ -4,24 +4,25 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 
-	blconfig "github.com/betterleaks/betterleaks/config"
-	blsources "github.com/betterleaks/betterleaks/sources"
+	blsources "github.com/betterleaks/betterleaks/v2/sources"
 
 	"github.com/leaktk/leaktk/internal/httpclient"
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/internal/sources"
-	"github.com/leaktk/leaktk/pkg/logger"
 )
 
 type URL struct {
-	Config           *blconfig.Config
 	FetchURLPatterns []string
+	Logger           *slog.Logger
 	MaxArchiveDepth  int
 	RateLimit        *httpclient.RateLimit
 	RawURL           string
+	ShouldSkip       blsources.SkipFunc
 	Sources          sources.Sources
 }
 
@@ -74,9 +75,9 @@ func (s *URL) Fragments(ctx context.Context, yield blsources.FragmentsFunc) erro
 		}
 
 		json := &JSON{
-			Config:           s.Config,
 			Sources:          s.Sources,
 			RateLimit:        s.RateLimit,
+			ShouldSkip:       s.ShouldSkip,
 			FetchURLPatterns: s.FetchURLPatterns,
 			MaxArchiveDepth:  s.MaxArchiveDepth,
 			Path:             parsedURL.Path,
@@ -87,10 +88,11 @@ func (s *URL) Fragments(ctx context.Context, yield blsources.FragmentsFunc) erro
 	}
 
 	file := &blsources.File{
-		Config:          s.Config,
 		Content:         resp.Body,
+		Logger:          s.Logger,
 		MaxArchiveDepth: s.MaxArchiveDepth,
 		Path:            parsedURL.Path,
+		ShouldSkip:      s.ShouldSkip,
 	}
 
 	return file.Fragments(ctx, yield)

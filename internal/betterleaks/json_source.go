@@ -5,19 +5,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
-	blconfig "github.com/betterleaks/betterleaks/config"
-	blsources "github.com/betterleaks/betterleaks/sources"
+	blsources "github.com/betterleaks/betterleaks/v2/sources"
 
 	"github.com/leaktk/leaktk/internal/fs"
 	"github.com/leaktk/leaktk/internal/httpclient"
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/internal/sources"
-	"github.com/leaktk/leaktk/pkg/logger"
 )
 
 var urlRegexp = regexp.MustCompile(`^https?:\/\/\S+$`)
@@ -25,8 +25,9 @@ var urlRegexp = regexp.MustCompile(`^https?:\/\/\S+$`)
 // JSON is a source for yielding fragments from strings in json data
 // and from URLs contained in the data that match FetchURLPatterns
 type JSON struct {
-	Config           *blconfig.Config
+	ShouldSkip       blsources.SkipFunc
 	FetchURLPatterns []string
+	Logger           *slog.Logger
 	MaxArchiveDepth  int
 	Path             string
 	RateLimit        *httpclient.RateLimit
@@ -115,10 +116,11 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield bls
 					currentNode.path,
 				)
 				file := &blsources.File{
-					Config:          s.Config,
 					Content:         strings.NewReader(obj),
+					Logger:          s.Logger,
 					MaxArchiveDepth: s.MaxArchiveDepth,
 					Path:            currentNode.path,
+					ShouldSkip:      s.ShouldSkip,
 				}
 
 				return file.Fragments(ctx, yield)
@@ -138,7 +140,7 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield bls
 				}
 
 				jsonData := &JSON{
-					Config:          s.Config,
+					ShouldSkip:      s.ShouldSkip,
 					MaxArchiveDepth: s.MaxArchiveDepth,
 					Path:            currentNode.path,
 					RawMessage:      data,
@@ -148,16 +150,18 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield bls
 			}
 
 			file := &blsources.File{
-				Path:    currentNode.path,
 				Content: resp.Body,
+				Logger:  s.Logger,
+				Path:    currentNode.path,
 			}
 
 			return file.Fragments(ctx, yield)
 		}
 
 		file := &blsources.File{
-			Path:    currentNode.path,
 			Content: strings.NewReader(obj),
+			Logger:  s.Logger,
+			Path:    currentNode.path,
 		}
 
 		return file.Fragments(ctx, yield)
