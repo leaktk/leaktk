@@ -4,30 +4,34 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/betterleaks/betterleaks/config"
+	blconfig "github.com/betterleaks/betterleaks/config"
 )
 
-func ParseConfig(rawConfig []byte) (cfg *config.Config, err error) {
+type Config blconfig.Config
+
+func ParseConfig(rawConfig []byte) (*Config, error) {
+	var err error
+	var cfg *blconfig.Config
+
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("config is invalid: %v", r)
 		}
 	}()
 
-	if cfg, err = config.ParseTOML(rawConfig, ""); err != nil {
-		err = fmt.Errorf("invalid config: %w", err)
-		return
+	cfg, err = blconfig.ParseTOML(rawConfig, "")
+	if err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
 	if err = validate(cfg); err != nil {
-		err = fmt.Errorf("invalid config: %w", err)
-		return
+		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	return
+	return (*Config)(cfg), nil
 }
 
-func validate(cfg *config.Config) error {
+func validate(cfg *blconfig.Config) error {
 	if len(cfg.Rules) == 0 && cfg.Prefilter == "" && cfg.Filter == "" {
 		return errors.New("no rules or filters")
 	}

@@ -28,14 +28,6 @@ import (
 	imagespecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-const (
-	AttrOCIImageDigest          = "oci.image.digest"
-	AttrOCIImageAuthorName      = "oci.image.author_name"
-	AttrOCIImageAuthorEmail     = "oci.image.author_email"
-	AttrOCIImageMaintainerName  = "oci.image.maintainer_name"
-	AttrOCIImageMaintainerEmail = "oci.image.maintainer_email"
-)
-
 type ContainerImage struct {
 	Arch            string
 	ShouldSkip      sources.SkipFunc

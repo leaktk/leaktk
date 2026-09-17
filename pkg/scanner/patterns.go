@@ -12,9 +12,8 @@ import (
 	"sync"
 	"time"
 
-	betterleaksconfig "github.com/betterleaks/betterleaks/config"
+	bl "github.com/leaktk/leaktk/internal/betterleaks"
 
-	"github.com/leaktk/leaktk/internal/betterleaks"
 	"github.com/leaktk/leaktk/internal/fs"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
@@ -26,7 +25,7 @@ type Patterns struct {
 	client             *http.Client
 	config             *config.Patterns
 	gitleaksConfigHash [32]byte
-	gitleaksConfig     *betterleaksconfig.Config
+	gitleaksConfig     *bl.Config
 	mutex              sync.Mutex
 }
 
@@ -102,7 +101,7 @@ func (p *Patterns) gitleaksConfigModTimeExceeds(modTimeLimit int) bool {
 }
 
 // Gitleaks returns a Gitleaks config object if it's able to
-func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, error) {
+func (p *Patterns) Gitleaks(ctx context.Context) (*bl.Config, error) {
 	// Lock since this updates the value of p.gitleaksConfig on the fly
 	// and updates files on the filesystem
 	p.mutex.Lock()
@@ -114,7 +113,7 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 			return p.gitleaksConfig, err
 		}
 
-		p.gitleaksConfig, err = betterleaks.ParseConfig([]byte(rawConfig))
+		p.gitleaksConfig, err = bl.ParseConfig([]byte(rawConfig))
 		if err != nil {
 			logger.Debug("fetched config:\n%s", rawConfig)
 
@@ -180,7 +179,7 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 			return p.gitleaksConfig, err
 		}
 
-		p.gitleaksConfig, err = betterleaks.ParseConfig(rawConfig)
+		p.gitleaksConfig, err = bl.ParseConfig(rawConfig)
 		if err != nil {
 			logger.Debug("loaded config:\n%s\n", rawConfig)
 
