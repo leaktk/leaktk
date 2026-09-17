@@ -12,123 +12,120 @@ import (
 	"time"
 
 	blconfig "github.com/betterleaks/betterleaks/config"
-	bldetect "github.com/betterleaks/betterleaks/detect"
-	blreport "github.com/betterleaks/betterleaks/report"
-	blsources "github.com/betterleaks/betterleaks/sources"
-	blscm "github.com/betterleaks/betterleaks/sources/scm"
+	blreport "github.com/betterleaks/betterleaks/v2/report"
+	blscan "github.com/betterleaks/betterleaks/v2/scan"
+	blsources "github.com/betterleaks/betterleaks/v2/sources"
+	blscm "github.com/betterleaks/betterleaks/v2/sources/scm"
 
 	"github.com/leaktk/leaktk/internal/fs"
 	"github.com/leaktk/leaktk/internal/httpclient"
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/internal/sources"
 	"github.com/leaktk/leaktk/pkg/id"
-	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/proto"
 )
 
 type ScannerOpts struct {
-	MaxArchiveDepth int
-	MaxDecodeDepth  int
+	MatchContext   string
+	MaxDecodeDepth int
+	MinConfidence  string
+	Workers        int
 }
 
-// GitScanOpts configures ScanGit
-type GitScanOpts struct {
-	Depth         int
-	RevisionRange string
-	Since         string
-	Staged        bool
-	Unstaged      bool
-}
-
-// ContainerImageScanOpts configures ScanContainerImage
 type ContainerImageScanOpts struct {
-	Arch       string
-	Depth      int
-	Exclusions []string
-	Since      string
+	Arch            string
+	Depth           int
+	Exclusions      []string
+	MaxArchiveDepth int
+	Since           string
 }
 
-// JSONScanOpts configures ScanJSON
+type FilesScanOpts struct {
+	FollowSymlinks  bool
+	MaxArchiveDepth int
+	Workers         int
+}
+
+type GitScanOpts struct {
+	Depth           int
+	MaxArchiveDepth int
+	RevisionRange   string
+	Since           string
+	Staged          bool
+	Unstaged        bool
+	Workers         int
+}
+
 type JSONScanOpts struct {
 	FetchURLPatterns []string
-	Sources          sources.Sources
+	MaxArchiveDepth  int
 	RateLimit        *httpclient.RateLimit
+	Sources          sources.Sources
 }
 
-// URLScanOpts configures ScanURL
+type ReaderScanOpts struct {
+	MaxArchiveDepth int
+}
+
 type URLScanOpts struct {
 	FetchURLPatterns []string
-	Sources          sources.Sources
+	MaxArchiveDepth  int
 	RateLimit        *httpclient.RateLimit
+	Sources          sources.Sources
 }
 
-func ScanReader(ctx context.Context, request *proto.Request, blScanner *bldetect.Detector, reader io.Reader) ([]*proto.Result, error) {
-	findings, err := blScanner.DetectSource(
-		ctx,
-		&blsources.File{
-			Content:         reader,
-			MaxArchiveDepth: blScanner.MaxArchiveDepth,
-			ShouldSkip:      blScanner.SkipFunc(),
-		},
-	)
-
-	return findingsToResults(request, findings), err
+func ScanReader(ctx context.Context, request *proto.Request, blScanner *blscan.Scanner, reader io.Reader, opts ReaderScanOpts) ([]*proto.Result, error) {
+	return scanSrc(ctx, blScanner, request, &blsources.File{
+		Content:         reader,
+		Logger:          logger.SLogger(),
+		MaxArchiveDepth: opts.MaxArchiveDepth,
+		ShouldSkip:      blScanner.SkipFunc(),
+	})
 }
 
-func ScanURL(ctx context.Context, request *proto.Request, blScanner *bldetect.Detector, rawURL string, opts URLScanOpts) ([]*proto.Result, error) {
-	findings, err := blScanner.DetectSource(
-		ctx,
-		&URL{
-			FetchURLPatterns: opts.FetchURLPatterns,
-			MaxArchiveDepth:  blScanner.MaxArchiveDepth,
-			RateLimit:        opts.RateLimit,
-			RawURL:           rawURL,
-			Sources:          opts.Sources,
-			ShouldSkip:       blScanner.SkipFunc(),
-		},
-	)
-
-	return findingsToResults(request, findings), err
+func ScanURL(ctx context.Context, request *proto.Request, blScanner *blscan.Scanner, rawURL string, opts URLScanOpts) ([]*proto.Result, error) {
+	return scanSrc(ctx, blScanner, request, &URL{
+		FetchURLPatterns: opts.FetchURLPatterns,
+		Logger:           logger.SLogger(),
+		MaxArchiveDepth:  opts.MaxArchiveDepth,
+		RateLimit:        opts.RateLimit,
+		RawURL:           rawURL,
+		ShouldSkip:       blScanner.SkipFunc(),
+		Sources:          opts.Sources,
+	})
 }
 
-func ScanJSON(ctx context.Context, request *proto.Request, blScanner *bldetect.Detector, data string, opts JSONScanOpts) ([]*proto.Result, error) {
-	findings, err := blScanner.DetectSource(
-		ctx,
-		&JSON{
-			FetchURLPatterns: opts.FetchURLPatterns,
-			MaxArchiveDepth:  blScanner.MaxArchiveDepth,
-			RateLimit:        opts.RateLimit,
-			RawMessage:       json.RawMessage(data),
-			Sources:          opts.Sources,
-			ShouldSkip:       blScanner.SkipFunc(),
-		},
-	)
-
-	return findingsToResults(request, findings), err
+func ScanJSON(ctx context.Context, request *proto.Request, blScanner *blscan.Scanner, data string, opts JSONScanOpts) ([]*proto.Result, error) {
+	return scanSrc(ctx, blScanner, request, &JSON{
+		FetchURLPatterns: opts.FetchURLPatterns,
+		Logger:           logger.SLogger(),
+		MaxArchiveDepth:  opts.MaxArchiveDepth,
+		RateLimit:        opts.RateLimit,
+		RawMessage:       json.RawMessage(data),
+		ShouldSkip:       blScanner.SkipFunc(),
+		Sources:          opts.Sources,
+	})
 }
 
-func ScanFiles(ctx context.Context, request *proto.Request, blScanner *bldetect.Detector, path string) ([]*proto.Result, error) {
-	findings, err := blScanner.DetectSource(
-		ctx,
-		&blsources.Files{
-			FollowSymlinks:  blScanner.FollowSymlinks,
-			MaxArchiveDepth: blScanner.MaxArchiveDepth,
-			Path:            path,
-			Sema:            blScanner.Sema,
-			ShouldSkip:      blScanner.SkipFunc(),
-		},
-	)
-
-	return findingsToResults(request, findings), err
+func ScanFiles(ctx context.Context, request *proto.Request, blScanner *blscan.Scanner, path string, opts FilesScanOpts) ([]*proto.Result, error) {
+	return scanSrc(ctx, blScanner, request, &blsources.Files{
+		FollowSymlinks:  opts.FollowSymlinks,
+		Logger:          logger.SLogger(),
+		MaxArchiveDepth: opts.MaxArchiveDepth,
+		Path:            path,
+		ShouldSkip:      blScanner.SkipFunc(),
+		Workers:         opts.Workers,
+	})
 }
 
-func ScanContainerImage(ctx context.Context, request *proto.Request, blScanner *bldetect.Detector, rawImageRef string, opts ContainerImageScanOpts) ([]*proto.Result, error) {
-	source := &ContainerImage{
+func ScanContainerImage(ctx context.Context, request *proto.Request, blScanner *blscan.Scanner, rawImageRef string, opts ContainerImageScanOpts) ([]*proto.Result, error) {
+	src := ContainerImage{
 		Arch:            opts.Arch,
 		Depth:           opts.Depth,
 		Exclusions:      opts.Exclusions,
-		MaxArchiveDepth: blScanner.MaxArchiveDepth,
+		Logger:          logger.SLogger(),
+		MaxArchiveDepth: opts.MaxArchiveDepth,
 		RawImageRef:     rawImageRef,
-		Sema:            blScanner.Sema,
 		ShouldSkip:      blScanner.SkipFunc(),
 	}
 
@@ -138,14 +135,13 @@ func ScanContainerImage(ctx context.Context, request *proto.Request, blScanner *
 			return nil, fmt.Errorf("could not parse option: since=%q", opts.Since)
 		}
 
-		source.Since = &since
+		src.Since = &since
 	}
 
-	findings, err := blScanner.DetectSource(ctx, source)
-	return findingsToResults(request, findings), err
+	return scanSrc(ctx, blScanner, request, &src)
 }
 
-func ScanGit(ctx context.Context, request *proto.Request, blScanner *bldetect.Detector, gitDir string, opts GitScanOpts) ([]*proto.Result, error) {
+func ScanGit(ctx context.Context, request *proto.Request, blScanner *blscan.Scanner, gitDir string, opts GitScanOpts) ([]*proto.Result, error) {
 	platform, remoteURL := blsources.ResolveRemote(ctx, blscm.UnknownPlatform, gitDir)
 
 	gitCmd, err := newGitCmd(ctx, gitDir, opts)
@@ -153,19 +149,25 @@ func ScanGit(ctx context.Context, request *proto.Request, blScanner *bldetect.De
 		return nil, fmt.Errorf("could not create git command: %w", err)
 	}
 
-	findings, err := blScanner.DetectSource(
-		ctx,
-		&blsources.Git{
-			Cmd:             gitCmd,
-			MaxArchiveDepth: blScanner.MaxArchiveDepth,
-			RemoteURL:       remoteURL,
-			Platform:        platform,
-			Sema:            blScanner.Sema,
-			ShouldSkip:      blScanner.SkipFunc(),
-		},
-	)
+	return scanSrc(ctx, blScanner, request, &blsources.Git{
+		Cmd:             gitCmd,
+		Logger:          logger.SLogger(),
+		MaxArchiveDepth: opts.MaxArchiveDepth,
+		Platform:        platform,
+		RemoteURL:       remoteURL,
+		ShouldSkip:      blScanner.SkipFunc(),
+		Workers:         opts.Workers,
+	})
 
-	return findingsToResults(request, findings), err
+}
+
+func scanSrc(ctx context.Context, blScanner *blscan.Scanner, request *proto.Request, src blsources.Source) ([]*proto.Result, error) {
+	results := make([]*proto.Result, 0, 16)
+	_, err := blScanner.Scan(ctx, src, func(f blreport.Finding) error {
+		results = append(results, findingToResult(request, &f))
+		return nil
+	})
+	return results, err
 }
 
 func shallowCommits(gitDir string) []string {
@@ -224,20 +226,19 @@ func newGitCmd(ctx context.Context, gitDir string, opts GitScanOpts) (gitCmd *bl
 	return gitCmd, err
 }
 
-func NewScanner(ctx context.Context, cfg *Config, opts ScannerOpts) (*bldetect.Detector, error) {
-	blScanner := bldetect.NewDetectorContext(ctx, (*blconfig.Config)(cfg), bldetect.ValidationOptions{})
-	blScanner.FollowSymlinks = false
-	blScanner.IgnoreGitleaksAllow = false
-	blScanner.MaxArchiveDepth = opts.MaxArchiveDepth
-	blScanner.MaxDecodeDepth = opts.MaxDecodeDepth
-	blScanner.MaxTargetMegaBytes = 0
-	blScanner.NoColor = true
-	blScanner.Redact = 0
-	blScanner.Verbose = false
-	return blScanner, nil
+func NewScanner(ctx context.Context, cfg Config, opts ScannerOpts) (*blscan.Scanner, error) {
+	return blscan.New(blconfig.Config(cfg),
+		blscan.WithLogger(logger.SLogger()),
+		blscan.WithWorkers(opts.Workers),
+		blscan.WithMatchContext(opts.MatchContext),
+		blscan.WithMaxDecodeDepth(opts.MaxDecodeDepth),
+		blscan.WithMinimumConfidence(blscan.Confidence(opts.MinConfidence)),
+		blscan.WithPrecompile(),
+		blscan.WithIgnoreAllowComments(false),
+	)
 }
 
-func LoadSourceConfig(blScanner *bldetect.Detector, sourcePath string) {
+func LoadSourceConfig(blScanner *blscan.Scanner, sourcePath string) {
 	if !fs.DirExists(sourcePath) {
 		logger.Debug("skipping additional config: source path does not exist: path=%q", sourcePath)
 		return
@@ -292,106 +293,101 @@ func mergeExpressions(a, b string) string {
 	return "(" + a + ") || (" + b + ")"
 }
 
-func findingsToResults(request *proto.Request, findings []blreport.Finding) []*proto.Result {
-	results := make([]*proto.Result, len(findings))
-
-	for i, finding := range findings {
-		result := &proto.Result{
-			ID: id.ID(
-				request.Resource,
-				finding.Attributes[AttrGitSHA],
-				finding.Attributes[AttrPath],
-				strconv.Itoa(finding.StartLine),
-				strconv.Itoa(finding.StartColumn),
-				strconv.Itoa(finding.EndLine),
-				strconv.Itoa(finding.EndColumn),
-				finding.RuleID,
-			),
-			Secret:  finding.Secret,
-			Match:   finding.Match,
-			Context: finding.Line,
-			Entropy: finding.Entropy,
-			Date:    finding.Attributes[AttrGitDate],
-			Notes:   map[string]string{},
-			Rule: proto.Rule{
-				ID:          finding.RuleID,
-				Description: finding.Description,
-				// TODO: pre 1.0 tags should be moved up to result since
-				// tags can be dynamic
-				Tags: finding.Tags,
+func findingToResult(request *proto.Request, finding *blreport.Finding) *proto.Result {
+	result := &proto.Result{
+		ID: id.ID(
+			request.Resource,
+			finding.Attributes[AttrGitSHA],
+			finding.Location.Path,
+			strconv.Itoa(finding.Location.StartLine),
+			strconv.Itoa(finding.Location.StartColumn),
+			strconv.Itoa(finding.Location.EndLine),
+			strconv.Itoa(finding.Location.EndColumn),
+			finding.RuleID,
+		),
+		// TODO: change Secret to Target or make a similar match struct
+		Secret:   finding.Match.Value,
+		Match:    finding.Match.Full,
+		Captures: finding.Match.Captures,
+		Context:  finding.MatchContext,
+		Entropy:  finding.Entropy,
+		Date:     finding.Attributes[AttrGitDate],
+		Notes:    map[string]string{},
+		Rule: proto.Rule{
+			ID:          finding.RuleID,
+			Description: finding.Description,
+			// TODO: pre 1.0 tags should be moved up to result since
+			// tags can be dynamic
+			Tags: finding.Tags,
+		},
+		Location: proto.Location{
+			Path: finding.Location.Path,
+			URL:  finding.Attributes[AttrURL],
+			Start: proto.Point{
+				Line:   finding.Location.StartLine,
+				Column: finding.Location.StartColumn,
 			},
-			Location: proto.Location{
-				Path: finding.Attributes[AttrPath],
-				URL:  finding.Attributes[AttrURL],
-				Start: proto.Point{
-					Line:   finding.StartLine,
-					Column: finding.StartColumn,
-				},
-				End: proto.Point{
-					Line:   finding.EndLine,
-					Column: finding.EndColumn,
-				},
+			End: proto.Point{
+				Line:   finding.Location.EndLine,
+				Column: finding.Location.EndColumn,
 			},
-		}
-
-		switch request.Kind {
-		case proto.GitRepoRequestKind:
-			result.Notes["gitleaks_fingerprint"] = finding.Fingerprint
-			result.Notes["commit_message"] = finding.Attributes[AttrGitMessage]
-			result.Notes["repository"] = request.Resource
-			result.Kind = proto.GitCommitResultKind
-			result.Location.Version = finding.Attributes[AttrGitSHA]
-			result.Contact = proto.Contact{
-				Name:  finding.Attributes[AttrGitAuthorName],
-				Email: finding.Attributes[AttrGitAuthorEmail],
-			}
-		case proto.ContainerImageRequestKind:
-			result.Location.Version = finding.Attributes[AttrOCIImageDigest]
-			authorName := finding.Attributes[AttrOCIImageAuthorName]
-			authorEmail := finding.Attributes[AttrOCIImageAuthorEmail]
-			maintainerName := finding.Attributes[AttrOCIImageMaintainerName]
-			maintainerEmail := finding.Attributes[AttrOCIImageMaintainerEmail]
-
-			// Prefer the one with the email else fall back on the one with the name
-			// Prefer author over maintainer for the contact
-			if len(authorEmail) > 0 {
-				result.Contact = proto.Contact{Name: authorName, Email: authorEmail}
-			} else if len(maintainerEmail) > 0 {
-				result.Contact = proto.Contact{Name: maintainerName, Email: maintainerEmail}
-			} else if len(authorName) > 0 {
-				result.Contact = proto.Contact{Name: authorName, Email: authorEmail}
-			} else if len(maintainerName) > 0 {
-				result.Contact = proto.Contact{Name: maintainerName, Email: maintainerEmail}
-			}
-
-			manifest := ""
-			parts := strings.Split(result.Location.Path, "/")
-			if len(parts) > 1 {
-				if strings.Contains(result.Location.Path, "layers/") {
-					loc := strings.Split(result.Location.Path, "!")
-					if len(loc) > 1 {
-						result.Location.Path = loc[1]
-						result.Kind = proto.ContainerLayerResultKind
-					}
-				}
-				manifest = parts[1]
-				result.Kind = proto.ContainerMetdataResultKind
-			}
-			if manifest != "" {
-				result.Notes["image"] = request.Resource + "@" + manifest
-			} else {
-				result.Notes["image"] = request.Resource
-			}
-
-		case proto.URLRequestKind:
-			result.Notes["url"] = request.Resource
-			result.Kind = proto.GenericResultKind
-		default:
-			result.Kind = proto.GenericResultKind
-		}
-
-		results[i] = result
+		},
 	}
 
-	return results
+	switch request.Kind {
+	case proto.GitRepoRequestKind:
+		result.Notes["commit_message"] = finding.Attributes[AttrGitMessage]
+		result.Notes["repository"] = request.Resource
+		result.Kind = proto.GitCommitResultKind
+		result.Location.Version = finding.Attributes[AttrGitSHA]
+		result.Contact = proto.Contact{
+			Name:  finding.Attributes[AttrGitAuthorName],
+			Email: finding.Attributes[AttrGitAuthorEmail],
+		}
+	case proto.ContainerImageRequestKind:
+		result.Location.Version = finding.Attributes[AttrOCIImageDigest]
+		authorName := finding.Attributes[AttrOCIImageAuthorName]
+		authorEmail := finding.Attributes[AttrOCIImageAuthorEmail]
+		maintainerName := finding.Attributes[AttrOCIImageMaintainerName]
+		maintainerEmail := finding.Attributes[AttrOCIImageMaintainerEmail]
+
+		// Prefer the one with the email else fall back on the one with the name
+		// Prefer author over maintainer for the contact
+		if len(authorEmail) > 0 {
+			result.Contact = proto.Contact{Name: authorName, Email: authorEmail}
+		} else if len(maintainerEmail) > 0 {
+			result.Contact = proto.Contact{Name: maintainerName, Email: maintainerEmail}
+		} else if len(authorName) > 0 {
+			result.Contact = proto.Contact{Name: authorName, Email: authorEmail}
+		} else if len(maintainerName) > 0 {
+			result.Contact = proto.Contact{Name: maintainerName, Email: maintainerEmail}
+		}
+
+		manifest := ""
+		parts := strings.Split(result.Location.Path, "/")
+		if len(parts) > 1 {
+			if strings.Contains(result.Location.Path, "layers/") {
+				loc := strings.Split(result.Location.Path, "!")
+				if len(loc) > 1 {
+					result.Location.Path = loc[1]
+					result.Kind = proto.ContainerLayerResultKind
+				}
+			}
+			manifest = parts[1]
+			result.Kind = proto.ContainerMetdataResultKind
+		}
+		if manifest != "" {
+			result.Notes["image"] = request.Resource + "@" + manifest
+		} else {
+			result.Notes["image"] = request.Resource
+		}
+
+	case proto.URLRequestKind:
+		result.Notes["url"] = request.Resource
+		result.Kind = proto.GenericResultKind
+	default:
+		result.Kind = proto.GenericResultKind
+	}
+
+	return result
 }

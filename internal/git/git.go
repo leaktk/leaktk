@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/pkg/config"
-	"github.com/leaktk/leaktk/pkg/logger"
 )
 
 // GitRepoInfo is a collection of facts about a repo being scanned.

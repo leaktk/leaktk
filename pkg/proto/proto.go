@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/internal/logger"
 )
 
 const (
@@ -152,6 +152,7 @@ type Result struct {
 	Secret   string            `json:"secret"   toml:"secret"   yaml:"secret"` // #nosec G117
 	Match    string            `json:"match"    toml:"match"    yaml:"match"`
 	Context  string            `json:"context"  toml:"context"  yaml:"context"`
+	Captures map[string]string `json:"captures" toml:"captures" yaml:"captures"`
 	Entropy  float32           `json:"entropy"  toml:"entropy"  yaml:"entropy"`
 	Date     string            `json:"date"     toml:"date"     yaml:"date"`
 	Rule     Rule              `json:"rule"     toml:"rule"     yaml:"rule"`

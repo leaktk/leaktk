@@ -15,10 +15,10 @@ import (
 	"github.com/leaktk/leaktk/internal/fs"
 	"github.com/leaktk/leaktk/internal/git"
 	"github.com/leaktk/leaktk/internal/httpclient"
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/internal/sources"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/id"
-	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/queue"
 )
@@ -138,10 +138,11 @@ func (s *Scanner) listen() {
 		}
 
 		// Copy so loadSourceConfig mutations don't affect other scans
-		cfgCopy := *cfg
-		blScanner, err := bl.NewScanner(ctx, &cfgCopy, bl.ScannerOpts{
+		blScanner, err := bl.NewScanner(ctx, *cfg, bl.ScannerOpts{
 			MaxArchiveDepth: s.maxArchiveDepth,
 			MaxDecodeDepth:  s.maxDecodeDepth,
+			MatchContext:    "10L",
+			Workers:         s.scanWorkers,
 		})
 
 		var results []*proto.Result

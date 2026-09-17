@@ -9,7 +9,7 @@ import (
 
 	"github.com/leaktk/leaktk/internal/auths"
 	"github.com/leaktk/leaktk/internal/httpclient"
-	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/internal/logger"
 )
 
 type Sources []Source

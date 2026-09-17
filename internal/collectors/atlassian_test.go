@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/leaktk/leaktk/internal/facts"
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/internal/sources"
-	"github.com/leaktk/leaktk/pkg/logger"
 )
 
 // Source: https://developer.atlassian.com/cloud/admin/organization/rest/api-group-directory/#api-v2-orgs-orgid-directories-get

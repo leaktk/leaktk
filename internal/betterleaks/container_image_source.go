@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -16,26 +17,28 @@ import (
 	"github.com/fatih/semgroup"
 	"github.com/mholt/archives"
 
-	"github.com/leaktk/leaktk/pkg/logger"
-	"github.com/leaktk/leaktk/pkg/version"
+	blsources "github.com/betterleaks/betterleaks/v2/sources"
 
-	"github.com/betterleaks/betterleaks/sources"
 	"go.podman.io/image/v5/manifest"
 	"go.podman.io/image/v5/pkg/blobinfocache"
 	"go.podman.io/image/v5/transports/alltransports"
 	"go.podman.io/image/v5/types"
 
 	imagespecv1 "github.com/opencontainers/image-spec/specs-go/v1"
+
+	"github.com/leaktk/leaktk/internal/logger"
+	"github.com/leaktk/leaktk/pkg/version"
 )
 
 type ContainerImage struct {
 	Arch            string
-	ShouldSkip      sources.SkipFunc
 	Depth           int
 	Exclusions      []string
+	Logger          *slog.Logger
 	MaxArchiveDepth int
 	RawImageRef     string
 	Sema            *semgroup.Group
+	ShouldSkip      blsources.SkipFunc
 	Since           *time.Time
 	path            string
 }
@@ -47,7 +50,7 @@ type seekReaderAt interface {
 	io.Seeker
 }
 
-func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsFunc) error {
+func (s *ContainerImage) Fragments(ctx context.Context, yield blsources.FragmentsFunc) error {
 	sysCtx := &types.SystemContext{
 		DockerRegistryUserAgent: version.GlobalUserAgent,
 	}
@@ -223,8 +226,9 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 			}
 		}
 
-		file := &sources.File{
+		file := &blsources.File{
 			Content:         stream,
+			Logger:          s.Logger,
 			MaxArchiveDepth: s.MaxArchiveDepth - 1,
 			Path:            filepath.Join(s.path, "layers", digest),
 		}
@@ -243,7 +247,7 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 	return nil
 }
 
-func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archives.Extractor, digest string, reader io.Reader, yield sources.FragmentsFunc) {
+func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archives.Extractor, digest string, reader io.Reader, yield blsources.FragmentsFunc) {
 	if _, isSeekReaderAt := reader.(seekReaderAt); !isSeekReaderAt {
 		switch extractor.(type) {
 		case archives.SevenZip, archives.Zip:
@@ -285,10 +289,11 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 			return nil
 		}
 
-		file := &sources.File{
+		file := &blsources.File{
 			Content:         innerReader,
-			Path:            filepath.Join(s.path, "layers", digest) + sources.InnerPathSeparator + path,
+			Logger:          s.Logger,
 			MaxArchiveDepth: s.MaxArchiveDepth - 1,
+			Path:            filepath.Join(s.path, "layers", digest) + blsources.InnerPathSeparator + path,
 		}
 
 		if err := file.Fragments(ctx, yield); err != nil {
@@ -306,15 +311,16 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 	}
 }
 
-func (s *ContainerImage) decompressorFragments(ctx context.Context, decompressor archives.Decompressor, digest string, reader io.Reader, yield sources.FragmentsFunc) {
+func (s *ContainerImage) decompressorFragments(ctx context.Context, decompressor archives.Decompressor, digest string, reader io.Reader, yield blsources.FragmentsFunc) {
 	innerReader, err := decompressor.OpenReader(reader)
 	if err != nil {
 		logger.Error("could not read compressed container layer blob: %v digest=%q", err, digest)
 		return
 	}
 
-	file := &sources.File{
+	file := &blsources.File{
 		Content:         innerReader,
+		Logger:          s.Logger,
 		MaxArchiveDepth: s.MaxArchiveDepth - 1,
 		Path:            filepath.Join(s.path, "layers", digest),
 	}
@@ -324,8 +330,8 @@ func (s *ContainerImage) decompressorFragments(ctx context.Context, decompressor
 	}
 }
 
-func yieldWithAttrs(attrs map[string]string, yield sources.FragmentsFunc) sources.FragmentsFunc {
-	return func(fragment sources.Fragment, err error) error {
+func yieldWithAttrs(attrs map[string]string, yield blsources.FragmentsFunc) blsources.FragmentsFunc {
+	return func(fragment blsources.Fragment, err error) error {
 		if err == nil {
 			maps.Copy(fragment.Attributes, attrs)
 		}
@@ -370,10 +376,10 @@ func (s *ContainerImage) attrsFromConfig(image *imagespecv1.Image) map[string]st
 	return attrs
 }
 
-func shouldSkipPath(skipFunc sources.SkipFunc, path string) bool {
+func shouldSkipPath(skipFunc blsources.SkipFunc, path string) bool {
 	if skipFunc == nil {
 		logger.Debug("not skipping path because skip func is nil: path=%q", path)
 		return false
 	}
-	return skipFunc(map[string]string{sources.AttrPath: path})
+	return skipFunc(map[string]string{blsources.AttrPath: path})
 }
