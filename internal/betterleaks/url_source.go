@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strings"
 
-	blconfig "github.com/betterleaks/betterleaks/config"
 	blsources "github.com/betterleaks/betterleaks/sources"
 
 	"github.com/leaktk/leaktk/internal/httpclient"
@@ -17,7 +16,7 @@ import (
 )
 
 type URL struct {
-	Config           *blconfig.Config
+	ShouldSkip       blsources.SkipFunc
 	FetchURLPatterns []string
 	MaxArchiveDepth  int
 	RateLimit        *httpclient.RateLimit
@@ -74,9 +73,9 @@ func (s *URL) Fragments(ctx context.Context, yield blsources.FragmentsFunc) erro
 		}
 
 		json := &JSON{
-			Config:           s.Config,
 			Sources:          s.Sources,
 			RateLimit:        s.RateLimit,
+			ShouldSkip:       s.ShouldSkip,
 			FetchURLPatterns: s.FetchURLPatterns,
 			MaxArchiveDepth:  s.MaxArchiveDepth,
 			Path:             parsedURL.Path,
@@ -87,7 +86,7 @@ func (s *URL) Fragments(ctx context.Context, yield blsources.FragmentsFunc) erro
 	}
 
 	file := &blsources.File{
-		Config:          s.Config,
+		ShouldSkip:      s.ShouldSkip,
 		Content:         resp.Body,
 		MaxArchiveDepth: s.MaxArchiveDepth,
 		Path:            parsedURL.Path,

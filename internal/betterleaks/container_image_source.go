@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,7 +19,6 @@ import (
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/version"
 
-	"github.com/betterleaks/betterleaks/config"
 	"github.com/betterleaks/betterleaks/sources"
 	"go.podman.io/image/v5/manifest"
 	"go.podman.io/image/v5/pkg/blobinfocache"
@@ -28,20 +28,27 @@ import (
 	imagespecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
+const (
+	AttrOCIImageDigest          = "oci.image.digest"
+	AttrOCIImageAuthorName      = "oci.image.author_name"
+	AttrOCIImageAuthorEmail     = "oci.image.author_email"
+	AttrOCIImageMaintainerName  = "oci.image.maintainer_name"
+	AttrOCIImageMaintainerEmail = "oci.image.maintainer_email"
+)
+
 type ContainerImage struct {
 	Arch            string
-	Config          *config.Config
+	ShouldSkip      sources.SkipFunc
 	Depth           int
 	Exclusions      []string
 	MaxArchiveDepth int
 	RawImageRef     string
 	Sema            *semgroup.Group
 	Since           *time.Time
-	Remote          *sources.RemoteInfo
 	path            string
 }
 
-var authorRe = regexp.MustCompile(`^(.+?)\s+<([^>]+)`)
+var contactRe = regexp.MustCompile(`^(.+?)\s+<([^>]+)`)
 
 type seekReaderAt interface {
 	io.ReaderAt
@@ -156,16 +163,16 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 		configHistories = append(configHistories, h)
 	}
 
-	commitInfo := s.commitInfoFromConfig(ociConfig)
-	commitInfo.SHA = imageManifest.ConfigInfo().Digest.String()
+	imageAttrs := s.attrsFromConfig(ociConfig)
+	imageAttrs[AttrOCIImageDigest] = imageManifest.ConfigInfo().Digest.String()
 	manifestJSON := &JSON{
-		Config:          s.Config,
+		ShouldSkip:      s.ShouldSkip,
 		MaxArchiveDepth: s.MaxArchiveDepth,
 		Path:            filepath.Join(s.path, "manifest"),
 		RawMessage:      rawManifest,
 	}
 
-	err = manifestJSON.Fragments(ctx, yieldWithCommitInfo(commitInfo, yield))
+	err = manifestJSON.Fragments(ctx, yieldWithAttrs(imageAttrs, yield))
 	if err != nil {
 		return err
 	}
@@ -177,8 +184,8 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 	checkSince := s.Since != nil && len(layerInfos) == len(configHistories)
 
 	for i, layerInfo := range layerInfos {
-		layerCommitInfo := commitInfo
-		layerCommitInfo.SHA = layerInfo.Digest.String()
+		layerAttrs := maps.Clone(imageAttrs)
+		layerAttrs[AttrOCIImageDigest] = layerInfo.Digest.String()
 		if layerInfo.EmptyLayer {
 			logger.Debug("skipping empty layer: digest=%q", layerInfo.Digest)
 			continue
@@ -202,7 +209,7 @@ func (s *ContainerImage) Fragments(ctx context.Context, yield sources.FragmentsF
 			continue
 		}
 
-		enrichedYield := yieldWithCommitInfo(layerCommitInfo, yield)
+		enrichedYield := yieldWithAttrs(layerAttrs, yield)
 		digest := layerInfo.Digest.String()
 
 		logger.Debug("downloading container layer blob: digest=%q", digest)
@@ -275,7 +282,7 @@ func (s *ContainerImage) extractorFragments(ctx context.Context, extractor archi
 			logger.Trace("skipping non-regular file: path=%q digest=%q", path, digest)
 			return nil
 		}
-		if s.Config != nil && shouldSkipPath(s.Config, path) {
+		if s.ShouldSkip != nil && shouldSkipPath(s.ShouldSkip, path) {
 			logger.Debug("skipping file: global allowlist: path=%q digest=%q", path, digest)
 			return nil
 		}
@@ -325,60 +332,56 @@ func (s *ContainerImage) decompressorFragments(ctx context.Context, decompressor
 	}
 }
 
-func yieldWithCommitInfo(commitInfo sources.CommitInfo, yield sources.FragmentsFunc) sources.FragmentsFunc {
+func yieldWithAttrs(attrs map[string]string, yield sources.FragmentsFunc) sources.FragmentsFunc {
 	return func(fragment sources.Fragment, err error) error {
 		if err == nil {
-			fragment.CommitInfo = &commitInfo
-			fragment.CommitSHA = commitInfo.SHA
+			maps.Copy(fragment.Attributes, attrs)
 		}
 		return yield(fragment, err)
 	}
 }
 
-func (s *ContainerImage) commitInfoFromConfig(image *imagespecv1.Image) sources.CommitInfo {
-	commitInfo := sources.CommitInfo{
-		Remote: s.Remote,
-	}
-
+func (s *ContainerImage) attrsFromConfig(image *imagespecv1.Image) map[string]string {
 	labels := image.Config.Labels
-
+	attrs := make(map[string]string)
 	if labelValue, ok := labels["email"]; ok {
-		commitInfo.AuthorEmail = strings.TrimSpace(labelValue)
+		attrs[AttrOCIImageAuthorEmail] = strings.TrimSpace(labelValue)
 	}
-
-	for _, labelName := range []string{
+	authorLables := []string{
 		"org.opencontainers.image.authors",
 		"author",
+	}
+	for _, labelName := range authorLables {
+		if labelValue, ok := labels[labelName]; ok {
+			if match := contactRe.FindStringSubmatch(labelValue); match != nil {
+				attrs[AttrOCIImageAuthorName] = match[1]
+				attrs[AttrOCIImageAuthorEmail] = match[2]
+				break
+			}
+			attrs[AttrOCIImageAuthorName] = strings.TrimSpace(labelValue)
+		}
+	}
+	maintainerLables := []string{
 		"org.opencontainers.image.maintainers",
 		"maintainer",
-	} {
+	}
+	for _, labelName := range maintainerLables {
 		if labelValue, ok := labels[labelName]; ok {
-			if match := authorRe.FindStringSubmatch(labelValue); match != nil {
-				commitInfo.AuthorName = match[1]
-				commitInfo.AuthorEmail = match[2]
-
-				return commitInfo
+			if match := contactRe.FindStringSubmatch(labelValue); match != nil {
+				attrs[AttrOCIImageMaintainerName] = match[1]
+				attrs[AttrOCIImageMaintainerEmail] = match[2]
+				break
 			}
-			commitInfo.AuthorName = strings.TrimSpace(labelValue)
-
-			return commitInfo
+			attrs[AttrOCIImageMaintainerName] = strings.TrimSpace(labelValue)
 		}
 	}
-
-	return commitInfo
+	return attrs
 }
 
-func shouldSkipPath(cfg *config.Config, path string) bool {
-	if cfg == nil {
-		logger.Debug("not skipping path because config is nil: path=%q", path)
+func shouldSkipPath(skipFunc sources.SkipFunc, path string) bool {
+	if skipFunc == nil {
+		logger.Debug("not skipping path because skip func is nil: path=%q", path)
 		return false
 	}
-
-	for _, a := range cfg.Allowlists {
-		if a.PathAllowed(filepath.ToSlash(path)) {
-			return true
-		}
-	}
-
-	return false
+	return skipFunc(map[string]string{sources.AttrPath: path})
 }
