@@ -48,7 +48,6 @@ supported kinds are:
 - **Files**: Scan local filesystem paths
 - **GitRepo**: Scan git repositories (default)
 - **JSONData**: Scan JSON data for URLs to fetch and scan
-- **Stdin**: Scan stdin
 - **Text**: Scan arbitrary text
 - **URL**: Fetch and scan a URL
 
@@ -66,7 +65,6 @@ Current authentication support by resource kind:
 | Files          | N/A                                                        |
 | GitRepo        | Local [git credentials][git-credentials]                   |
 | JSONData       | [Sources][sources] for `fetch_urls` option when applicable |
-| Stdin          | N/A                                             |
 | Text           | N/A                                                        |
 | URL            | [Sources][sources] when applicable                         |
 

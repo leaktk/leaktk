@@ -20,7 +20,6 @@ const (
 	FilesRequestKind
 	GitRepoRequestKind
 	JSONDataRequestKind
-	StdinRequestKind
 	TextRequestKind
 	URLRequestKind
 )
@@ -30,7 +29,6 @@ var requestKindNames = []string{
 	"Files",
 	"GitRepo",
 	"JSONData",
-	"Stdin",
 	"Text",
 	"URL",
 }

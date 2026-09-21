@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/leaktk/leaktk/internal/httpclient"
 	"github.com/leaktk/leaktk/pkg/config"
 )
 
@@ -31,15 +32,15 @@ func setupPatterns(t *testing.T, patternsCfg *config.Patterns, client *http.Clie
 	patternsCfg.Autofetch = true
 	patternsCfg.RefreshAfter = 1
 
-	// Set LocalPath to temp directory if not set (mimic setMissingValues behavior for tests)
+	// Set ConfigPath to temp directory if not set (mimic setMissingValues behavior for tests)
 	tmpDir := t.TempDir()
-	if len(patternsCfg.Gitleaks.LocalPath) == 0 {
-		patternsCfg.Gitleaks.LocalPath = filepath.Join(tmpDir, "patterns", "gitleaks", patternsCfg.Gitleaks.Version)
+	if len(patternsCfg.Gitleaks.ConfigPath) == 0 {
+		patternsCfg.Gitleaks.ConfigPath = filepath.Join(tmpDir, "patterns", "gitleaks", patternsCfg.Gitleaks.Version)
 	}
 
 	// Clean up any local files to ensure fetching occurs (ignore error if doesn't exist)
-	if len(patternsCfg.Gitleaks.LocalPath) > 0 {
-		_ = os.Remove(patternsCfg.Gitleaks.LocalPath)
+	if len(patternsCfg.Gitleaks.ConfigPath) > 0 {
+		_ = os.Remove(patternsCfg.Gitleaks.ConfigPath)
 	}
 
 	return NewPatterns(patternsCfg, client)
@@ -168,31 +169,31 @@ func TestGitleaksConfigModTimeExceeds(t *testing.T) {
 
 		// Create a Patterns instance with the temporary file path
 		cfg := config.DefaultConfig()
-		cfg.Scanner.Patterns.Gitleaks.LocalPath = tempFilePath
+		cfg.Scanner.Patterns.Gitleaks.ConfigPath = tempFilePath
 
 		// Test with a modTimeLimit of 5 seconds
-		assert.True(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
+		assert.True(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.ConfigPath, 5))
 
 		// Test with a modTimeLimit of 15 seconds
-		assert.False(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
+		assert.False(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.ConfigPath, 15))
 	})
 
 	t.Run("FileDoesNotExist", func(t *testing.T) {
 		cfg := config.DefaultConfig()
-		cfg.Scanner.Patterns.Gitleaks.LocalPath = "/path/to/nonexistent/file.toml"
+		cfg.Scanner.Patterns.Gitleaks.ConfigPath = "/path/to/nonexistent/file.toml"
 
 		// Test with any modTimeLimit
-		assert.True(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
-		assert.True(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
+		assert.True(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.ConfigPath, 5))
+		assert.True(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.ConfigPath, 15))
 	})
 
 	t.Run("FileExistsButErrorOnStat", func(t *testing.T) {
 		// Create a Patterns instance with a file path that causes an error on Stat
 		cfg := config.DefaultConfig()
-		cfg.Scanner.Patterns.Gitleaks.LocalPath = "/dev/zero"
+		cfg.Scanner.Patterns.Gitleaks.ConfigPath = "/dev/zero"
 
 		// Test with any modTimeLimit
-		assert.True(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 5))
-		assert.True(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.LocalPath, 15))
+		assert.True(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.ConfigPath, 5))
+		assert.True(t, fileModTimeExceeds(cfg.Scanner.Patterns.Gitleaks.ConfigPath, 15))
 	})
 }

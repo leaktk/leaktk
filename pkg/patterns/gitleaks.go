@@ -24,7 +24,7 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 	defer p.mutex.Unlock()
 
 	cfg := p.config
-	localPath := cfg.Gitleaks.LocalPath
+	localPath := cfg.Gitleaks.ConfigPath
 	modTimeExceeds := fileModTimeExceeds(localPath, cfg.RefreshAfter)
 
 	if cfg.Autofetch && modTimeExceeds || cfg.Refresh {

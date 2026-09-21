@@ -263,8 +263,6 @@ func (s *Scanner) listen() {
 			})
 		case proto.TextRequestKind:
 			findings, err = betterleaks.ScanReader(ctx, detector, strings.NewReader(request.Resource))
-		case proto.StdinRequestKind:
-			findings, err = betterleaks.ScanReader(ctx, detector, os.Stdin)
 		case proto.FilesRequestKind:
 			if !s.allowLocal {
 				logger.Critical("scan failed: local scans not allowed: id=%q", request.ID)
@@ -320,6 +318,7 @@ func (s *Scanner) listen() {
 			RequestID: request.ID,
 			Error:     scanErr,
 			Results:   results,
+			Resource:  request.Resource,
 		}
 
 		analystPatterns, err := s.analyst.Patterns.LeakTK(ctx)
@@ -334,7 +333,7 @@ func (s *Scanner) listen() {
 			}
 		}
 
-		logger.Info("queueing response: id=%q response_id=%q", request.ID, response.ID)
+		logger.Info("queueing response: id=%q queue_size=%d", request.ID, s.responseQueue.Size()+1)
 		s.responseQueue.Send(&queue.Message[*proto.Response]{
 			Priority: msg.Priority,
 			Value:    response,
@@ -343,13 +342,12 @@ func (s *Scanner) listen() {
 }
 
 func (s *Scanner) respondWithError(request *proto.Request, err *proto.Error) {
-	responseID := id.ID()
-	logger.Info("queueing response: id=%q response_id=%q queue_size=%d", request.ID, responseID, s.responseQueue.Size()+1)
-	logger.Error("scan error: %v id=%q response_id=%q", err, request.ID, responseID)
+	logger.Info("queueing response: id=%q queue_size=%d", request.ID, s.responseQueue.Size()+1)
+	logger.Error("scan error: %v id=%q", err, request.ID)
 	s.responseQueue.Send(&queue.Message[*proto.Response]{
 		Priority: request.Opts.Priority,
 		Value: &proto.Response{
-			ID:        responseID,
+			ID:        id.ID(),
 			Kind:      proto.ScanResultsResponseKind,
 			RequestID: request.ID,
 			Error:     err,

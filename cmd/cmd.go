@@ -42,13 +42,6 @@ func initLogger() {
 	}
 }
 
-func displayResponse(formatter *Formatter, response *proto.Response) {
-	fmt.Println(formatter.Format(response))
-	if response.Error != nil {
-		logger.Fatal("response contains error: %w", response.Error)
-	}
-}
-
 func runHelp(cmd *cobra.Command, args []string) {
 	if err := cmd.Help(); err != nil {
 		logger.Fatal("%v", err)
@@ -143,7 +136,7 @@ func runScan(cmd *cobra.Command, args []string) {
 	// Providing a gitleaks-config via command line arguments takes
 	// precedence over gitleaks config set in the leaktk config file
 	if len(gitleaksConfig) != 0 {
-		cfg.Scanner.Patterns.Gitleaks.LocalPath = gitleaksConfig
+		cfg.Scanner.Patterns.Gitleaks.ConfigPath = gitleaksConfig
 		logger.Debug("using provided gitleaks config: path=%s", gitleaksConfig)
 
 		// Providing a config automatically disables pattern autofetch
@@ -175,7 +168,10 @@ func runScan(cmd *cobra.Command, args []string) {
 		if !leaksFound && len(response.Results) > 0 {
 			leaksFound = true
 		}
-		displayResponse(formatter, response)
+		fmt.Println(formatter.Format(response))
+		if response.Error != nil {
+			logger.Fatal("response contains error: %w", response.Error)
+		}
 		wg.Done()
 	})
 
@@ -201,20 +197,6 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 		return nil, errors.New("missing required field: field=\"kind\"")
 	}
 
-	// Convert kind string to enum
-	requestKind, isValidKind := proto.GetRequestKind(kind)
-	if !isValidKind {
-		return nil, fmt.Errorf("unsupported request kind: kind=%q", kind)
-	}
-
-	if requestKind == proto.StdinRequestKind {
-		if len(args) == 0 {
-			args = append(args, "-")
-		} else {
-			return nil, errors.New("resource field should not be set for this kind")
-		}
-	}
-
 	if len(args) == 0 || len(args[0]) == 0 {
 		return nil, errors.New("missing required field: field=\"resource\"")
 	}
@@ -236,6 +218,12 @@ func scanCommandToRequest(cmd *cobra.Command, args []string) (*proto.Request, er
 	rawOpts, err := flags.GetString("options")
 	if err != nil {
 		return nil, fmt.Errorf("there was an issue with the options flag: %w", err)
+	}
+
+	// Convert kind string to enum
+	requestKind, isValidKind := proto.GetRequestKind(kind)
+	if !isValidKind {
+		return nil, fmt.Errorf("unsupported request kind: kind=%q", kind)
 	}
 
 	// Parse options once directly into proto.Opts struct
@@ -340,7 +328,10 @@ func analyzeResponses(ctx context.Context, a *analyst.Analyst, f *Formatter, r *
 			response = analyzedResponse
 		}
 
-		displayResponse(f, response)
+		fmt.Println(f.Format(response))
+		if response.Error != nil {
+			logger.Fatal("response contains error: %w", response.Error)
+		}
 	}
 }
 
@@ -449,11 +440,6 @@ func runListen(cmd *cobra.Command, args []string) {
 		if err != nil {
 			logger.Error("could not unmarshal request: %v", err)
 
-			continue
-		}
-
-		if request.Kind == proto.StdinRequestKind {
-			logger.Error("invalid kind for listen: kind=%q request_id=%q", request.Kind, request.ID)
 			continue
 		}
 
