@@ -4,10 +4,12 @@ type Kind int
 
 const (
 	AtlassianCloudUserKind Kind = iota
+	GitLabUserKind
 )
 
 var KindNames = []string{
 	"AtlassianCloudUser",
+	"GitLabUser",
 }
 
 var kindNameMap = make(map[string]Kind, len(KindNames))
