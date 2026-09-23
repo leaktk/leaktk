@@ -5,11 +5,13 @@ type Kind int
 const (
 	AtlassianCloudAdminKind Kind = iota
 	AtlassianCloudJiraKind
+	GitLabKind
 )
 
 var KindNames = []string{
 	"AtlassianCloudAdmin",
 	"AtlassianCloudJira",
+	"GitLab",
 }
 
 var kindNameMap = make(map[string]Kind, len(KindNames))

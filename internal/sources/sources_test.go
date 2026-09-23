@@ -37,6 +37,12 @@ kind = 'AtlassianCloudAdmin'
 base_url = 'https://api.example.com/admin'
 org_id = 'org2-org2-org2-org2'
 token = 'org2-token' # notsecret
+
+[[sources]]
+id = 'instance1-gitlab'
+kind = 'GitLab'
+base_url = 'https://gitlab.example.com/'
+token = 'instance1-token' # notsecret
 `
 
 func TestSources(t *testing.T) {
@@ -45,7 +51,7 @@ func TestSources(t *testing.T) {
 	}
 	_, err := toml.Decode(configText, &cfg)
 	require.NoError(t, err)
-	require.Len(t, cfg.Sources, 4)
+	require.Len(t, cfg.Sources, 5)
 
 	t.Run("SetHeader", func(t *testing.T) {
 		tests := []struct {
@@ -79,6 +85,13 @@ func TestSources(t *testing.T) {
 				url:  "https://api.example.com/admin/v2/orgs/org2-org2-org2-org2/directories",
 				expectedHeaders: map[string]string{
 					"Authorization": "Bearer org2-token", // notsecret
+				},
+			},
+			{
+				name: "Instance1GitLab",
+				url:  "https://gitlab.example.com/api/v4/users",
+				expectedHeaders: map[string]string{
+					"Authorization": "Bearer instance1-token", // notsecret
 				},
 			},
 			{

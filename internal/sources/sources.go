@@ -107,6 +107,15 @@ func (ss *Sources) UnmarshalTOML(data any) error {
 					Password: castSrcField[string](value, "password"),
 				},
 			})
+		case GitLabKind:
+			*ss = append(*ss, &GitLab{
+				id:        srcID,
+				BaseURL:   strings.TrimRight(castSrcField[string](value, "base_url"), "/"),
+				RateLimit: httpclient.NewRateLimit(),
+				BearerAuth: auths.BearerAuth{
+					Token: castSrcField[string](value, "token"),
+				},
+			})
 		default:
 			return fmt.Errorf("unknown source kind: %q index=%d", kind, i)
 		}
