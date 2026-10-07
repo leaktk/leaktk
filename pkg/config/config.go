@@ -134,8 +134,17 @@ func setMissingValues(cfg *Config) *Config {
 		cfg.Scanner.Patterns.Server.URL = urlFromFile
 	}
 
+	autofetchStr := os.Getenv("LEAKTK_AUTOFETCH")
+	if len(autofetchStr) == 0 {
+		// TODO: remove at v1.0.0 & update docs
+		autofetchStr = os.Getenv("LEAKTK_SCANNER_AUTOFETCH")
+		if len(autofetchStr) != 0 {
+			logger.Warning("LEAKTK_SCANNER_AUTOFETCH is deprecated, use LEAKTK_AUTOFETCH instead")
+		}
+	}
+
 	cfg.Scanner.Patterns.Autofetch = stringToBool(
-		os.Getenv("LEAKTK_SCANNER_AUTOFETCH"),
+		autofetchStr,
 		cfg.Scanner.Patterns.Autofetch,
 	)
 
