@@ -8,20 +8,18 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/betterleaks/betterleaks/detect"
-	"github.com/betterleaks/betterleaks/report"
+	bl "github.com/leaktk/leaktk/internal/betterleaks"
 
-	"github.com/leaktk/leaktk/internal/git"
-	"github.com/leaktk/leaktk/internal/sources"
-
-	"github.com/leaktk/leaktk/internal/betterleaks"
 	"github.com/leaktk/leaktk/internal/fs"
+	"github.com/leaktk/leaktk/internal/git"
 	"github.com/leaktk/leaktk/internal/httpclient"
+	"github.com/leaktk/leaktk/internal/logger"
+	"github.com/leaktk/leaktk/internal/sources"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/id"
-	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/proto"
 	"github.com/leaktk/leaktk/pkg/queue"
 )
@@ -41,38 +39,42 @@ const (
 
 // Scanner holds the config and state for the scanner processes
 type Scanner struct {
-	allowLocal      bool
-	clonesDir       string
-	maxArchiveDepth int
-	maxDecodeDepth  int
-	maxScanDepth    int
-	patterns        *Patterns
-	rateLimit       *httpclient.RateLimit
-	responseQueue   *queue.PriorityQueue[*proto.Response]
-	scanQueue       *queue.PriorityQueue[*proto.Request]
-	scanTimeout     time.Duration
-	scanWorkers     int
-	sources         sources.Sources
+	maxScanDepth      int
+	scanWorkers       int
+	m                 sync.Mutex
+	scanTimeout       time.Duration
+	noSrcCfgBlScanner *bl.Scanner
+	patterns          *Patterns
+	rateLimit         *httpclient.RateLimit
+	responseQueue     *queue.PriorityQueue[*proto.Response]
+	scanQueue         *queue.PriorityQueue[*proto.Request]
+	clonesDir         string
+	sources           sources.Sources
+	blScannerOpts     bl.ScannerOpts
+	allowLocal        bool
 }
 
 // NewScanner returns a initialized and listening scanner instance that should
 // be closed when it's no longer needed.
 func NewScanner(cfg *config.Config) *Scanner {
 	scanner := &Scanner{
-		allowLocal:      cfg.Scanner.AllowLocal,
-		clonesDir:       filepath.Join(cfg.Scanner.Workdir, "clones"),
-		maxArchiveDepth: cfg.Scanner.MaxArchiveDepth,
-		maxDecodeDepth:  cfg.Scanner.MaxDecodeDepth,
-		maxScanDepth:    cfg.Scanner.MaxScanDepth,
-		patterns:        NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
-		rateLimit:       httpclient.NewRateLimit(),
-		responseQueue:   queue.NewPriorityQueue[*proto.Response](initQueueCapacity, cfg.Scanner.MaxResponseQueueSize),
-		scanQueue:       queue.NewPriorityQueue[*proto.Request](initQueueCapacity, cfg.Scanner.MaxScanQueueSize),
-		scanTimeout:     time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
-		scanWorkers:     cfg.Scanner.ScanWorkers,
-		sources:         cfg.Sources,
+		allowLocal:    cfg.Scanner.AllowLocal,
+		clonesDir:     filepath.Join(cfg.Scanner.Workdir, "clones"),
+		maxScanDepth:  cfg.Scanner.MaxScanDepth,
+		patterns:      NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient()),
+		rateLimit:     httpclient.NewRateLimit(),
+		responseQueue: queue.NewPriorityQueue[*proto.Response](initQueueCapacity, cfg.Scanner.MaxResponseQueueSize),
+		scanQueue:     queue.NewPriorityQueue[*proto.Request](initQueueCapacity, cfg.Scanner.MaxScanQueueSize),
+		scanTimeout:   time.Duration(cfg.Scanner.ScanTimeout) * time.Second,
+		scanWorkers:   cfg.Scanner.ScanWorkers,
+		sources:       cfg.Sources,
+		blScannerOpts: bl.ScannerOpts{
+			MaxArchiveDepth: cfg.Scanner.MaxArchiveDepth,
+			MaxDecodeDepth:  cfg.Scanner.MaxDecodeDepth,
+			MatchContext:    "2L,256C",
+			Workers:         s.scanWorkers,
+		},
 	}
-
 	scanner.start()
 	return scanner
 }
@@ -99,6 +101,59 @@ func (s *Scanner) start() {
 	for i := int(0); i < s.scanWorkers; i++ {
 		go s.listen()
 	}
+}
+
+func (s *Scanner) blScannerForRequest(request *proto.Request, srcCfgDir string) (*bl.Scanner, error) {
+	// Make sure that two threads can't update the scanner at once
+	s.m.Lock()
+	defer s.m.Unlock()
+
+	// Config changed so nil this out to trigger making a new one below
+	if s.patterns.GitleaksChanged() {
+		s.noSrcCfgBlScanner = nil
+	}
+
+	// If there's no custom config provided by the source so we can use an unmodified copy of the scanner here
+	if !bl.HasSourceConfig(srcCfgDir) {
+		if s.noSrcCfgBlScanner != nil {
+			// Use existing: scanner instance is up-to-date and there's no source config
+			return s.noSrcCfgBlScanner, nil
+		}
+		// Create new: patterns changed or this is the first one
+		cfg, err := s.patterns.Gitleaks(ctx)
+		if err != nil {
+			return nil, err
+		}
+		blScanner, err := bl.NewScanner(ctx, cfg, bl.ScannerOpts{
+			MaxArchiveDepth: s.maxArchiveDepth,
+			MaxDecodeDepth:  s.maxDecodeDepth,
+			MatchContext:    "2L,256C",
+			Workers:         s.scanWorkers,
+		})
+		if err != nil {
+			return nil, err
+		}
+		s.noSrcCfgBlScanner = blScanner
+		return blScanner, nil
+	}
+
+	// Create special: This repo has custom config in it so it gets its own instance
+	cfg, err := s.patterns.Gitleaks(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// If this fails: log it, use the config we have and keep going
+	if err := bl.MergeSourceConfig(&cfg, srcCfgDir); err != nil {
+		logger.Error("merge source config: %v id=%q", err, request.ID)
+	}
+
+	return bl.NewScanner(ctx, cfg, bl.ScannerOpts{
+		MaxArchiveDepth: s.maxArchiveDepth,
+		MaxDecodeDepth:  s.maxDecodeDepth,
+		MatchContext:    "2L,256C",
+		Workers:         s.scanWorkers,
+	})
 }
 
 // Watch the scan queue for requests
@@ -128,29 +183,43 @@ func (s *Scanner) listen() {
 			defer cancel()
 		}
 
-		cfg, err := s.patterns.Gitleaks(ctx)
-		if err != nil {
-			logger.Critical("scan failed: could load scanner config: %v id=%q", err, request.ID)
-			s.respondWithError(request, &proto.Error{
-				Code:    configErrorCode,
-				Message: "could not load scanner config",
-				Data:    request,
+		// Ensure we have a configured copy of the scanner
+		if s.blScanner == nil || s.patterns.Changed() {
+			cfg, err := s.patterns.Gitleaks(ctx)
+			if err != nil {
+				logger.Critical("scan failed: load config: %v id=%q", err, request.ID)
+				s.respondWithError(request, &proto.Error{
+					Code:    configErrorCode,
+					Message: "could not load scanner config",
+					Data:    request,
+				})
+				s.m.Unlock()
+				return
+			}
+			// Copy so loadSourceConfig mutations don't affect other scans
+			blScanner, err = bl.NewScanner(ctx, *cfg, bl.ScannerOpts{
+				MaxArchiveDepth: s.maxArchiveDepth,
+				MaxDecodeDepth:  s.maxDecodeDepth,
+				MatchContext:    "2L,256C",
+				Workers:         s.scanWorkers,
 			})
+			if err != nil {
+				logger.Critical("scan failed: init betterleaks scanner: %v id=%q", err, request.ID)
+				s.respondWithError(request, &proto.Error{
+					Code:    configErrorCode,
+					Message: "could not init betterleaks scanner",
+					Data:    request,
+				})
+				s.m.Unlock()
+				return
+			}
 
-			return
+			// Update the scanner's copy of blScanner for other scans to reuse it
+			s.blScanner = blScanner
 		}
+		s.m.Unlock()
 
-		detector := detect.NewDetectorContext(ctx, *cfg)
-		detector.FollowSymlinks = false
-		detector.IgnoreGitleaksAllow = false
-		detector.MaxArchiveDepth = s.maxArchiveDepth
-		detector.MaxDecodeDepth = s.maxDecodeDepth
-		detector.MaxTargetMegaBytes = 0
-		detector.NoColor = true
-		detector.Redact = 0
-		detector.Verbose = false
-
-		var findings []report.Finding
+		var results []*proto.Result
 		switch request.Kind {
 		case proto.GitRepoRequestKind:
 			var gitRepoInfo git.RepoInfo
@@ -215,8 +284,11 @@ func (s *Scanner) listen() {
 				}
 			}
 
-			// Load the checked out config from the working tree
-			loadSourceConfig(detector, gitRepoInfo.WorkingTreePath)
+			blScanner, err := s.blScannerForRequest(request, gitRepoInfo.WorkingTreePath)
+			if err != nil {
+				s.respondWithError(request, &proto.Error{Code: configErrorCode, Message: err, Data: request})
+				return
+			}
 
 			// If there are exclusions, create a revision range like:
 			// ^{exclusion1} ^{exclusion2} {branch}
@@ -231,7 +303,7 @@ func (s *Scanner) listen() {
 				revisionRange = strings.Join(items, " ")
 			}
 
-			findings, err = betterleaks.ScanGit(ctx, detector, gitRepoInfo.GitDir, betterleaks.GitScanOpts{
+			results, err = bl.ScanGit(ctx, request, blScanner, gitRepoInfo.GitDir, bl.GitScanOpts{
 				RevisionRange: revisionRange,
 				Depth:         scanDepth(request.Opts.Depth, s.maxScanDepth),
 				Since:         request.Opts.Since,
@@ -242,21 +314,41 @@ func (s *Scanner) listen() {
 			// Remove temp files as soon as they're no longer needed
 			removeTempGitFiles(request, gitRepoInfo)
 		case proto.URLRequestKind:
-			findings, err = betterleaks.ScanURL(ctx, detector, request.Resource, betterleaks.URLScanOpts{
+			blScanner, err := s.blScannerForRequest(request, "")
+			if err != nil {
+				s.respondWithError(request, &proto.Error{Code: configErrorCode, Message: err, Data: request})
+				return
+			}
+			results, err = bl.ScanURL(ctx, request, blScanner, request.Resource, bl.URLScanOpts{
 				FetchURLPatterns: splitFetchURLPatterns(request.Opts.FetchURLs),
 				Sources:          s.sources,
 				RateLimit:        s.rateLimit,
 			})
 		case proto.JSONDataRequestKind:
-			findings, err = betterleaks.ScanJSON(ctx, detector, request.Resource, betterleaks.JSONScanOpts{
+			blScanner, err := s.blScannerForRequest(request, "")
+			if err != nil {
+				s.respondWithError(request, &proto.Error{Code: configErrorCode, Message: err, Data: request})
+				return
+			}
+			results, err = bl.ScanJSON(ctx, request, blScanner, request.Resource, bl.JSONScanOpts{
 				FetchURLPatterns: splitFetchURLPatterns(request.Opts.FetchURLs),
 				Sources:          s.sources,
 				RateLimit:        s.rateLimit,
 			})
 		case proto.TextRequestKind:
-			findings, err = betterleaks.ScanReader(ctx, detector, strings.NewReader(request.Resource))
+			blScanner, err := s.blScannerForRequest(request, "")
+			if err != nil {
+				s.respondWithError(request, &proto.Error{Code: configErrorCode, Message: err, Data: request})
+				return
+			}
+			results, err = bl.ScanReader(ctx, request, blScanner, strings.NewReader(request.Resource))
 		case proto.StdinRequestKind:
-			findings, err = betterleaks.ScanReader(ctx, detector, os.Stdin)
+			blScanner, err := s.blScannerForRequest(request, "")
+			if err != nil {
+				s.respondWithError(request, &proto.Error{Code: configErrorCode, Message: err, Data: request})
+				return
+			}
+			results, err = bl.ScanReader(ctx, request, blScanner, os.Stdin)
 		case proto.FilesRequestKind:
 			if !s.allowLocal {
 				logger.Critical("scan failed: local scans not allowed: id=%q", request.ID)
@@ -268,16 +360,31 @@ func (s *Scanner) listen() {
 
 				return
 			}
-			loadSourceConfig(detector, request.Resource)
-			findings, err = betterleaks.ScanFiles(ctx, detector, request.Resource)
+			blScanner, err := s.blScannerForRequest(request, request.Resource)
+			if err != nil {
+				s.respondWithError(request, &proto.Error{Code: configErrorCode, Message: err, Data: request})
+				return
+			}
+			results, err = bl.ScanFiles(ctx, request, blScanner, request.Resource)
 		case proto.ContainerImageRequestKind:
-			findings, err = betterleaks.ScanContainerImage(ctx, detector, request.Resource, betterleaks.ContainerImageScanOpts{
+			blScanner, err := s.blScannerForRequest(request, "")
+			if err != nil {
+				s.respondWithError(request, &proto.Error{Code: configErrorCode, Message: err, Data: request})
+				return
+			}
+			results, err = bl.ScanContainerImage(ctx, request, blScanner, request.Resource, bl.ContainerImageScanOpts{
 				Arch:  request.Opts.Arch,
 				Depth: scanDepth(request.Opts.Depth, s.maxScanDepth),
 				Since: request.Opts.Since,
 			})
 		default:
-			logger.Warning("unexpected request kind: %s", request.Kind)
+			logger.Critical("unexpected request kind: %s id=%q", request.Kind, request.ID)
+			s.respondWithError(request, &proto.Error{
+				Code:    sourceErrorCode,
+				Message: "unexpected request kind",
+				Data:    request,
+			})
+			return
 		}
 
 		var scanErr *proto.Error
@@ -299,11 +406,6 @@ func (s *Scanner) listen() {
 				}
 				logger.Error("scan error: %v id=%q", scanErr, request.ID)
 			}
-		}
-
-		results := make([]*proto.Result, len(findings))
-		for i, finding := range findings {
-			results[i] = findingToResult(request, &finding)
 		}
 
 		logger.Info("queueing response: id=%q queue_size=%d", request.ID, s.responseQueue.Size()+1)
@@ -350,121 +452,6 @@ func removeTempGitFiles(request *proto.Request, gitRepoInfo git.RepoInfo) {
 	if gitRepoInfo.IsBare && fs.PathExists(gitRepoInfo.WorkingTreePath) {
 		if err := os.RemoveAll(gitRepoInfo.WorkingTreePath); err != nil {
 			logger.Error("error removing temp working tree: %v path=%q id=%q", err, gitRepoInfo.WorkingTreePath, request.ID)
-		}
-	}
-}
-
-func findingToResult(request *proto.Request, finding *report.Finding) *proto.Result {
-	result := &proto.Result{
-		ID: id.ID(
-			request.Resource,
-			finding.Commit,
-			finding.File,
-			strconv.Itoa(finding.StartLine),
-			strconv.Itoa(finding.StartColumn),
-			strconv.Itoa(finding.EndLine),
-			strconv.Itoa(finding.EndColumn),
-			finding.RuleID,
-		),
-		Secret:  finding.Secret,
-		Match:   finding.Match,
-		Context: finding.Line,
-		Entropy: finding.Entropy,
-		Date:    finding.Date,
-		Notes:   map[string]string{},
-		Contact: proto.Contact{
-			Name:  finding.Author,
-			Email: finding.Email,
-		},
-		Rule: proto.Rule{
-			ID:          finding.RuleID,
-			Description: finding.Description,
-			// TODO: pre 1.0 tags should be moved up to result since
-			// tags can be dynamic
-			Tags: finding.Tags,
-		},
-		Location: proto.Location{
-			Version: finding.Commit,
-			Path:    finding.File,
-			Start: proto.Point{
-				Line:   finding.StartLine,
-				Column: finding.StartColumn,
-			},
-			End: proto.Point{
-				Line:   finding.EndLine,
-				Column: finding.EndColumn,
-			},
-		},
-	}
-
-	switch request.Kind {
-	case proto.GitRepoRequestKind:
-		result.Notes["gitleaks_fingerprint"] = finding.Fingerprint
-		result.Notes["commit_message"] = finding.Message
-		result.Notes["repository"] = request.Resource
-		result.Kind = proto.GitCommitResultKind
-	case proto.ContainerImageRequestKind:
-		manifest := ""
-		parts := strings.Split(result.Location.Path, "/")
-		if len(parts) > 1 {
-			if strings.Contains(result.Location.Path, "layers/") {
-				loc := strings.Split(result.Location.Path, "!")
-				if len(loc) > 1 {
-					result.Location.Path = loc[1]
-					result.Kind = proto.ContainerLayerResultKind
-				}
-			}
-			manifest = parts[1]
-			result.Kind = proto.ContainerMetdataResultKind
-		}
-		if manifest != "" {
-			result.Notes["image"] = request.Resource + "@" + manifest
-		} else {
-			result.Notes["image"] = request.Resource
-		}
-	case proto.URLRequestKind:
-		result.Notes["url"] = request.Resource
-		result.Kind = proto.GenericResultKind
-	default:
-		result.Kind = proto.GenericResultKind
-	}
-
-	return result
-}
-
-func loadSourceConfig(detector *detect.Detector, sourcePath string) {
-	if !fs.DirExists(sourcePath) {
-		logger.Debug("skipping additional config: source path does not exist: path=%q", sourcePath)
-		return
-	}
-
-	additionalConfigPath := filepath.Join(sourcePath, ".gitleaks.toml")
-	rawAdditionalConfig, err := os.ReadFile(additionalConfigPath) // #nosec G304
-	if err == nil && len(rawAdditionalConfig) > 0 {
-		logger.Debug("applying additional config: path=%q", additionalConfigPath)
-		additionalConfig, err := betterleaks.ParseConfig(string(rawAdditionalConfig))
-		if err != nil {
-			logger.Error("could not parse additional config: %s", err)
-		} else {
-			detector.Config.Allowlists = append(detector.Config.Allowlists, additionalConfig.Allowlists...)
-		}
-	} else {
-		logger.Debug("no additional config")
-	}
-
-	baselinePath := filepath.Join(sourcePath, ".gitleaksbaseline")
-	if fs.FileExists(baselinePath) {
-		logger.Debug("applying .gitleaksbaseline: path=%q", baselinePath)
-		if err := detector.AddBaseline(baselinePath, sourcePath); err != nil {
-			logger.Error("could not add baseline: %v", err)
-		}
-	}
-
-	ignorePath := filepath.Join(sourcePath, ".gitleaksignore")
-	if fs.FileExists(ignorePath) {
-		logger.Debug("applying .gitleaksignore: path=%q", ignorePath)
-		if err := detector.AddGitleaksIgnore(ignorePath); err != nil {
-			logger.Error("could not add gitleaksignore: %v", err)
 		}
 	}
 }
@@ -546,7 +533,7 @@ func tempCheckoutGitSourceConfigFiles(ctx context.Context, gitDir, gitRef string
 	if len(gitRef) == 0 {
 		gitRef = "HEAD"
 	}
-	cmd := git.CommandContext(ctx, "-C", gitDir, "--work-tree", worktreePath, "restore", "--source", gitRef, ".gitleaks*")
+	cmd := git.CommandContext(ctx, "-C", gitDir, "--work-tree", worktreePath, "restore", "--source", gitRef, ".betterleaks*", ".gitleaks*")
 	logger.Debug("executing: %s", cmd)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return worktreePath, fmt.Errorf("could not checkout scanner config files: %w cmd=%q (%s)", err, cmd, string(out))

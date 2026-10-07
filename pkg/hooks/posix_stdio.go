@@ -1,7 +1,7 @@
 package hooks
 
 import (
-	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/internal/logger"
 
 	"fmt"
 )

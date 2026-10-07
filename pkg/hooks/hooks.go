@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/pkg/config"
-	"github.com/leaktk/leaktk/pkg/logger"
 )
 
 // Hook is a wrapper around a hookname to abstract parsing it

@@ -10,8 +10,8 @@ import (
 
 	"github.com/leaktk/leaktk/internal/facts"
 	"github.com/leaktk/leaktk/internal/httpclient"
+	"github.com/leaktk/leaktk/internal/logger"
 	"github.com/leaktk/leaktk/internal/sources"
-	"github.com/leaktk/leaktk/pkg/logger"
 )
 
 func atlassianReq(ctx context.Context, src *sources.AtlassianCloudAdmin, client *http.Client, method, url string, reqBody io.Reader, respData any) error {

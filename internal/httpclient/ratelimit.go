@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/internal/logger"
 )
 
 const (
