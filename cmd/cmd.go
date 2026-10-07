@@ -54,8 +54,9 @@ func runLogin(cmd *cobra.Command, args []string) {
 
 	logger.Info("logging in: pattern_server=%q", serverURL)
 
-	token, _ := cmd.Flags().GetString("token")
-	web, _ := cmd.Flags().GetBool("web")
+	flags := cmd.Flags()
+	token := mustGetString(flags, "token")
+	web := mustGetBool(flags, "web")
 
 	switch {
 	case len(token) > 0:
@@ -64,7 +65,7 @@ func runLogin(cmd *cobra.Command, args []string) {
 			logger.Fatal("token validation failed: %v", err)
 		}
 
-		if err := config.SavePatternServerAuthToken(token); err != nil {
+		if err := config.SavePatternServerAuth(serverURL, token); err != nil {
 			logger.Fatal("could not save token: %v", err)
 		}
 
@@ -75,7 +76,7 @@ func runLogin(cmd *cobra.Command, args []string) {
 			logger.Fatal("web login failed: %v", err)
 		}
 
-		if err := config.SavePatternServerAuthToken(token); err != nil {
+		if err := config.SavePatternServerAuth(serverURL, token); err != nil {
 			logger.Fatal("could not save token: %v", err)
 		}
 
@@ -92,7 +93,7 @@ func runLogin(cmd *cobra.Command, args []string) {
 			logger.Fatal("token validation failed: %v", err)
 		}
 
-		if err := config.SavePatternServerAuthToken(authToken); err != nil {
+		if err := config.SavePatternServerAuth(serverURL, authToken); err != nil {
 			logger.Fatal("could not save token: %v", err)
 		}
 	}
@@ -103,7 +104,7 @@ func runLogin(cmd *cobra.Command, args []string) {
 func runLogout(cmd *cobra.Command, args []string) {
 	logger.Info("logging out: pattern_server=%q", cfg.Scanner.Patterns.Server.URL)
 
-	if err := config.RemovePatternServerAuthToken(); err != nil {
+	if err := config.RemovePatternServerAuth(); err != nil {
 		logger.Fatal("could not logout: %v", err)
 	}
 

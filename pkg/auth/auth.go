@@ -12,8 +12,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
+
+	"github.com/coreos/go-oidc/v3/oidc"
 
 	"github.com/leaktk/leaktk/pkg/logger"
 )
@@ -33,104 +36,71 @@ type OIDCEndpoints struct {
 	TokenEndpoint         string `json:"token_endpoint"`
 }
 
-func ParseWWWAuthenticate(header string) (WWWAuthenticate, error) {
-	var auth WWWAuthenticate
+var wwwAuthParamRe = regexp.MustCompile(`([^\s"=,]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^\s",]+))`)
+
+func (a *WWWAuthenticate) UnmarshalText(text []byte) error {
+	header := string(text)
 
 	if len(header) == 0 {
-		return auth, errors.New("empty WWW-Authenticate header")
+		return errors.New("empty WWW-Authenticate header")
 	}
 
-	scheme, params, ok := strings.Cut(header, " ")
+	scheme, paramStr, ok := strings.Cut(header, " ")
 	if !ok || !strings.EqualFold(scheme, "Bearer") {
-		return auth, fmt.Errorf("unsupported auth scheme: %q", scheme)
+		return fmt.Errorf("unsupported auth scheme: %q", scheme)
 	}
 
-	for _, pair := range splitParams(params) {
-		key, value, found := strings.Cut(pair, "=")
-		if !found {
-			continue
-		}
-		key = strings.TrimSpace(key)
-		value = strings.TrimSpace(value)
-		value = strings.Trim(value, "\"")
+	params := parseParams(paramStr)
+	a.Realm = params["realm"]
+	a.Service = params["service"]
+	a.Scope = params["scope"]
 
-		switch strings.ToLower(key) {
-		case "realm":
-			auth.Realm = value
-		case "service":
-			auth.Service = value
-		case "scope":
-			auth.Scope = value
-		}
+	if len(a.Realm) == 0 {
+		return errors.New("WWW-Authenticate header missing realm")
 	}
 
-	if len(auth.Realm) == 0 {
-		return auth, errors.New("WWW-Authenticate header missing realm")
-	}
-
-	return auth, nil
+	return nil
 }
 
-func splitParams(s string) []string {
-	var parts []string
-	var current strings.Builder
-	inQuotes := false
+func ParseWWWAuthenticate(header string) (WWWAuthenticate, error) {
+	var auth WWWAuthenticate
+	err := auth.UnmarshalText([]byte(header))
+	return auth, err
+}
 
-	for _, r := range s {
-		switch {
-		case r == '"':
-			inQuotes = !inQuotes
-			current.WriteRune(r)
-		case r == ',' && !inQuotes:
-			parts = append(parts, current.String())
-			current.Reset()
-		default:
-			current.WriteRune(r)
+func parseParams(s string) map[string]string {
+	params := make(map[string]string)
+	for _, match := range wwwAuthParamRe.FindAllStringSubmatch(s, -1) {
+		key := match[1]
+		if match[2] != "" {
+			// It matched the quoted group (Group 2)
+			// Clean up escaped quotes (convert \" back to ")
+			params[key] = strings.ReplaceAll(match[2], `\"`, `"`)
+		} else {
+			// It matched the unquoted group (Group 3)
+			params[key] = match[3]
 		}
 	}
-
-	if current.Len() > 0 {
-		parts = append(parts, current.String())
-	}
-
-	return parts
+	return params
 }
 
 func DiscoverEndpoints(ctx context.Context, client *http.Client, realm string) (*OIDCEndpoints, error) {
-	discoveryURL := strings.TrimRight(realm, "/") + "/.well-known/openid-configuration"
-
-	request, err := http.NewRequestWithContext(ctx, "GET", discoveryURL, nil)
+	ctx = oidc.ClientContext(ctx, client)
+	provider, err := oidc.NewProvider(ctx, realm)
 	if err != nil {
-		return fallbackEndpoints(realm), nil
+		return nil, fmt.Errorf("OIDC discovery failed: %w", err)
 	}
 
-	response, err := client.Do(request)
-	if err != nil {
-		return fallbackEndpoints(realm), nil
-	}
-	defer func() { _ = response.Body.Close() }()
+	endpoint := provider.Endpoint()
 
-	if response.StatusCode != http.StatusOK {
-		return fallbackEndpoints(realm), nil
+	if len(endpoint.AuthURL) == 0 || len(endpoint.TokenURL) == 0 {
+		return nil, errors.New("OIDC discovery response missing required endpoints")
 	}
 
-	var endpoints OIDCEndpoints
-	if err := json.NewDecoder(response.Body).Decode(&endpoints); err != nil {
-		return fallbackEndpoints(realm), nil
-	}
-
-	if len(endpoints.AuthorizationEndpoint) == 0 || len(endpoints.TokenEndpoint) == 0 {
-		return fallbackEndpoints(realm), nil
-	}
-
-	return &endpoints, nil
-}
-
-func fallbackEndpoints(realm string) *OIDCEndpoints {
 	return &OIDCEndpoints{
-		AuthorizationEndpoint: realm,
-		TokenEndpoint:         realm,
-	}
+		AuthorizationEndpoint: endpoint.AuthURL,
+		TokenEndpoint:         endpoint.TokenURL,
+	}, nil
 }
 
 const maxRedirects = 10

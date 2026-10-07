@@ -64,15 +64,17 @@ func TestDiscoverEndpoints(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("ValidDiscovery", func(t *testing.T) {
+		var serverURL string
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "/.well-known/openid-configuration", r.URL.Path)
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(OIDCEndpoints{ // #nosec G101
-				AuthorizationEndpoint: "https://sso.example.com/auth",
-				TokenEndpoint:         "https://sso.example.com/token",
+			_ = json.NewEncoder(w).Encode(map[string]string{ // #nosec G101
+				"issuer":                 serverURL,
+				"authorization_endpoint": "https://sso.example.com/auth",
+				"token_endpoint":         "https://sso.example.com/token",
 			})
 		}))
 		defer ts.Close()
+		serverURL = ts.URL
 
 		endpoints, err := DiscoverEndpoints(ctx, ts.Client(), ts.URL)
 		require.NoError(t, err)
@@ -86,10 +88,8 @@ func TestDiscoverEndpoints(t *testing.T) {
 		}))
 		defer ts.Close()
 
-		endpoints, err := DiscoverEndpoints(ctx, ts.Client(), ts.URL)
-		require.NoError(t, err)
-		assert.Equal(t, ts.URL, endpoints.AuthorizationEndpoint)
-		assert.Equal(t, ts.URL, endpoints.TokenEndpoint)
+		_, err := DiscoverEndpoints(ctx, ts.Client(), ts.URL)
+		require.Error(t, err)
 	})
 
 	t.Run("MalformedJSON", func(t *testing.T) {
@@ -98,23 +98,24 @@ func TestDiscoverEndpoints(t *testing.T) {
 		}))
 		defer ts.Close()
 
-		endpoints, err := DiscoverEndpoints(ctx, ts.Client(), ts.URL)
-		require.NoError(t, err)
-		assert.Equal(t, ts.URL, endpoints.AuthorizationEndpoint)
-		assert.Equal(t, ts.URL, endpoints.TokenEndpoint)
+		_, err := DiscoverEndpoints(ctx, ts.Client(), ts.URL)
+		require.Error(t, err)
 	})
 
 	t.Run("EmptyEndpoints", func(t *testing.T) {
+		var serverURL string
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(OIDCEndpoints{})
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"issuer": serverURL,
+			})
 		}))
 		defer ts.Close()
+		serverURL = ts.URL
 
-		endpoints, err := DiscoverEndpoints(ctx, ts.Client(), ts.URL)
-		require.NoError(t, err)
-		assert.Equal(t, ts.URL, endpoints.AuthorizationEndpoint)
-		assert.Equal(t, ts.URL, endpoints.TokenEndpoint)
+		_, err := DiscoverEndpoints(ctx, ts.Client(), ts.URL)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "missing required endpoints")
 	})
 }
 
