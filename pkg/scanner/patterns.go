@@ -218,6 +218,7 @@ func (p *Patterns) handleFetchError(ctx context.Context, fetchErr error) (string
 		return "", fetchErr
 	}
 
+	//nolint:gosec // os.Stdin file descriptor (0) safely fits within int bounds
 	if !p.config.Autologin || !term.IsTerminal(int(os.Stdin.Fd())) {
 		return "", fmt.Errorf(
 			"authentication required: run \"leaktk login %s\" to authenticate: %w",
