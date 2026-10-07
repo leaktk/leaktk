@@ -230,7 +230,6 @@ func ValidateToken(ctx context.Context, client *http.Client, serverURL, token st
 	}
 
 	request.Header.Set("Authorization", "Bearer "+token)
-
 	response, err := client.Do(request)
 	if err != nil {
 		return fmt.Errorf("validation request failed: %w", err)
@@ -238,7 +237,7 @@ func ValidateToken(ctx context.Context, client *http.Client, serverURL, token st
 	defer func() { _ = response.Body.Close() }()
 
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("token validation failed: status_code=%d", response.StatusCode)
+		return fmt.Errorf("expected %d: status_code=%d", http.StatusOK, response.StatusCode)
 	}
 
 	return nil

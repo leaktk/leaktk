@@ -18,6 +18,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/leaktk/leaktk/internal/fs"
 	"github.com/leaktk/leaktk/internal/httpclient"
@@ -51,12 +52,15 @@ func saveLogin(ctx context.Context, serverURL, token string) {
 	if err := auth.ValidateToken(ctx, client, serverURL, token); err != nil {
 		logger.Fatal("token validation failed: %v", err)
 	}
+
 	if err := config.SavePatternServerAuth(serverURL, token); err != nil {
 		logger.Fatal("could not save token: %v", err)
 	}
 }
 
 func runLogin(cmd *cobra.Command, args []string) {
+	var err error
+
 	serverURL := cfg.Scanner.Patterns.Server.URL
 	if len(args) > 0 {
 		serverURL = args[0]
@@ -68,28 +72,26 @@ func runLogin(cmd *cobra.Command, args []string) {
 	token := mustGetString(flags, "token")
 	web := mustGetBool(flags, "web")
 
-	switch {
-	case len(token) > 0:
-		saveLogin(cmd.Context(), serverURL, token)
-
-	case web:
-		client := httpclient.NewClient()
-		token, err := auth.WebLogin(cmd.Context(), client, serverURL)
-		if err != nil {
-			logger.Fatal("web login failed: %v", err)
+	if len(token) == 0 {
+		if web {
+			client := httpclient.NewClient()
+			token, err = auth.WebLogin(cmd.Context(), client, serverURL)
+			if err != nil {
+				logger.Fatal("web login failed: %v", err)
+			}
+		} else {
+			fmt.Printf("Enter %s auth token: ", serverURL)
+			//nolint:gosec // os.Stdin file descriptor (0) safely fits within int bounds
+			tokenBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+			fmt.Println("")
+			if err != nil {
+				logger.Fatal("could not login: %v", err)
+			}
+			token = string(tokenBytes)
 		}
-		saveLogin(cmd.Context(), serverURL, token)
-
-	default:
-		fmt.Printf("Enter %s auth token: ", serverURL)
-
-		var authToken string
-		if _, err := fmt.Scanln(&authToken); err != nil {
-			logger.Fatal("could not login: %v", err)
-		}
-		saveLogin(cmd.Context(), serverURL, authToken)
 	}
 
+	saveLogin(cmd.Context(), serverURL, token)
 	logger.Info("login successful")
 }
 
@@ -100,7 +102,7 @@ func runLogout(cmd *cobra.Command, args []string) {
 		logger.Fatal("could not logout: %v", err)
 	}
 
-	logger.Info("token removed")
+	logger.Info("logout successful")
 }
 
 func loginCommand() *cobra.Command {
@@ -120,7 +122,7 @@ func loginCommand() *cobra.Command {
 func logoutCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "logout",
-		Short: "Log out of a pattern server",
+		Short: "Log out of the configured pattern server",
 		Run:   runLogout,
 	}
 }
