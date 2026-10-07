@@ -2,4 +2,5 @@
   paths = [
     '''_test.go$''',
     '''(?:^|\/)docs/''',
+    '''(?:^|\/)hack\/mock-pattern-server$''',
   ]

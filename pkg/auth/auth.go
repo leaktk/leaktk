@@ -3,13 +3,9 @@ package auth
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -17,6 +13,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"golang.org/x/oauth2"
 
 	"github.com/leaktk/leaktk/pkg/logger"
 )
@@ -29,11 +26,6 @@ type WWWAuthenticate struct {
 	Service  string
 	Scope    string
 	ClientID string
-}
-
-type OIDCEndpoints struct {
-	AuthorizationEndpoint string `json:"authorization_endpoint"`
-	TokenEndpoint         string `json:"token_endpoint"`
 }
 
 var wwwAuthParamRe = regexp.MustCompile(`([^\s"=,]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^\s",]+))`)
@@ -84,23 +76,21 @@ func parseParams(s string) map[string]string {
 	return params
 }
 
-func DiscoverEndpoints(ctx context.Context, client *http.Client, realm string) (*OIDCEndpoints, error) {
-	ctx = oidc.ClientContext(ctx, client)
-	provider, err := oidc.NewProvider(ctx, realm)
-	if err != nil {
-		return nil, fmt.Errorf("OIDC discovery failed: %w", err)
-	}
-
-	endpoint := provider.Endpoint()
-
-	if len(endpoint.AuthURL) == 0 || len(endpoint.TokenURL) == 0 {
-		return nil, errors.New("OIDC discovery response missing required endpoints")
-	}
-
-	return &OIDCEndpoints{
-		AuthorizationEndpoint: endpoint.AuthURL,
-		TokenEndpoint:         endpoint.TokenURL,
-	}, nil
+func OAuthConfig(ctx context.Context, client *http.Client, realm, clientID, redirectURI string) (*oauth2.Config, error) {
+    if len(clientID) == 0 {
+        clientID = defaultClientID
+    }
+    ctx = oidc.ClientContext(ctx, client)
+    provider, err := oidc.NewProvider(ctx, realm)
+    if err != nil {
+        return nil, fmt.Errorf("OIDC discovery failed: %w", err)
+    }
+    return &oauth2.Config{
+        ClientID:    clientID,
+        Endpoint:    provider.Endpoint(),
+        RedirectURL: redirectURI,
+        Scopes:      []string{oidc.ScopeOpenID},
+    }, nil
 }
 
 const maxRedirects = 10
@@ -143,14 +133,12 @@ func Challenge(ctx context.Context, client *http.Client, serverURL string) (*WWW
 }
 
 func noRedirectClient(client *http.Client) *http.Client {
-	return &http.Client{
-		Transport: client.Transport,
-		Timeout:   client.Timeout,
-		Jar:       client.Jar,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+	c := *client
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
 	}
+
+	return &c
 }
 
 func discoverFromRedirects(ctx context.Context, client *http.Client, resp *http.Response) (*WWWAuthenticate, error) {
@@ -235,110 +223,6 @@ func extractIssuer(u *url.URL) string {
 	return issuer.String()
 }
 
-// PKCEChallenge holds the PKCE code verifier and challenge pair.
-type PKCEChallenge struct {
-	Verifier  string
-	Challenge string
-}
-
-// GeneratePKCE creates a PKCE code verifier and its S256 challenge.
-func GeneratePKCE() (*PKCEChallenge, error) {
-	buf := make([]byte, 32)
-	if _, err := rand.Read(buf); err != nil {
-		return nil, fmt.Errorf("could not generate PKCE verifier: %w", err)
-	}
-
-	verifier := base64.RawURLEncoding.EncodeToString(buf)
-	hash := sha256.Sum256([]byte(verifier))
-	challenge := base64.RawURLEncoding.EncodeToString(hash[:])
-
-	return &PKCEChallenge{Verifier: verifier, Challenge: challenge}, nil
-}
-
-func BuildAuthURL(authEndpoint, redirectURI, state, clientID string, pkce *PKCEChallenge) string {
-	if len(clientID) == 0 {
-		clientID = defaultClientID
-	}
-
-	params := url.Values{
-		"response_type": {"code"},
-		"client_id":     {clientID},
-		"redirect_uri":  {redirectURI},
-		"state":         {state},
-		"scope":         {"openid"},
-	}
-
-	if pkce != nil {
-		params.Set("code_challenge", pkce.Challenge)
-		params.Set("code_challenge_method", "S256")
-	}
-
-	sep := "?"
-	if strings.Contains(authEndpoint, "?") {
-		sep = "&"
-	}
-
-	return authEndpoint + sep + params.Encode()
-}
-
-func ExchangeCode(ctx context.Context, client *http.Client, tokenEndpoint, code, redirectURI, clientID, codeVerifier string) (string, error) {
-	if len(clientID) == 0 {
-		clientID = defaultClientID
-	}
-
-	data := url.Values{
-		"grant_type":   {"authorization_code"},
-		"code":         {code},
-		"redirect_uri": {redirectURI},
-		"client_id":    {clientID},
-	}
-
-	if len(codeVerifier) > 0 {
-		data.Set("code_verifier", codeVerifier)
-	}
-
-	request, err := http.NewRequestWithContext(ctx, "POST", tokenEndpoint, strings.NewReader(data.Encode()))
-	if err != nil {
-		return "", fmt.Errorf("could not create token request: %w", err)
-	}
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	response, err := client.Do(request)
-	if err != nil {
-		return "", fmt.Errorf("token request failed: %w", err)
-	}
-	defer func() { _ = response.Body.Close() }()
-
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		return "", fmt.Errorf("could not read token response: %w", err)
-	}
-
-	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("token endpoint returned status %d: %s", response.StatusCode, string(body))
-	}
-
-	var tokenResponse struct {
-		AccessToken string `json:"access_token"`
-		Error       string `json:"error"`
-		Description string `json:"error_description"`
-	}
-
-	if err := json.Unmarshal(body, &tokenResponse); err != nil {
-		return "", fmt.Errorf("could not parse token response: %w", err)
-	}
-
-	if len(tokenResponse.Error) > 0 {
-		return "", fmt.Errorf("token error: %s: %s", tokenResponse.Error, tokenResponse.Description)
-	}
-
-	if len(tokenResponse.AccessToken) == 0 {
-		return "", errors.New("token response did not contain an access token")
-	}
-
-	return tokenResponse.AccessToken, nil
-}
-
 func ValidateToken(ctx context.Context, client *http.Client, serverURL, token string) error {
 	request, err := http.NewRequestWithContext(ctx, "GET", serverURL, nil)
 	if err != nil {
@@ -373,21 +257,11 @@ func WebLogin(ctx context.Context, client *http.Client, serverURL string) (strin
 		return "", errors.New("server does not require authentication")
 	}
 
-	endpoints, err := DiscoverEndpoints(ctx, client, wwwAuth.Realm)
-	if err != nil {
-		return "", fmt.Errorf("could not discover auth endpoints: %w", err)
-	}
-
 	stateBytes := make([]byte, 16)
 	if _, err := rand.Read(stateBytes); err != nil {
 		return "", fmt.Errorf("could not generate state parameter: %w", err)
 	}
 	state := hex.EncodeToString(stateBytes)
-
-	pkce, err := GeneratePKCE()
-	if err != nil {
-		return "", err
-	}
 
 	callbackCtx, callbackCancel := context.WithTimeout(ctx, loginTimeout)
 	defer callbackCancel()
@@ -399,7 +273,14 @@ func WebLogin(ctx context.Context, client *http.Client, serverURL string) (strin
 	defer shutdown()
 
 	redirectURI := "http://" + addr + "/callback"
-	authURL := BuildAuthURL(endpoints.AuthorizationEndpoint, redirectURI, state, "", pkce)
+
+	oauthCfg, err := OAuthConfig(ctx, client, wwwAuth.Realm, wwwAuth.ClientID, redirectURI)
+	if err != nil {
+		return "", fmt.Errorf("could not discover auth endpoints: %w", err)
+	}
+
+	verifier := oauth2.GenerateVerifier()
+	authURL := oauthCfg.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier))
 
 	if err := OpenBrowser(authURL); err != nil {
 		logger.Info("could not open browser automatically")
@@ -407,6 +288,8 @@ func WebLogin(ctx context.Context, client *http.Client, serverURL string) (strin
 	}
 
 	logger.Info("waiting for authentication...")
+
+	oauthCtx := oidc.ClientContext(ctx, client)
 
 	select {
 	case result := <-resultCh:
@@ -419,17 +302,17 @@ func WebLogin(ctx context.Context, client *http.Client, serverURL string) (strin
 		}
 
 		logger.Info("exchanging authorization code for token")
-		token, err := ExchangeCode(ctx, client, endpoints.TokenEndpoint, result.Code, redirectURI, "", pkce.Verifier)
+		oauthToken, err := oauthCfg.Exchange(oauthCtx, result.Code, oauth2.VerifierOption(verifier))
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("token exchange failed: %w", err)
 		}
 
 		logger.Info("validating token")
-		if err := ValidateToken(ctx, client, serverURL, token); err != nil {
+		if err := ValidateToken(ctx, client, serverURL, oauthToken.AccessToken); err != nil {
 			return "", err
 		}
 
-		return token, nil
+		return oauthToken.AccessToken, nil
 
 	case <-callbackCtx.Done():
 		return "", errors.New("authentication timed out; please try again")

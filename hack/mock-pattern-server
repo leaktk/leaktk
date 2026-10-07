@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+DEX_HOST = "127.0.0.1"
+DEX_PORT = 5556
+DEX_ISSUER = f"http://{DEX_HOST}:{DEX_PORT}/dex"
+
+SERVER_HOST = "127.0.0.1"
+SERVER_PORT = 8580
+
+DEX_CONFIG = f"""\
+issuer: {DEX_ISSUER}
+storage:
+  type: memory
+web:
+  http: {DEX_HOST}:{DEX_PORT}
+staticClients:
+- id: leaktk-cli
+  name: LeakTK CLI
+  public: true
+enablePasswordDB: true
+staticPasswords:
+- email: admin@example.com
+  hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+  username: admin
+"""
+
+GITLEAKS_CONFIG = """
+[[rules]]
+id = "mock-secret"
+description = "Mock secret for testing"
+regex = '''secret'''
+"""
+
+dex_proc = None
+
+
+def validate_token(token):
+    try:
+        req = Request(f"{DEX_ISSUER}/userinfo")
+        req.add_header("Authorization", f"Bearer {token}")
+        urlopen(req)
+        return True
+    except (HTTPError, URLError):
+        return False
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        auth = self.headers.get("Authorization", "")
+        if not auth.startswith("Bearer ") or not validate_token(auth[7:]):
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", f'Bearer realm="{DEX_ISSUER}"')
+            self.end_headers()
+            return
+
+        if self.path.startswith("/patterns/gitleaks/"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(GITLEAKS_CONFIG.encode())
+            return
+
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"authenticated\n")
+
+    def log_message(self, format, *args):
+        print(f"[pattern-server] {args[0]}", file=sys.stderr)
+
+
+def wait_for_dex():
+    for _ in range(30):
+        try:
+            urlopen(f"{DEX_ISSUER}/.well-known/openid-configuration")
+            return
+        except (HTTPError, URLError):
+            time.sleep(0.5)
+    print("error: dex did not start in time", file=sys.stderr)
+    sys.exit(1)
+
+
+def cleanup(*_):
+    global dex_proc
+    if dex_proc and dex_proc.poll() is None:
+        dex_proc.terminate()
+        dex_proc.wait()
+    sys.exit(0)
+
+
+def main():
+    global dex_proc
+
+    if not shutil.which("dex"):
+        print("error: 'dex' not found in PATH", file=sys.stderr)
+        print("install: https://dexidp.io/docs/getting-started/", file=sys.stderr)
+        sys.exit(1)
+
+    signal.signal(signal.SIGINT, cleanup)
+    signal.signal(signal.SIGTERM, cleanup)
+
+    dex_proc = subprocess.Popen(
+        ["dex", "serve", "/dev/stdin"],
+        stdin=subprocess.PIPE,
+        stdout=sys.stderr,
+        stderr=sys.stderr,
+    )
+    dex_proc.stdin.write(DEX_CONFIG.encode())
+    dex_proc.stdin.close()
+
+    wait_for_dex()
+
+    server = HTTPServer((SERVER_HOST, SERVER_PORT), Handler)
+    print(f"mock pattern server: http://{SERVER_HOST}:{SERVER_PORT}", file=sys.stderr)
+    print(f"dex issuer:          {DEX_ISSUER}", file=sys.stderr)
+    print(f"login:               admin@example.com / password", file=sys.stderr)
+
+    try:
+        server.serve_forever()
+    finally:
+        cleanup()
+
+
+if __name__ == "__main__":
+    main()
+    
