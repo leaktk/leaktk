@@ -1,6 +1,7 @@
 package auths
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -11,7 +12,7 @@ type BasicAuth struct {
 	Password string `toml:"password"`
 }
 
-func (a *BasicAuth) SetHeader(h http.Header) error {
+func (a *BasicAuth) SetHeader(ctx context.Context, h http.Header) error {
 	value := "Basic " + base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", a.Username, a.Password)))
 	h.Set("Authorization", value)
 	return nil

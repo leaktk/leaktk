@@ -58,7 +58,7 @@ class Handler(BaseHTTPRequestHandler):
         auth = self.headers.get("Authorization", "")
         if not auth.startswith("Bearer ") or not validate_token(auth[7:]):
             self.send_response(401)
-            self.send_header("WWW-Authenticate", f'Bearer realm="{DEX_ISSUER}"')
+            self.send_header("WWW-Authenticate", f'Bearer realm="{DEX_ISSUER}",scope="openid"')
             self.end_headers()
             return
 
