@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -20,13 +21,14 @@ type Source interface {
 }
 
 type httpHeaderSetter interface {
-	SetHeader(h http.Header) error
+	SetHeader(ctx context.Context, h http.Header) error
 	AppliesTo(url *url.URL) bool
 }
 
-// SetHeader runs source.SetHeader(req.Header) for each applicable source in order that they apper in the config.
+// SetHeader runs source.SetHeader(context.Context, req.Header) for each
+// applicable source in order that they apper in the config.
 // NOTE: If more than one source sets the same header, the last one wins.
-func (ss Sources) SetHeader(req *http.Request) error {
+func (ss Sources) SetHeader(ctx context.Context, req *http.Request) error {
 	for _, s := range ss {
 		hs, isHeaderSetter := s.(httpHeaderSetter)
 
@@ -40,7 +42,7 @@ func (ss Sources) SetHeader(req *http.Request) error {
 			continue
 		}
 
-		if err := hs.SetHeader(req.Header); err != nil {
+		if err := hs.SetHeader(ctx, req.Header); err != nil {
 			return fmt.Errorf("source could not set header: %w source_id=%q", err, s.ID())
 		}
 	}

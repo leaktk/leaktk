@@ -39,7 +39,7 @@ func (s *URL) Fragments(ctx context.Context, yield blsources.FragmentsFunc) erro
 		if err != nil {
 			return fmt.Errorf("error creating HTTP GET request: %w", err)
 		}
-		if err := s.Sources.SetHeader(req); err != nil {
+		if err := s.Sources.SetHeader(ctx, req); err != nil {
 			return fmt.Errorf("set header error: %w", err)
 		}
 

@@ -31,7 +31,7 @@ func atlassianReq(ctx context.Context, src *sources.AtlassianCloudAdmin, client 
 		if reqBody != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}
-		if err = src.SetHeader(req.Header); err != nil {
+		if err = src.SetHeader(ctx, req.Header); err != nil {
 			return err
 		}
 
