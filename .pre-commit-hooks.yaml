@@ -1,7 +1,7 @@
 - id: leaktk.git.pre-commit
   name: LeakTK Git Pre-Commit
   description: Block commits containing secrets
-  language: golang
+  language: python
   pass_filenames: false
   entry: leaktk
   stages: ['pre-commit']

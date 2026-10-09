@@ -1,5 +1,5 @@
 VERSION := $(shell ./hack/version)
-COMMIT := $(shell git rev-parse HEAD)
+COMMIT := $(shell ./hack/commit)
 MODULE := $(shell grep '^module' go.mod | awk '{print $$2}')
 BUILD_META :=
 BUILD_META += -X=$(MODULE)/pkg/version.Version=$(VERSION)
@@ -18,7 +18,7 @@ LDFLAGS := -ldflags "$(BUILD_META)"
 all: build completions
 
 clean:
-	if [[ -e .git ]]; then git clean -dfX; fi
+	@hack/clean
 
 .PHONY: completions
 completions: build

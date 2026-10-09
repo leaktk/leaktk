@@ -1,0 +1,16 @@
+#!/bin/sh
+if [ -e .git ]
+then
+    exec git clean -dfX
+else
+    @find . -type f -regex ".*\.py[co]$$" -delete
+    @find . -type f \( -name "*~" \) -delete
+    @find . -type f \( -name "#*" \) -delete
+    @find . -type f \( -name "*.csv" \) -delete
+    @find . -type f \( -name "*.zip" \) -delete
+    @find . -type f \( -name "*.log" \) -delete
+    @find . -type f \( -name "*.gz" \) -delete
+    @find . -type f \( -name "*.xz" \) -delete
+    @find . -type d \( -name "__pycache__" \) -delete
+    @rm -rf *.egg-info .coverage .pytest* dist build
+fi

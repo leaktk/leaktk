@@ -1,0 +1,5 @@
+#!/bin/sh
+if [ -e .git ]
+then
+    exec git rev-parse HEAD
+fi

@@ -1,3 +1,13 @@
+# Environments
+.env
+.envrc
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
 # Binaries for programs and plugins
 /leaktk
 *.exe
@@ -14,9 +24,19 @@
 # Go workspace file
 go.work
 
-# Added by goreleaser init:
+# Cache/Build files
 dist/
+build/
+.cache
 
 # Editor files
 *~
 *.swp
+
+# Python files
+__pycache__/
+*.py[codz]
+*$py.class
+*.egg-info/
+*.egg
+MANIFEST

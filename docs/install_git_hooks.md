@@ -82,6 +82,13 @@ that allows you to define hooks in the Git repository itself.
    pre-commit run --hook-stage pre-commit leaktk.git.pre-commit
    ```
 
+Note: The pre-commit hook by default will try to pull pre-compiled binaries if
+one exists for your system. Do disable that set and export this env var:
+
+```sh
+LEAKTK_BUILD_FETCH_PRECOMPILED=0
+```
+
 ### Custom
 
 > **⚠️  WARNING: This hook only scans staged content**

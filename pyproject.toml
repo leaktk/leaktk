@@ -1,0 +1,40 @@
+[project]
+name = 'leaktk'
+description = 'The Leak Tool Kit'
+readme = 'README.md'
+dynamic = ['version']
+requires-python = '>=3.9'
+keywords = ['leaktk', 'betterleaks', 'gitleaks', 'secret', 'scan']
+classifiers = [
+    'Programming Language :: Python :: 3',
+    'Operating System :: OS Independent',
+    'Programming Language :: Go',
+    'Topic :: Security',
+]
+license = 'MIT'
+license-files = ['LICENCE']
+
+[project.urls]
+Homepage = 'https://github.com/leaktk/leaktk'
+Repository = 'https://github.com/leaktk/leaktk.git'
+Issues = 'https://github.com/leaktk/leaktk/issues'
+Changelog = 'https://github.com/leaktk/leaktk/releases'
+Documentation = 'https://github.com/leaktk/leaktk/tree/HEAD/docs'
+
+[project.scripts]
+leaktk = 'leaktk:main'
+
+[build-system]
+requires = ['hatchling >= 1.32.0', 'hatch-vcs >= 0.5.0', 'requests >= 2.33.0']
+build-backend = 'hatchling.build'
+
+[tool.hatch.version]
+source = 'vcs'
+
+[tool.hatch.build.targets.wheel]
+packages = ["python/leaktk"]
+reproducible = false
+
+[tool.hatch.build.hooks.custom]
+path = 'hack/hatch_build.py'
+fetch_precompiled = true
