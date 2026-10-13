@@ -44,49 +44,6 @@ func runHelp(cmd *cobra.Command, args []string) {
 	}
 }
 
-func runLogin(cmd *cobra.Command, args []string) {
-	logger.Info("logging in: pattern_server=%q", cfg.Scanner.Patterns.Server.URL)
-
-	fmt.Printf("Enter %s auth token: ", cfg.Scanner.Patterns.Server.URL)
-
-	var authToken string
-	if _, err := fmt.Scanln(&authToken); err != nil {
-		logger.Fatal("could not login: %v", err)
-	}
-
-	if err := config.SavePatternServerAuthToken(authToken); err != nil {
-		logger.Fatal("could not login: %v", err)
-	}
-
-	logger.Info("token saved")
-}
-
-func runLogout(cmd *cobra.Command, args []string) {
-	logger.Info("logging out: pattern_server=%q", cfg.Scanner.Patterns.Server.URL)
-
-	if err := config.RemovePatternServerAuthToken(); err != nil {
-		logger.Fatal("could not logout: %v", err)
-	}
-
-	logger.Info("token removed")
-}
-
-func loginCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "login",
-		Short: "Log into a pattern server",
-		Run:   runLogin,
-	}
-}
-
-func logoutCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "logout",
-		Short: "Log out of a pattern server",
-		Run:   runLogout,
-	}
-}
-
 func runScan(cmd *cobra.Command, args []string) {
 	leakExitCode, err := cmd.Flags().GetInt("leak-exit-code")
 	if err != nil {

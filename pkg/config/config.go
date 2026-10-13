@@ -100,6 +100,7 @@ type (
 	// Patterns provides configuration for managing pattern updates
 	Patterns struct {
 		Autofetch    bool          `toml:"autofetch"`
+		Autologin    bool          `toml:"autologin"`
 		ExpiredAfter int           `toml:"expired_after"`
 		Gitleaks     Gitleaks      `toml:"gitleaks"`
 		RefreshAfter int           `toml:"refresh_after"`
@@ -129,11 +130,32 @@ func setMissingValues(cfg *Config) *Config {
 	urlFromEnvVar := os.Getenv("LEAKTK_PATTERN_SERVER_URL")
 	if len(urlFromEnvVar) != 0 {
 		cfg.Scanner.Patterns.Server.URL = urlFromEnvVar
+	} else if urlFromFile := loadPatternServerURL(); len(urlFromFile) != 0 {
+		cfg.Scanner.Patterns.Server.URL = urlFromFile
+	}
+
+	autofetchStr := os.Getenv("LEAKTK_AUTOFETCH")
+	if len(autofetchStr) == 0 {
+		// TODO: remove at v1.0.0 & update docs
+		autofetchStr = os.Getenv("LEAKTK_SCANNER_AUTOFETCH")
+		if len(autofetchStr) != 0 {
+			logger.Warning("LEAKTK_SCANNER_AUTOFETCH is deprecated, use LEAKTK_AUTOFETCH instead")
+		}
 	}
 
 	cfg.Scanner.Patterns.Autofetch = stringToBool(
-		os.Getenv("LEAKTK_SCANNER_AUTOFETCH"),
+		autofetchStr,
 		cfg.Scanner.Patterns.Autofetch,
+	)
+
+	defaultURL := DefaultConfig().Scanner.Patterns.Server.URL
+	if cfg.Scanner.Patterns.Server.URL == defaultURL {
+		cfg.Scanner.Patterns.Autologin = false
+	}
+
+	cfg.Scanner.Patterns.Autologin = stringToBool(
+		os.Getenv("LEAKTK_AUTOLOGIN"),
+		cfg.Scanner.Patterns.Autologin,
 	)
 
 	// It's better to have the auth token out of the config file to make it
@@ -168,6 +190,24 @@ func loadPatternServerAuthTokenFromFile(path string) string {
 
 func patternServerAuthTokenPath(configDir string) string {
 	return filepath.Join(configDir, "pattern-server-auth-token")
+}
+
+func patternServerURLPath(configDir string) string {
+	return filepath.Join(configDir, "pattern-server-url")
+}
+
+func loadPatternServerURL() string {
+	path := patternServerURLPath(localConfigDir)
+	if fs.FileExists(path) {
+		return loadPatternServerAuthTokenFromFile(path)
+	}
+
+	path = patternServerURLPath(nixGlobalConfigDir)
+	if fs.FileExists(path) {
+		return loadPatternServerAuthTokenFromFile(path)
+	}
+
+	return ""
 }
 
 func loadPatternServerAuthToken() string {
@@ -285,29 +325,37 @@ func LocateAndLoadConfig(path string) (*Config, error) {
 	return setMissingValues(DefaultConfig()), nil
 }
 
-// SavePatternServerAuthToken saves the token in the path where it should go
-func SavePatternServerAuthToken(authToken string) error {
+func SavePatternServerAuth(serverURL, authToken string) error {
 	if !fs.PathExists(localConfigDir) {
 		if err := os.MkdirAll(localConfigDir, 0700); err != nil {
 			return fmt.Errorf("could not create dir: path=%q", localConfigDir)
 		}
 	}
 
-	path := patternServerAuthTokenPath(localConfigDir)
-	if err := os.WriteFile(path, []byte(strings.TrimSpace(authToken)), 0600); err != nil {
+	if len(serverURL) > 0 {
+		urlPath := patternServerURLPath(localConfigDir)
+		if err := os.WriteFile(urlPath, []byte(strings.TrimSpace(serverURL)), 0600); err != nil {
+			return err
+		}
+	}
+
+	tokenPath := patternServerAuthTokenPath(localConfigDir)
+	if err := os.WriteFile(tokenPath, []byte(strings.TrimSpace(authToken)), 0600); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// RemovePatternServerAuthToken deletes the auth token
-func RemovePatternServerAuthToken() error {
-	path := patternServerAuthTokenPath(localConfigDir)
-
-	if fs.FileExists(path) {
-		if err := os.Remove(path); err != nil {
-			return err
+func RemovePatternServerAuth() error {
+	for _, path := range []string{
+		patternServerAuthTokenPath(localConfigDir),
+		patternServerURLPath(localConfigDir),
+	} {
+		if fs.FileExists(path) {
+			if err := os.Remove(path); err != nil {
+				return err
+			}
 		}
 	}
 
