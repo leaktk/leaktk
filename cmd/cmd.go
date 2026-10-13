@@ -344,12 +344,12 @@ func runAnalyze(cmd *cobra.Command, paths []string) {
 
 	p := patterns.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient())
 	a := analyst.NewAnalyst(p)
-	analystPatterns, err := p.LeakTK(ctx)
+	err = p.ConfigurePatterns(ctx)
 	if err != nil {
 		logger.Error("unable to fetch leaktk patterns")
 	} else {
 		if len(paths) == 0 {
-			analyzeResponses(ctx, a, f, bufio.NewReader(os.Stdin), analystPatterns)
+			analyzeResponses(ctx, a, f, bufio.NewReader(os.Stdin), p.LeaktkPatterns)
 		} else {
 			for _, path := range paths {
 				r, err := os.Open(filepath.Clean(path))
@@ -357,7 +357,7 @@ func runAnalyze(cmd *cobra.Command, paths []string) {
 					logger.Error("could not open path: %v path=%q", err, path)
 					continue
 				}
-				analyzeResponses(ctx, a, f, bufio.NewReader(r), analystPatterns)
+				analyzeResponses(ctx, a, f, bufio.NewReader(r), p.LeaktkPatterns)
 				if err := r.Close(); err != nil {
 					logger.Error("could not close file: %v path=%q", err, path)
 				}

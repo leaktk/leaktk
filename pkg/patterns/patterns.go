@@ -11,6 +11,7 @@ import (
 	"time"
 
 	betterleaksconfig "github.com/betterleaks/betterleaks/config"
+	//"github.com/jedisct1/go-minisign"
 
 	"github.com/leaktk/leaktk/internal/fs"
 	"github.com/leaktk/leaktk/pkg/config"
@@ -20,17 +21,16 @@ import (
 
 type hashDgst [32]byte
 
-// Patterns holds shared dependencies, clients, and cached in-memory structures.
 type Patterns struct {
 	client          *http.Client
 	config          *config.Patterns
 	wellKnownClient *wellknown.Client
 	mutex           sync.Mutex
 
-	gitleaksPatterns     *betterleaksconfig.Config
+	GitleaksPatterns     *betterleaksconfig.Config
 	gitleaksPatternsHash hashDgst
 
-	leaktkPatterns *LeakTKPatterns
+	LeaktkPatterns *LeakTKPatterns
 }
 
 func NewPatterns(patternsCfg *config.Patterns, client *http.Client) *Patterns {
@@ -41,7 +41,6 @@ func NewPatterns(patternsCfg *config.Patterns, client *http.Client) *Patterns {
 	}
 }
 
-// sanitizeJSONMap converts whole float64 numbers (e.g. 1.0 -> 1) for clean TOML compatibility.
 func sanitizeJSONMap(val interface{}) interface{} {
 	switch v := val.(type) {
 	case map[string]interface{}:
@@ -64,8 +63,58 @@ func sanitizeJSONMap(val interface{}) interface{} {
 	}
 }
 
-// downloadBundle downloads the bundle payload atomically using a temporary file.
+func (p *Patterns) ConfigurePatterns(ctx context.Context) error {
+	cfg := p.config
+	wk := p.wellKnownClient.Fetch(ctx)
+	if bundleURL, ok := p.wellKnownClient.BundleURL(wk, "latest", "bundle.tar.gz"); ok {
+		bundlePath := filepath.Join(p.config.CacheDir, "bundle.tar.gz")
+		// sigURL, _ := p.wellKnownClient.BundleSignatureURL(wk, "latest", "bundle.tar.gz")
+		// pubKeyURL := p.wellKnownClient.PublicKeyURL(wk)
+
+		modTimeExceeds := fileModTimeExceeds(bundlePath, cfg.RefreshAfter)
+		if cfg.Autofetch && modTimeExceeds {
+			if err := p.downloadBundle(ctx, bundleURL, bundlePath); err != nil {
+				return fmt.Errorf("failed to download bundle: %w", err)
+			}
+		}
+	}
+
+	var err error
+
+	p.GitleaksPatterns, err = p.gitleaks(ctx)
+	if err != nil {
+		return fmt.Errorf("could not load gitleaks config: %w", err)
+	}
+
+	p.LeaktkPatterns, err = p.leakTK(ctx)
+	if err != nil {
+		return fmt.Errorf("could not load leaktk config: %w", err)
+	}
+
+	return nil
+}
+
 func (p *Patterns) downloadBundle(ctx context.Context, bundleURL, bundlePath string) error {
+	//pubKeyStr, err := fetchPatterns(ctx, p.client, pubKeyURL, p.config.Server.AuthToken)
+	//if err != nil {
+	//	return fmt.Errorf("failed to fetch public key: %w", err)
+	//}
+
+	//pubKey, err := minisign.NewPublicKey(pubKeyStr)
+	//if err != nil {
+	//	return fmt.Errorf("invalid public key format: %w", err)
+	//}
+
+	//sigStr, err := fetchPatterns(ctx, p.client, sigURL, p.config.Server.AuthToken)
+	//if err != nil {
+	//	return fmt.Errorf("failed to fetch signature: %w", err)
+	//}
+
+	//sig, err := minisign.DecodeSignature(sigStr)
+	//if err != nil {
+	//	return fmt.Errorf("invalid signature format: %w", err)
+	//}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, bundleURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create bundle request: %w", err)
@@ -104,16 +153,25 @@ func (p *Patterns) downloadBundle(ctx context.Context, bundleURL, bundlePath str
 	}
 	_ = tmpFile.Close()
 
+	//bundleBytes, err := os.ReadFile(tmpName)
+	//if err != nil {
+	//	return fmt.Errorf("failed to read temp bundle for verification: %w", err)
+	//}
+
+	//valid, err := pubKey.Verify(bundleBytes, sig)
+	//if err != nil || !valid {
+	//	return fmt.Errorf("minisign verification failed: bundle payload is tampered or corrupted")
+	//}
+
 	return os.Rename(tmpName, bundlePath)
 }
 
-// fetchPatterns fetches a raw pattern string from a direct HTTP URL.
 func fetchPatterns(ctx context.Context, client *http.Client, patternsURL, authToken string) (string, error) {
 	logger.Debug("fetching resource: url=%q", patternsURL)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, patternsURL, nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("unable to generate request: %w", err)
 	}
 
 	if len(authToken) > 0 {
@@ -122,7 +180,7 @@ func fetchPatterns(ctx context.Context, client *http.Client, patternsURL, authTo
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("could not get response from client: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -132,13 +190,12 @@ func fetchPatterns(ctx context.Context, client *http.Client, patternsURL, authTo
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("could not read response body: %w", err)
 	}
 
 	return string(body), nil
 }
 
-// updateLocalPatterns writes pattern contents to localPath safely using file locks.
 func updateLocalPatterns(localPath, rawPatterns string) error {
 	if err := os.MkdirAll(filepath.Dir(localPath), 0700); err != nil {
 		return fmt.Errorf("could not create patterns dir: %w", err)
@@ -180,7 +237,6 @@ func updateLocalPatterns(localPath, rawPatterns string) error {
 	return nil
 }
 
-// fileModTimeExceeds checks if a local file is older than modTimeLimit seconds.
 func fileModTimeExceeds(path string, modTimeLimit int) bool {
 	if modTimeLimit == 0 {
 		return false

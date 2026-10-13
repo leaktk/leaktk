@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -28,13 +27,13 @@ type LeakTKPatterns struct {
 }
 
 // LeakTK returns the LeakTKPatterns object, handling fetch/caching/update.
-func (p *Patterns) LeakTK(ctx context.Context) (*LeakTKPatterns, error) {
+func (p *Patterns) leakTK(ctx context.Context) (*LeakTKPatterns, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	rawPatterns, err := p.fetchLeakTKPatterns(ctx)
+	rawPatterns, err := p.fetchLeakTKPatterns()
 	if err != nil {
-		return p.leaktkPatterns, err
+		return p.LeaktkPatterns, err
 	}
 
 	config, err := p.parseLeakTKConfig(ctx, rawPatterns)
@@ -42,25 +41,14 @@ func (p *Patterns) LeakTK(ctx context.Context) (*LeakTKPatterns, error) {
 		return nil, fmt.Errorf("could not parse leaktk patterns: %w", err)
 	}
 
-	p.leaktkPatterns = config
+	p.LeaktkPatterns = config
 	logger.Info("fetched leaktk patterns")
 
-	return p.leaktkPatterns, nil
+	return p.LeaktkPatterns, nil
 }
 
-func (p *Patterns) fetchLeakTKPatterns(ctx context.Context) (string, error) {
-	wk := p.wellKnownClient.Fetch(ctx)
-	bundleURL, ok := p.wellKnownClient.BundleURL(wk, "latest", "bundle.tar.gz")
-	if !ok {
-		return "", errors.New("failed to locate bundle URL for leaktk")
-	}
-
+func (p *Patterns) fetchLeakTKPatterns() (string, error) {
 	bundlePath := filepath.Join(p.config.CacheDir, "bundle.tar.gz")
-	if _, err := os.Stat(bundlePath); os.IsNotExist(err) {
-		if err := p.downloadBundle(ctx, bundleURL, bundlePath); err != nil {
-			return "", fmt.Errorf("failed to download bundle: %w", err)
-		}
-	}
 
 	cleanPath := filepath.Clean(bundlePath)
 	f, err := os.Open(cleanPath)
@@ -131,7 +119,6 @@ func (p *Patterns) fetchLeakTKPatterns(ctx context.Context) (string, error) {
 	return string(tomlBytes), nil
 }
 func (p *Patterns) parseLeakTKConfig(ctx context.Context, rawPatterns string) (*LeakTKPatterns, error) {
-	// Mirror the nested TOML structure
 	var uncompiled struct {
 		Models struct {
 			Analyst struct {

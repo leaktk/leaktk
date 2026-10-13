@@ -136,9 +136,9 @@ func (s *Scanner) listen() {
 			defer cancel()
 		}
 
-		cfg, err := s.patterns.Gitleaks(ctx)
+		err := s.patterns.ConfigurePatterns(ctx)
 		if err != nil {
-			logger.Critical("scan failed: could load scanner config: %v id=%q", err, request.ID)
+			logger.Critical("scan failed: could not load scanner config: %v id=%q", err, request.ID)
 			s.respondWithError(request, &proto.Error{
 				Code:    configErrorCode,
 				Message: "could not load scanner config",
@@ -148,7 +148,7 @@ func (s *Scanner) listen() {
 			return
 		}
 
-		detector := detect.NewDetectorContext(ctx, *cfg)
+		detector := detect.NewDetectorContext(ctx, *s.patterns.GitleaksPatterns)
 		detector.FollowSymlinks = false
 		detector.IgnoreGitleaksAllow = false
 		detector.MaxArchiveDepth = s.maxArchiveDepth
@@ -321,12 +321,11 @@ func (s *Scanner) listen() {
 			Resource:  request.Resource,
 		}
 
-		analystPatterns, err := s.analyst.Patterns.LeakTK(ctx)
 		if err != nil {
 			logger.Error("unable to fetch leaktk patterns: %s", err)
 		} else {
 			logger.Info("analyzing response: id=%q response_id=%q", request.ID, response.ID)
-			if analyzedResponse, err := s.analyst.Analyze(ctx, response, analystPatterns); err != nil {
+			if analyzedResponse, err := s.analyst.Analyze(ctx, response, s.patterns.LeaktkPatterns); err != nil {
 				logger.Error("response analysis failed: %v id=%q response_id=%q", err, request.ID, response.ID)
 			} else {
 				response = analyzedResponse

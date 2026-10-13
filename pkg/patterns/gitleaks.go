@@ -19,7 +19,7 @@ import (
 )
 
 // Gitleaks returns a Gitleaks config object, fetching/caching/updating as necessary.
-func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, error) {
+func (p *Patterns) gitleaks(ctx context.Context) (*betterleaksconfig.Config, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
@@ -32,13 +32,13 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 
 		rawPatterns, err := p.fetchGitleaksPatterns(ctx)
 		if err != nil {
-			return p.gitleaksPatterns, err
+			return p.GitleaksPatterns, fmt.Errorf("could not fetch gitleaks patterns: %w", err)
 		}
 
 		newHash := hashDgst(sha256.Sum256([]byte(rawPatterns)))
 		if newHash == p.gitleaksPatternsHash {
 			logger.Debug("skipping update: gitleaks patterns hash unchanged")
-			return p.gitleaksPatterns, nil
+			return p.GitleaksPatterns, nil
 		}
 
 		newConfig, err := p.parseGitleaksConfig(ctx, rawPatterns)
@@ -50,10 +50,10 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 			return newConfig, err
 		}
 
-		p.gitleaksPatterns = newConfig
+		p.GitleaksPatterns = newConfig
 		p.gitleaksPatternsHash = newHash
 		logger.Info("updated gitleaks patterns")
-	} else if p.gitleaksPatterns == nil {
+	} else if p.GitleaksPatterns == nil {
 		if fileModTimeExceeds(localPath, cfg.ExpiredAfter) {
 			return nil, fmt.Errorf("gitleaks config is expired and autofetch is disabled: path=%q", localPath)
 		}
@@ -70,11 +70,11 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 			return nil, fmt.Errorf("could not parse gitleaks config: error=%q", err)
 		}
 
-		p.gitleaksPatterns = newConfig
+		p.GitleaksPatterns = newConfig
 		p.gitleaksPatternsHash = hashDgst(sha256.Sum256(rawPatternsBytes))
 	}
 
-	return p.gitleaksPatterns, nil
+	return p.GitleaksPatterns, nil
 }
 
 // GitleaksConfigHash returns the sha256 hash for the current gitleaks config.
@@ -85,7 +85,7 @@ func (p *Patterns) GitleaksConfigHash() string {
 func (p *Patterns) parseGitleaksConfig(_ context.Context, rawPatterns string) (*betterleaksconfig.Config, error) {
 	cfg, err := betterleaks.ParseConfig(rawPatterns)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not parse raw patterns: %w", err)
 	}
 	return cfg, nil
 }
@@ -94,42 +94,39 @@ func (p *Patterns) fetchGitleaksPatterns(ctx context.Context) (string, error) {
 	wk := p.wellKnownClient.Fetch(ctx)
 	version := p.config.Gitleaks.Version
 
-	if bundleURL, ok := p.wellKnownClient.BundleURL(wk, "latest", "bundle.tar.gz"); ok {
-		bundlePath := filepath.Join(p.config.CacheDir, "bundle.tar.gz")
-		if _, err := os.Stat(bundlePath); os.IsNotExist(err) {
-			_ = p.downloadBundle(ctx, bundleURL, bundlePath)
-		}
+	bundlePath := filepath.Join(p.config.CacheDir, "bundle.tar.gz")
 
-		cleanPath := filepath.Clean(bundlePath)
-		if f, err := os.Open(cleanPath); err == nil {
-			if gz, err := gzip.NewReader(f); err == nil {
-				tr := tar.NewReader(gz)
-				for {
-					header, err := tr.Next()
-					if err != nil {
-						break
-					}
-					cleanName := path.Clean(header.Name)
-					if cleanName == "data.json" || cleanName == "/data.json" {
-						var rootData map[string]interface{}
-						if err := json.NewDecoder(tr).Decode(&rootData); err == nil {
-							if provMap, ok := rootData["gitleaks"].(map[string]interface{}); ok {
-								for _, val := range provMap {
-									sanitized := sanitizeJSONMap(val)
-									if b, err := toml.Marshal(sanitized); err == nil {
-										_ = gz.Close()
-										_ = f.Close()
-										return string(b), nil
-									}
+	cleanPath := filepath.Clean(bundlePath)
+	f, err := os.Open(cleanPath)
+	if err == nil {
+		gz, err := gzip.NewReader(f)
+		if err == nil {
+			tr := tar.NewReader(gz)
+			for {
+				header, err := tr.Next()
+				if err != nil {
+					break
+				}
+				cleanName := path.Clean(header.Name)
+				if cleanName == "data.json" || cleanName == "/data.json" {
+					var rootData map[string]interface{}
+					if err := json.NewDecoder(tr).Decode(&rootData); err == nil {
+						if provMap, ok := rootData["gitleaks"].(map[string]interface{}); ok {
+							for _, val := range provMap {
+								sanitized := sanitizeJSONMap(val)
+								if b, err := toml.Marshal(sanitized); err == nil {
+									_ = gz.Close()
+									_ = f.Close()
+									return string(b), nil
 								}
 							}
 						}
 					}
 				}
-				_ = gz.Close()
 			}
-			_ = f.Close()
+			_ = gz.Close()
 		}
+		_ = f.Close()
 	}
 
 	patternURL := p.wellKnownClient.PatternURL(wk, "gitleaks", version)

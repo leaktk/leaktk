@@ -9,8 +9,10 @@ import (
 )
 
 type WellKnown struct {
-	Bundles  map[string]map[string]string `json:"bundles,omitempty"`
-	Patterns map[string]map[string]string `json:"patterns,omitempty"`
+	Bundles     map[string]map[string]string `json:"bundles,omitempty"`
+	Patterns    map[string]map[string]string `json:"patterns,omitempty"`
+	Signatures  map[string]map[string]string `json:"signatures,omitempty"`
+	MinisignPub string                       `json:"minisign_pub,omitempty"`
 }
 
 type Client struct {
@@ -66,6 +68,38 @@ func (c *Client) BundleURL(wk *WellKnown, releaseTag, asset string) (string, boo
 			}
 		}
 	}
+	return "", false
+}
+
+// PublicKeyURL returns the URL for fetching the Minisign public key.
+func (c *Client) PublicKeyURL(wk *WellKnown) string {
+	if wk != nil && len(wk.MinisignPub) > 0 {
+		if strings.HasPrefix(wk.MinisignPub, "http://") || strings.HasPrefix(wk.MinisignPub, "https://") {
+			return wk.MinisignPub
+		}
+		if pubURL, err := url.JoinPath(c.baseURL, wk.MinisignPub); err == nil {
+			return pubURL
+		}
+	}
+
+	fallback, _ := url.JoinPath(c.baseURL, "patterns", ".well-known", "minisign.pub")
+	return fallback
+}
+
+// BundleSignatureURL resolves the detached .minisig URL for a given release tag and asset.
+func (c *Client) BundleSignatureURL(wk *WellKnown, releaseTag, asset string) (string, bool) {
+	if wk != nil && wk.Signatures != nil {
+		if release, ok := wk.Signatures[releaseTag]; ok {
+			if sigURL, ok := release[asset+".minisig"]; ok {
+				return sigURL, true
+			}
+		}
+	}
+
+	if bundleURL, ok := c.BundleURL(wk, releaseTag, asset); ok {
+		return bundleURL + ".minisig", true
+	}
+
 	return "", false
 }
 
