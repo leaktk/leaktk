@@ -101,6 +101,73 @@ func (p *Patterns) gitleaksConfigModTimeExceeds(modTimeLimit int) bool {
 	return true
 }
 
+// Refresh refreshes all of the local patterns caches
+func (p *Patterns) Refresh(ctx context.Context) error {
+	return p.refreshGitleaks(ctx)
+}
+
+func (p *Patterns) refreshGitleaks(ctx context.Context) error {
+	rawConfig, err := p.fetchGitleaksConfig(ctx)
+	if err != nil {
+		return err
+	}
+
+	p.gitleaksConfig, err = betterleaks.ParseConfig(rawConfig)
+	if err != nil {
+		logger.Debug("fetched config:\n%s", rawConfig)
+		return fmt.Errorf("could not parse config: error=%q", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(p.config.Gitleaks.ConfigPath), 0700); err != nil {
+		return fmt.Errorf("could not create config dir: error=%q", err)
+	}
+
+	// Open the config file, creating it if it doesn't already exist, but don't truncate yet
+	configFile, err := os.OpenFile(p.config.Gitleaks.ConfigPath, os.O_RDWR|os.O_CREATE, 0600)
+	if err != nil {
+		return fmt.Errorf("could not open config file: %w path=%q", err, p.config.Gitleaks.ConfigPath)
+	}
+
+	// defer the close and add logging around it since we're adding locks
+	defer func() {
+		if err := configFile.Close(); err != nil {
+			logger.Error("could not close config file: %v path=%q", err, p.config.Gitleaks.ConfigPath)
+			if err := fs.UnlockFile(configFile); err != nil {
+				logger.Error("error releasing config file lock: %v path=%q", err, p.config.Gitleaks.ConfigPath)
+			}
+		}
+	}()
+
+	// Establish a file lock to avoid different instances of the scanner writing to the config
+	if fs.FileLockSupported {
+		logger.Debug("locking config file for writes: path=%q", p.config.Gitleaks.ConfigPath)
+		if err = fs.LockFile(configFile); err != nil {
+			return fmt.Errorf("could not establish a file lock: %w path=%s", err, p.config.Gitleaks.ConfigPath)
+		}
+	}
+
+	// Now that a lock's established if it's supported, seek to the beginning to be safe, truncate and write the file
+	if _, err := configFile.Seek(0, 0); err != nil {
+		return fmt.Errorf("could not seek to the beginning of the config file: %w path=%s", err, p.config.Gitleaks.ConfigPath)
+	}
+	if err := configFile.Truncate(0); err != nil {
+		return fmt.Errorf("could not truncate existing config file: %w path=%s", err, p.config.Gitleaks.ConfigPath)
+	}
+
+	// only write the config after parsing it, that way we don't break a good
+	// existing config if the server returns an invalid response
+	if _, err := configFile.WriteString(rawConfig); err != nil {
+		return fmt.Errorf("could not write config: path=%q error=%q", p.config.Gitleaks.ConfigPath, err)
+	}
+
+	if hash := sha256.Sum256([]byte(rawConfig)); p.gitleaksConfigHash != hash {
+		p.gitleaksConfigHash = hash
+		logger.Info("refreshed gitleaks patterns: hash=%s", p.GitleaksConfigHash())
+	}
+
+	return nil
+}
+
 // Gitleaks returns a Gitleaks config object if it's able to
 func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, error) {
 	// Lock since this updates the value of p.gitleaksConfig on the fly
@@ -109,64 +176,8 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 	defer p.mutex.Unlock()
 
 	if p.config.Autofetch && p.gitleaksConfigModTimeExceeds(p.config.RefreshAfter) {
-		rawConfig, err := p.fetchGitleaksConfig(ctx)
-		if err != nil {
-			return p.gitleaksConfig, err
-		}
-
-		p.gitleaksConfig, err = betterleaks.ParseConfig(rawConfig)
-		if err != nil {
-			logger.Debug("fetched config:\n%s", rawConfig)
-
-			return p.gitleaksConfig, fmt.Errorf("could not parse config: error=%q", err)
-		}
-
-		if err := os.MkdirAll(filepath.Dir(p.config.Gitleaks.ConfigPath), 0700); err != nil {
-			return p.gitleaksConfig, fmt.Errorf("could not create config dir: error=%q", err)
-		}
-
-		// Open the config file, creating it if it doesn't already exist, but don't truncate yet
-		configFile, err := os.OpenFile(p.config.Gitleaks.ConfigPath, os.O_RDWR|os.O_CREATE, 0600)
-		if err != nil {
-			return p.gitleaksConfig, fmt.Errorf("could not open config file: %w path=%q", err, p.config.Gitleaks.ConfigPath)
-		}
-
-		// defer the close and add logging around it since we're adding locks
-		defer func() {
-			if err := configFile.Close(); err != nil {
-				logger.Error("could not close config file: %v path=%q", err, p.config.Gitleaks.ConfigPath)
-				if err := fs.UnlockFile(configFile); err != nil {
-					logger.Error("error releasing config file lock: %v path=%q", err, p.config.Gitleaks.ConfigPath)
-				}
-			}
-		}()
-
-		// Establish a file lock to avoid different instances of the scanner writing to the config
-		if fs.FileLockSupported {
-			logger.Debug("locking config file for writes: path=%q", p.config.Gitleaks.ConfigPath)
-			if err = fs.LockFile(configFile); err != nil {
-				return p.gitleaksConfig, fmt.Errorf("could not establish a file lock: %w path=%s", err, p.config.Gitleaks.ConfigPath)
-			}
-		}
-
-		// Now that a lock's established if it's supported, seek to the beginning to be safe, truncate and write the file
-		if _, err := configFile.Seek(0, 0); err != nil {
-			return p.gitleaksConfig, fmt.Errorf("could not seek to the beginning of the config file: %w path=%s", err, p.config.Gitleaks.ConfigPath)
-		}
-		if err := configFile.Truncate(0); err != nil {
-			return p.gitleaksConfig, fmt.Errorf("could not truncate existing config file: %w path=%s", err, p.config.Gitleaks.ConfigPath)
-		}
-
-		// only write the config after parsing it, that way we don't break a good
-		// existing config if the server returns an invalid response
-		if _, err := configFile.WriteString(rawConfig); err != nil {
-			return p.gitleaksConfig, fmt.Errorf("could not write config: path=%q error=%q", p.config.Gitleaks.ConfigPath, err)
-		}
-
-		if hash := sha256.Sum256([]byte(rawConfig)); p.gitleaksConfigHash != hash {
-			p.gitleaksConfigHash = hash
-			logger.Info("updated gitleaks patterns: hash=%s", p.GitleaksConfigHash())
-		}
+		err := p.refreshGitleaks(ctx)
+		return p.gitleaksConfig, err
 	} else if p.gitleaksConfig == nil {
 		if p.gitleaksConfigModTimeExceeds(p.config.ExpiredAfter) {
 			return nil, fmt.Errorf(
