@@ -44,7 +44,7 @@ func TestGitInstallHook(t *testing.T) {
 
 		// Test installing a hook
 		hook := hooks.GitPreCommitHook
-		require.NoError(t, gitHookInstall(hook, tempDir, false, 0750))
+		require.NoError(t, gitHookInstallScript(hook, tempDir, false, 0750))
 
 		// Verify the hook was created
 		hookPath := filepath.Join(tempDir, "hooks", "pre-commit")
@@ -67,6 +67,26 @@ func TestGitInstallHook(t *testing.T) {
 		assert.Contains(t, contentStr, "docs/error_command_not_found")
 		// Must NOT exec unconditionally (the old broken form)
 		assert.NotContains(t, contentStr, "\nexec leaktk")
+	})
+
+	t.Run("gitCreateHookConfig", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		gitConfigPath := filepath.Join(tempDir, "gitconfig")
+		t.Setenv("GIT_CONFIG_GOLBAL", gitConfigPath)
+
+		// Test installing a hook
+		hook := hooks.GitPreCommitHook
+		require.NoError(t, gitHookInstallConfig(t.Context(), hook, git.ScopeGlobal))
+
+		// Verify the install
+		var out string
+
+		out = git.GetConfig(t.Context(), "hook.leaktk.git.pre-commit.command")
+		assert.Equal(t, "leaktk hook git.pre-commit", out)
+
+		out = git.GetConfig(t.Context(), "hook.leaktk.git.pre-commit.event")
+		assert.Equal(t, "pre-commit", out)
 	})
 
 	t.Run("findGitDirs", func(t *testing.T) {

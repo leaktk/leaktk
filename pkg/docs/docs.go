@@ -30,8 +30,8 @@ func init() {
 		BaseDocsURL = base
 	}
 	// Look up LEAKTK_DOCS_EXT environment variable
-	if ext := strings.TrimSpace(os.Getenv("LEAKTK_DOCS_EXT")); ext != "" {
-		DocsExt = ext
+	if ext, ok := os.LookupEnv("LEAKTK_DOCS_EXT"); ok {
+		DocsExt = strings.TrimSpace(ext)
 	}
 	// Make sure the base URL ends with a slash
 	if BaseDocsURL[len(BaseDocsURL)-1] != '/' {
