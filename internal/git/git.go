@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
@@ -21,6 +20,30 @@ type RepoInfo struct {
 	GitDir string
 	// The working tree for the repo (a temp one is created for bare repos)
 	WorkingTreePath string
+}
+
+func withHostConfig(f func()) {
+	unsetEnv := []string{
+		"GIT_CONFIG_NOSYSTEM",
+		"GIT_CONFIG_GLOBAL",
+	}
+
+	for _, name := range unsetEnv {
+		// Ensure it's set back at the end
+		defer func(value string) {
+			if err := os.Setenv(name, value); err != nil {
+				logger.Fatal("could not set env var: %v name=%q value=%q", err, name, value)
+			}
+		}(os.Getenv(name))
+
+		// Unset the variable
+		if err := os.Unsetenv(name); err != nil {
+			logger.Fatal("could not unset env var: %v name=%q", err, name)
+		}
+	}
+
+	// Call the function that needs the host config
+	f()
 }
 
 func GetRepoInfo(ctx context.Context, path string) (RepoInfo, error) {
@@ -86,55 +109,57 @@ func RemoteRefExists(ctx context.Context, repository, ref string) bool {
 
 // GetGlobalConfigPath gets a value from the global config and applies a --type=path flag
 // to handle normalizing it
-func GetGlobalConfigPath(ctx context.Context, name string) string {
-	// Handle undoing the override for this operation
-	if os.Getenv("GIT_CONFIG_GLOBAL") == config.GitConfigGlobalOverride {
-		if err := os.Unsetenv("GIT_CONFIG_GLOBAL"); err != nil {
-			logger.Fatal("Unable to properly configure git env: %v", err)
+func GetGlobalConfigPath(ctx context.Context, name string) (configPath string) {
+	withHostConfig(func() {
+		logger.Debug("getting global config value: name=%q", name)
+		cmd := CommandContext(ctx, "config", "--global", "--type=path", name)
+		logger.Debug("executing: %s", cmd)
+		output, err := cmd.Output()
+		if err != nil {
+			logger.Debug("existing value not found: %v name=%q", err, name)
+			return
 		}
-	}
-
-	logger.Debug("getting global config value: name=%q", name)
-	cmd := CommandContext(ctx, "config", "--global", "--type=path", name)
-
-	logger.Debug("executing: %s", cmd)
-	output, err := cmd.Output()
-	if err != nil {
-		// if the value isn't set properly or at all, treat it like it's not set at all
-		logger.Debug("existing value not found: %v name=%q", err, name)
-		if err := os.Setenv("GIT_CONFIG_GLOBAL", config.GitConfigGlobalOverride); err != nil {
-			logger.Fatal("Unable to properly configure git env: %v", err)
-		}
-
-		return ""
-	}
-
-	if err := os.Setenv("GIT_CONFIG_GLOBAL", config.GitConfigGlobalOverride); err != nil {
-		logger.Fatal("Unable to properly configure git env: %v", err)
-	}
-	return strings.TrimSpace(string(output))
+		configPath = strings.TrimSpace(string(output))
+	})
+	return
 }
 
 // SetGlobalConfigPath sets a value in the global config and applies a --type=path flag
 // to handle normalizing it
-func SetGlobalConfigPath(ctx context.Context, name, value string) error {
-	// Handle undoing the override for this operation
-	if os.Getenv("GIT_CONFIG_GLOBAL") == config.GitConfigGlobalOverride {
-		if err := os.Unsetenv("GIT_CONFIG_GLOBAL"); err != nil {
-			logger.Fatal("Unable to properly configure git env: %v", err)
+func SetGlobalConfigPath(ctx context.Context, name, value string) (err error) {
+	withHostConfig(func() {
+		logger.Debug("setting global config value: name=%q value=%q", name, value)
+		if err = RunContext(ctx, "config", "--global", "--type=path", name, value); err != nil {
+			err = fmt.Errorf("could not set git config value: %w name=%q value=%q", err, name, value)
+		}
+	})
+	return
+}
+
+func SafeDirectories(ctx context.Context) []string {
+	userHomeDir, err := os.UserHomeDir()
+	if err != nil {
+		logger.Debug("using / as user home dir: %v", err)
+		userHomeDir = "/"
+	}
+
+	cmd := CommandContext(ctx, "config", "get", "--all", "safe.directory")
+	cmd.Dir = userHomeDir // Make sure not to pick up repo config
+
+	logger.Debug("executing: %s", cmd)
+	output, err := cmd.Output()
+	if err != nil {
+		logger.Debug("could not look up safe.directory: %v", err)
+		return nil
+	}
+
+	var safeDirs []string
+	for _, line := range strings.Split(string(output), "\n") {
+		line = strings.TrimSpace(line)
+		if len(line) > 0 {
+			safeDirs = append(safeDirs, line)
 		}
 	}
 
-	logger.Debug("setting global config value: name=%q value=%q", name, value)
-	if err := RunContext(ctx, "config", "--global", "--type=path", name, value); err != nil {
-		if err := os.Setenv("GIT_CONFIG_GLOBAL", config.GitConfigGlobalOverride); err != nil {
-			logger.Fatal("Unable to properly configure git env: %v", err)
-		}
-		return fmt.Errorf("could not set git config value: %w name=%q value=%q", err, name, value)
-	}
-
-	if err := os.Setenv("GIT_CONFIG_GLOBAL", config.GitConfigGlobalOverride); err != nil {
-		logger.Fatal("Unable to properly configure git env: %v", err)
-	}
-	return nil
+	return safeDirs
 }
