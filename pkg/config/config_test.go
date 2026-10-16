@@ -10,14 +10,14 @@ import (
 	"github.com/leaktk/leaktk/internal/sources"
 )
 
-func TestPartialLoadConfigFromFile(t *testing.T) {
+func TestPartialUpdateConfigFromFile(t *testing.T) {
 	require.NoError(t, os.Setenv("LEAKTK_PATTERN_SERVER_AUTH_TOKEN", "x"))
 	require.NoError(t, os.Unsetenv("LEAKTK_PATTERN_SERVER_URL"))
-	cfg, err := LoadConfigFromFile("../../testdata/partial-config.toml")
+	cfg, err := UpdateConfigFromFile(DefaultConfig(), "../../testdata/partial-config.toml")
 
 	if err != nil {
 		// If there are config issues fail fast
-		assert.FailNowf(t, "Failed to load config file", "Load returned an error %s", err)
+		assert.FailNowf(t, "Failed to load config file", "Update returned an error %s", err)
 	}
 
 	// Check values
@@ -62,7 +62,7 @@ func TestPartialLoadConfigFromFile(t *testing.T) {
 
 func TestLocateAndLoadConfig(t *testing.T) {
 	// Set the env var here to prove the provided path overrides it
-	localConfigDir = "../../testdata/locator-test/leaktk"
+	userConfigDir = "../../testdata/locator-test/leaktk"
 
 	t.Run("LoadFromFile", func(t *testing.T) {
 		require.NoError(t, os.Setenv("LEAKTK_CONFIG_PATH", "../../testdata/locator-test/leaktk/config.2.toml"))

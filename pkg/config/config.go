@@ -18,13 +18,11 @@ import (
 // GitConfigGlobalOverride helps normalize things in the scanner
 // it is a variable here so other code can check if it's been set
 const GitConfigGlobalOverride = "/dev/null"
-const nixGlobalConfigDir = "/etc/leaktk"
+const nixSystemConfigDir = "/etc/leaktk"
 
-var localConfigDir string
+var userConfigDir = filepath.Join(xdg.ConfigHome, "leaktk")
 
 func init() {
-	localConfigDir = filepath.Join(xdg.ConfigHome, "leaktk")
-
 	// The environment variables for the scan environment
 	env := map[string]string{
 		"GIT_CONFIG_GLOBAL":      GitConfigGlobalOverride,
@@ -179,12 +177,12 @@ func loadPatternServerAuthToken() string {
 		return authTokenFromEnvVar
 	}
 
-	path := patternServerAuthTokenPath(localConfigDir)
+	path := patternServerAuthTokenPath(userConfigDir)
 	if fs.FileExists(path) {
 		return loadPatternServerAuthTokenFromFile(path)
 	}
 
-	path = patternServerAuthTokenPath(nixGlobalConfigDir)
+	path = patternServerAuthTokenPath(nixSystemConfigDir)
 	if fs.FileExists(path) {
 		return loadPatternServerAuthTokenFromFile(path)
 	}
@@ -196,12 +194,7 @@ func stringToBool(value string, defaultValue bool) bool {
 	if len(value) == 0 {
 		return defaultValue
 	}
-
-	if value == "true" || value == "1" {
-		return true
-	}
-
-	return false
+	return value == "true" || value == "1"
 }
 
 // DefaultConfig provides a fully usable instance of Config with default
@@ -240,60 +233,58 @@ func DefaultConfig() *Config {
 	}
 }
 
-// LoadConfigFromFile provides a config object with default values set plus any
-// custom values pulled in from the config file
-func LoadConfigFromFile(path string) (*Config, error) {
+// UpdateConfigFromFile accepts a config object and updates it with settings
+// found in the file at the provided path.
+func UpdateConfigFromFile(cfg *Config, path string) (*Config, error) {
 	path = filepath.Clean(path)
 	logger.Debug("loading config: path=%q", path)
-	cfg := DefaultConfig()
 	_, err := toml.DecodeFile(path, cfg)
-
 	if err != nil {
 		return nil, err
 	}
-
 	return setMissingValues(cfg), err
 }
 
 // LocateAndLoadConfig looks through the possible places for the config
 // favoring the provided path if it is set
-func LocateAndLoadConfig(path string) (*Config, error) {
-	if len(path) > 0 {
-		return LoadConfigFromFile(path)
+func LocateAndLoadConfig(userConfigPath string) (*Config, error) {
+	var err error
+	cfg := setMissingValues(DefaultConfig())
+
+	// Update the default config with the system config
+	if !stringToBool(os.Getenv("LEAKTK_CONFIG_NOSYSTEM"), false) {
+		systemConfigPath := filepath.Join(nixSystemConfigDir, "config.toml")
+		if fs.FileExists(systemConfigPath) {
+			cfg, err = UpdateConfigFromFile(cfg, systemConfigPath)
+			if err != nil {
+				return cfg, err
+			}
+		}
 	}
 
-	if path = os.Getenv("LEAKTK_CONFIG_PATH"); len(path) > 0 {
-		return LoadConfigFromFile(path)
+	// Update the default+system config with user config
+	if len(userConfigPath) > 0 {
+		return UpdateConfigFromFile(cfg, userConfigPath)
+	}
+	if userConfigPath = os.Getenv("LEAKTK_CONFIG_PATH"); len(userConfigPath) > 0 {
+		return UpdateConfigFromFile(cfg, userConfigPath)
+	}
+	if userConfigPath = filepath.Join(userConfigDir, "config.toml"); fs.FileExists(userConfigPath) {
+		return UpdateConfigFromFile(cfg, userConfigPath)
 	}
 
-	if len(path) > 0 {
-		logger.Debug("loading config: path=%q", path)
-	} else {
-		logger.Debug("using default config")
-	}
-
-	path = filepath.Join(localConfigDir, "config.toml")
-	if fs.FileExists(path) {
-		return LoadConfigFromFile(path)
-	}
-
-	path = filepath.Join(nixGlobalConfigDir, "config.toml")
-	if fs.FileExists(path) {
-		return LoadConfigFromFile(path)
-	}
-
-	return setMissingValues(DefaultConfig()), nil
+	return cfg, nil
 }
 
 // SavePatternServerAuthToken saves the token in the path where it should go
 func SavePatternServerAuthToken(authToken string) error {
-	if !fs.PathExists(localConfigDir) {
-		if err := os.MkdirAll(localConfigDir, 0700); err != nil {
-			return fmt.Errorf("could not create dir: path=%q", localConfigDir)
+	if !fs.PathExists(userConfigDir) {
+		if err := os.MkdirAll(userConfigDir, 0700); err != nil {
+			return fmt.Errorf("could not create dir: path=%q", userConfigDir)
 		}
 	}
 
-	path := patternServerAuthTokenPath(localConfigDir)
+	path := patternServerAuthTokenPath(userConfigDir)
 	if err := os.WriteFile(path, []byte(strings.TrimSpace(authToken)), 0600); err != nil {
 		return err
 	}
@@ -303,7 +294,7 @@ func SavePatternServerAuthToken(authToken string) error {
 
 // RemovePatternServerAuthToken deletes the auth token
 func RemovePatternServerAuthToken() error {
-	path := patternServerAuthTokenPath(localConfigDir)
+	path := patternServerAuthTokenPath(userConfigDir)
 
 	if fs.FileExists(path) {
 		if err := os.Remove(path); err != nil {
