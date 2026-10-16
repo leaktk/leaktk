@@ -66,3 +66,10 @@ export LEAKTK_PATTERN_SERVER_AUTH_TOKEN="<YOUR_AUTH_TOKEN>"
 # Run the scanner
 leaktk scan ...
 ```
+
+## Refreshing patterns
+
+Sometimes you may want to refresh your local patterns cache before they expire
+on their own. To do this run `leaktk refresh`. This will fetch fresh patterns
+from the currently configured pattern server. Given that this fetch is manual,
+this will still fetch patterns even if `LEAKTK_SCANNER_AUTOFETCH` is disabled.

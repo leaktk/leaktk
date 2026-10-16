@@ -567,6 +567,7 @@ func rootCommand() *cobra.Command {
 	flags.StringP("format", "f", "", "Change the output format [json, human, csv, toml, yaml] (default \"json\")")
 
 	rootCommand.AddCommand(scanCommand())
+	rootCommand.AddCommand(refreshCommand())
 	rootCommand.AddCommand(installCommand())
 	rootCommand.AddCommand(loginCommand())
 	rootCommand.AddCommand(logoutCommand())
