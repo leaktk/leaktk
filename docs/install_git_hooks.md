@@ -51,7 +51,7 @@ we get questions about different methods.
 
 ### Git Before v2.54.0
 
-> **🗒️ NOTE: Only allows one hook in a repositories per Git event**
+> **🗒️ NOTE: Only allows one hook in a repository per Git event**
 >
 > Before v2.54.0, Git did not support
 > [config-based git hooks](https://github.blog/open-source/git/highlights-from-git-2-54/#h-config-based-hooks),
