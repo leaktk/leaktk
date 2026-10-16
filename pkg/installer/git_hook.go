@@ -25,6 +25,8 @@ import (
 
 const systemGitTemplateDir = "/usr/share/git-core/templates"
 
+var minGitConfigHookVer = git.VersionInfo{X: 2, Y: 54, Z: 0}
+
 // GitHookOpts contains flags and options to pass to the git hook installer
 type GitHookOpts struct {
 	// Hook is the hook to install (e.g. hooks.Hook("git.pre-commit"))
@@ -35,10 +37,14 @@ type GitHookOpts struct {
 	Recursive bool
 	// Force replaces existing hooks instead of skipping them
 	Force bool
+	// SystemConfig installs the hook in /etc/gitconfig for git >= 2.54.0 config based hooks
+	SystemConfig bool
 	// SystemTemplateDir installs the hook in /usr/share/git-core/templates
 	SystemTemplateDir bool
+	// UserConfig installs the hook in $XDG_CONFIG_HOME/git/config or ~/.gitconfig for git >= 2.54.0 config based hooks
+	UserConfig bool
 	// UserTemplateDir installs the hook in the user's git init.templateDir
-	// (one is created at ~/.config/git/template if not already configured)
+	// (one is created at $XDG_CONFIG_HOME/git/template if not already configured)
 	UserTemplateDir bool
 	// Stdout prints the hook template to stdout. This can be useful for
 	// cases where you need to manually generate and install the hook
@@ -101,8 +107,8 @@ func findGitDirs(ctx context.Context, root string) ([]string, error) {
 // If init.templateDir is not configured, it creates a default directory at
 // $XDG_CONFIG_HOME/git/template and sets init.templateDir to that path.
 func gitUserTemplateDir(ctx context.Context) (string, error) {
-	// NOTE: GetGlobalConfigPath handles ~ expansion for paths in git configs
-	templateDir := git.GetGlobalConfigPath(ctx, "init.templateDir")
+	// NOTE: --type=path handles ~ expansion for paths in git configs
+	templateDir := git.GetConfig(ctx, "init.templateDir", "--global", "--type=path")
 	if len(templateDir) > 1 {
 		return templateDir, nil
 	}
@@ -112,7 +118,7 @@ func gitUserTemplateDir(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("could not create user git template dir: %w path=%q", err, templateDir)
 	}
 
-	if err := git.SetGlobalConfigPath(ctx, "init.templateDir", templateDir); err != nil {
+	if err := git.SetConfig(ctx, "init.templateDir", templateDir, "--global", "--type=path"); err != nil {
 		return "", fmt.Errorf("could not set user git template dir: %w path=%q", err, templateDir)
 	}
 
@@ -132,8 +138,33 @@ func gitHookScript(hook hooks.Hook) string {
 	)
 }
 
-// gitHookInstall installs a git hook script into installDir (the .git directory).
-func gitHookInstall(hook hooks.Hook, installDir string, force bool, perm os.FileMode) error {
+// gitHookInstallConfig installs a git hook using the git >= 2.54 config based hook feature
+func gitHookInstallConfig(ctx context.Context, hook hooks.Hook, scope git.Scope) error {
+	section := "hook.leaktk." + string(hook)
+	fieldname := section + ".command"
+	hookcmd := "leaktk hook " + string(hook)
+	if err := git.SetConfig(ctx, fieldname, hookcmd, scope.Flag()); err != nil {
+		return fmt.Errorf(
+			"could not set git config-based hook command: name=%q value=%q scope=%q",
+			fieldname, hookcmd, scope,
+		)
+	}
+
+	fieldname = section + ".event"
+	hookevent := hook.Event()
+	if err := git.SetConfig(ctx, fieldname, hookevent, scope.Flag()); err != nil {
+		return fmt.Errorf(
+			"could not set git config-based hook command: name=%q value=%q scope=%q",
+			fieldname, hookevent, scope,
+		)
+	}
+
+	logger.Info("git hook installed: event=%q command=%q scope=%q", hookevent, hookcmd, scope)
+	return nil
+}
+
+// gitHookInstallScript installs a git hook script into installDir (the .git directory).
+func gitHookInstallScript(hook hooks.Hook, installDir string, force bool, perm os.FileMode) error {
 	hooksDir := filepath.Join(installDir, "hooks")
 	hookPath := filepath.Join(hooksDir, hook.Event())
 
@@ -162,6 +193,33 @@ func GitHookInstall(ctx context.Context, cfg *config.Config, opts GitHookOpts) e
 
 	hookname := opts.Hook.Name()
 	hadErrors := false
+	if opts.SystemConfig || opts.UserConfig {
+		v := git.Version(ctx)
+		logger.Debug(
+			"comparing git min supported config hook version to current: min=%q current=%q",
+			minGitConfigHookVer, v,
+		)
+		if v.Compare(&minGitConfigHookVer) < 0 {
+			return fmt.Errorf(
+				"git version does not support config-based hooks: min_version=%q current_version=%q",
+				minGitConfigHookVer, v,
+			)
+		}
+	}
+
+	if opts.UserConfig {
+		if err := gitHookInstallConfig(ctx, opts.Hook, git.ScopeGlobal); err != nil {
+			logger.Info("could not install user config-based hook: %v", err)
+			hadErrors = true
+		}
+	}
+
+	if opts.SystemConfig {
+		if err := gitHookInstallConfig(ctx, opts.Hook, git.ScopeSystem); err != nil {
+			logger.Info("could not install system config-based hook: %v", err)
+			hadErrors = true
+		}
+	}
 
 	if opts.Path != "" {
 		if !fs.PathExists(opts.Path) {
@@ -188,7 +246,7 @@ func GitHookInstall(ctx context.Context, cfg *config.Config, opts GitHookOpts) e
 		}
 
 		for _, gitDir := range gitDirs {
-			if err := gitHookInstall(opts.Hook, gitDir, opts.Force, 0750); err != nil {
+			if err := gitHookInstallScript(opts.Hook, gitDir, opts.Force, 0750); err != nil {
 				logger.Info("could not install hook: %v hookname=%q path=%q", err, hookname, gitDir)
 				hadErrors = true
 			}
@@ -201,7 +259,7 @@ func GitHookInstall(ctx context.Context, cfg *config.Config, opts GitHookOpts) e
 			logger.Error("could not resolve user template dir: %v hookname=%s", err, hookname)
 			hadErrors = true
 		} else {
-			if err := gitHookInstall(opts.Hook, userGitTemplateDir, opts.Force, 0750); err != nil {
+			if err := gitHookInstallScript(opts.Hook, userGitTemplateDir, opts.Force, 0750); err != nil {
 				logger.Info(
 					"could not install hook in user git template dir: %v hookname=%q path=%q",
 					err, hookname, userGitTemplateDir,
@@ -212,7 +270,7 @@ func GitHookInstall(ctx context.Context, cfg *config.Config, opts GitHookOpts) e
 	}
 
 	if opts.SystemTemplateDir {
-		if err := gitHookInstall(opts.Hook, systemGitTemplateDir, opts.Force, 0755); err != nil {
+		if err := gitHookInstallScript(opts.Hook, systemGitTemplateDir, opts.Force, 0755); err != nil {
 			logger.Info(
 				"could not install hook in system git template dir: %v hookname=%q path=%q",
 				err, hookname, systemGitTemplateDir,

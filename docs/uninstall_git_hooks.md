@@ -19,6 +19,10 @@ For this guide we're going to use the Git pre-commit hook, but the process is si
 other hooks.
 
 1. Choose the hook you want to uninstall (in our case it's `git.pre-commit`).
+1. Uninstall config-based hooks if present (only applies to Git v2.54.0 and higher):
+   ```
+   git config remove-section --global hook.leaktk.git.pre-commit
+   ```
 1. Change directories in your terminal to the directory containing the Git repository or multiple repositories containing the hook.
 1. Run this command to remove the hook from all repositories under your current directory:
    ```sh

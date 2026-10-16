@@ -47,6 +47,8 @@ func gitHookInstallCommand(hook hooks.Hook) *cobra.Command {
 		Run:   runGitHookInstall,
 	}
 	flags := cmd.Flags()
+	flags.Bool("user-config", false, fmt.Sprintf("Install the %s hook in ~/.gitconfig or $XDG_CONFIG_HOME/git/config (requires git >= 2.54)", hookname))
+	flags.Bool("system-config", false, fmt.Sprintf("Install the %s hook in $(prefix)/etc/gitconfig (requires git >= 2.54)", hookname))
 	flags.Bool("user-template-dir", false, fmt.Sprintf("Install the %s hook in your git init.templateDir (one is created if not already defined)", hookname))
 	flags.Bool("system-template-dir", false, fmt.Sprintf("Install the %s hook in /usr/share/git-core/templates", hookname))
 	flags.String("path", "", fmt.Sprintf("Install the %s hook in all git repositories under this path (unless --no-recursive is set)", hookname))
@@ -74,6 +76,8 @@ func runGitHookInstall(cmd *cobra.Command, args []string) {
 	flags := cmd.Flags()
 	opts := installer.GitHookOpts{
 		Hook:              hooks.Hook(cmd.Use),
+		UserConfig:        mustGetBool(flags, "user-config"),
+		SystemConfig:      mustGetBool(flags, "system-config"),
 		UserTemplateDir:   mustGetBool(flags, "user-template-dir"),
 		SystemTemplateDir: mustGetBool(flags, "system-template-dir"),
 		Path:              mustGetString(flags, "path"),
@@ -82,8 +86,8 @@ func runGitHookInstall(cmd *cobra.Command, args []string) {
 		Stdout:            mustGetBool(flags, "stdout"),
 	}
 
-	if len(opts.Path) == 0 && !opts.UserTemplateDir && !opts.SystemTemplateDir && !opts.Stdout {
-		logger.Fatal("install requires at least one of: --path, --user-template-dir, --system-template-dir, --stdout")
+	if len(opts.Path) == 0 && !opts.UserConfig && !opts.SystemConfig && !opts.UserTemplateDir && !opts.SystemTemplateDir && !opts.Stdout {
+		logger.Fatal("install requires at least one of: --path, --user-config, --system-config, --user-template-dir, --system-template-dir, --stdout")
 	}
 
 	if err := installer.GitHookInstall(cmd.Context(), cfg, opts); err != nil {

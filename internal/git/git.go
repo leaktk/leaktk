@@ -5,12 +5,44 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/bits"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
+
+type VersionInfo struct {
+	X int
+	Y int
+	Z int
+}
+
+func (v VersionInfo) String() string {
+	return fmt.Sprintf("%d.%d.%d", v.X, v.Y, v.Z)
+}
+
+func (v VersionInfo) Compare(o *VersionInfo) int {
+	x := v.X - o.X
+	y := v.Y - o.Y
+	z := v.Z - o.Z
+	shift := bits.UintSize - 1
+
+	if x != 0 {
+		return int(uint(-x)>>shift) - int(uint(x)>>shift) //#nosec G115
+	}
+	if y != 0 {
+		return int(uint(-y)>>shift) - int(uint(y)>>shift) //#nosec G115
+	}
+	if z != 0 {
+		return int(uint(-z)>>shift) - int(uint(z)>>shift) //#nosec G115
+	}
+
+	return 0
+}
 
 // GitRepoInfo is a collection of facts about a repo being scanned.
 // See `man 7 gitglossary` for more information about the terms.
@@ -22,6 +54,8 @@ type RepoInfo struct {
 	// The working tree for the repo (a temp one is created for bare repos)
 	WorkingTreePath string
 }
+
+var versionRe = regexp.MustCompile(`^git\sversion\s(\d+)\.(\d+)\.(\d+)`)
 
 func GetRepoInfo(ctx context.Context, path string) (RepoInfo, error) {
 	info := RepoInfo{WorkingTreePath: path}
@@ -84,9 +118,8 @@ func RemoteRefExists(ctx context.Context, repository, ref string) bool {
 	return RunContext(ctx, "ls-remote", "--exit-code", "--quiet", repository, ref) == nil
 }
 
-// GetGlobalConfigPath gets a value from the global config and applies a --type=path flag
-// to handle normalizing it
-func GetGlobalConfigPath(ctx context.Context, name string) string {
+// GetConfig gets a value from the config and applies provided flags
+func GetConfig(ctx context.Context, name string, flags ...string) string {
 	// Handle undoing the override for this operation
 	if os.Getenv("GIT_CONFIG_GLOBAL") == config.GitConfigGlobalOverride {
 		if err := os.Unsetenv("GIT_CONFIG_GLOBAL"); err != nil {
@@ -94,8 +127,12 @@ func GetGlobalConfigPath(ctx context.Context, name string) string {
 		}
 	}
 
-	logger.Debug("getting global config value: name=%q", name)
-	cmd := CommandContext(ctx, "config", "--global", "--type=path", name)
+	logger.Debug("getting global config value: name=%q flags=%q", name, strings.Join(flags, " "))
+	args := make([]string, 0, len(flags)+2)
+	args = append(args, "config")
+	args = append(args, flags...)
+	args = append(args, name)
+	cmd := CommandContext(ctx, args...)
 
 	logger.Debug("executing: %s", cmd)
 	output, err := cmd.Output()
@@ -115,9 +152,8 @@ func GetGlobalConfigPath(ctx context.Context, name string) string {
 	return strings.TrimSpace(string(output))
 }
 
-// SetGlobalConfigPath sets a value in the global config and applies a --type=path flag
-// to handle normalizing it
-func SetGlobalConfigPath(ctx context.Context, name, value string) error {
+// SetConfig sets a value in the config
+func SetConfig(ctx context.Context, name, value string, flags ...string) error {
 	// Handle undoing the override for this operation
 	if os.Getenv("GIT_CONFIG_GLOBAL") == config.GitConfigGlobalOverride {
 		if err := os.Unsetenv("GIT_CONFIG_GLOBAL"); err != nil {
@@ -125,8 +161,15 @@ func SetGlobalConfigPath(ctx context.Context, name, value string) error {
 		}
 	}
 
-	logger.Debug("setting global config value: name=%q value=%q", name, value)
-	if err := RunContext(ctx, "config", "--global", "--type=path", name, value); err != nil {
+	logger.Debug("setting config value: name=%q value=%q flags=%q", name, value, strings.Join(flags, " "))
+
+	args := make([]string, 0, len(flags)+3)
+	args = append(args, "config")
+	args = append(args, flags...)
+	args = append(args, name)
+	args = append(args, value)
+
+	if err := RunContext(ctx, args...); err != nil {
 		if err := os.Setenv("GIT_CONFIG_GLOBAL", config.GitConfigGlobalOverride); err != nil {
 			logger.Fatal("Unable to properly configure git env: %v", err)
 		}
@@ -137,4 +180,24 @@ func SetGlobalConfigPath(ctx context.Context, name, value string) error {
 		logger.Fatal("Unable to properly configure git env: %v", err)
 	}
 	return nil
+}
+
+func Version(ctx context.Context) VersionInfo {
+	v := VersionInfo{}
+	cmd := CommandContext(ctx, "version")
+	logger.Debug("executing: %s", cmd)
+	rawVersion, err := cmd.Output()
+	if err != nil {
+		logger.Error("could not get git version: %v", err)
+		return v
+	}
+
+	m := versionRe.FindSubmatch(rawVersion)
+	if len(m) != 0 {
+		v.X, _ = strconv.Atoi(string(m[1]))
+		v.Y, _ = strconv.Atoi(string(m[2]))
+		v.Z, _ = strconv.Atoi(string(m[3]))
+	}
+
+	return v
 }

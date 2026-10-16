@@ -15,13 +15,54 @@ already have it installed, see the main [installation guide](install.md).
 
 ## Steps
 
+> **🗒️ NOTE: Alternate install methods are at the end**
+>
+> Some teams use Git hook managers like the one provided by pre-commit.com.
+> There is a section at the end for those.
+
 For this guide we're going to use the Git pre-commit hook, but the process is
 similar for the other hooks.
 
-> **🗒️ NOTE: Alternate install methods are at the end**
+1. Choose the hook you want to install (in our case it's `git.pre-commit`).
+1. Decide where you want to install it (this example will enable it for all of
+   the user's existing and new repositories without replacing existing hooks).
+1. Run the install command with the proper flags set:
+   ```sh
+   leaktk install hook git.pre-commit --user-config
+   ```
+
+You should see output similar to this:
+
+```
+[INFO] git hook installed: event="pre-commit" command="leaktk hook git.pre-commit" scope="global"
+```
+
+If you get an error like the one below, follow the steps in
+[Git Before v2.54.0](#git-before-v2540) instead.
+
+```
+[CRITICAL] could not install git hook: git version does not support config-based hooks: min_version="2.54.0" current_version="2.52.0" hookname="git.pre-commit"
+```
+
+## Alternate Install Methods
+
+We won't be able to list every method here, but we plan to add more here as
+we get questions about different methods.
+
+### Git Before v2.54.0
+
+> **🗒️ NOTE: Only allows one hook in a repositories per Git event**
 >
-> Some teams use git hook managers like the one provided by pre-commit.com.
-> There is a section at the end for those.
+> Before v2.54.0, Git did not support
+> [config-based git hooks](https://github.blog/open-source/git/highlights-from-git-2-54/#h-config-based-hooks),
+> and without using a hook manager, could only run one hook per Git event
+> (i.e. pre-commit, commit-msg, etc). Newer versions of Git support
+> config-based hooks that allow multiple hooks to be installed at the repository, user,
+> or system levels at the same time. Steps for using config-based hooks can be
+> found [above](#steps).
+
+This method covers how to install the hook for every repository under `"${HOME}"` and
+for new clones for Git before v2.54.0.
 
 1. Choose the hook you want to install (in our case it's `git.pre-commit`).
 1. Decide where you want to install it (this example will assume all Git
@@ -52,11 +93,6 @@ command was unable to access or identify as a Git repository:
 LEAKTK_LOGGER_LEVEL=DEBUG leaktk install hook git.pre-commit --force --user-template-dir --path "${HOME}"
 ```
 
-## Alternate Install Methods
-
-We won't be able to list every method here, but we plan to add more here as
-we get questions about different methods.
-
 ### .pre-commit-config.yaml
 
 There is a popular git hook manager called [pre-commit](https://pre-commit.com)
@@ -71,9 +107,9 @@ that allows you to define hooks in the Git repository itself.
        # We recommend pinning by commit. Run this command to get the latest
        # revision:
        #
-       #   git ls-remote https://github.com/leaktk/leaktk.git refs/tags/v*  | tail -n 1
+       #   git ls-remote https://github.com/leaktk/leaktk.git refs/tags/v*
        #
-       rev: f9468ba58c786f53e5e8c093f81925e10bfaf67e
+       rev: 3a0b3201b0524d5f46dcfc8d8907b66cea7f7c8f
        hooks:
          - id: leaktk.git.pre-commit
    ```
