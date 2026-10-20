@@ -21,3 +21,11 @@ func mustGetString(flags *pflag.FlagSet, name string) string {
 	}
 	return value
 }
+
+func mustGetInt(flags *pflag.FlagSet, name string) int {
+	value, err := flags.GetInt(name)
+	if err != nil {
+		logger.Fatal("unable to get flag: name=%q", name)
+	}
+	return value
+}

@@ -88,19 +88,33 @@ func logoutCommand() *cobra.Command {
 }
 
 func runScan(cmd *cobra.Command, args []string) {
-	leakExitCode, err := cmd.Flags().GetInt("leak-exit-code")
-	if err != nil {
-		logger.Fatal("invalid leak-exit-code: %v", err)
-	}
+	flags := cmd.Flags()
 
-	grepPattern, err := cmd.Flags().GetString("grep")
-	if err != nil {
-		logger.Fatal("invalid grep: %v", err)
-	}
+	leakExitCode := mustGetInt(flags, "leak-exit-code")
+	grepPattern := mustGetString(flags, "grep")
+	gitleaksConfig := mustGetString(flags, "gitleaks-config")
+	addExcludeTags := mustGetString(flags, "add-exclude-tags")
+	setExcludeTags := mustGetString(flags, "set-exclude-tags")
 
-	gitleaksConfig, err := cmd.Flags().GetString("gitleaks-config")
-	if err != nil {
-		logger.Fatal("invalid gitleaks-config: %v", err.Error())
+	if len(addExcludeTags) > 0 {
+		if len(setExcludeTags) > 0 {
+			logger.Fatal("cannot use add-exclude-tags when the set-exclude-tags flag is set")
+		}
+		for _, tag := range strings.Split(addExcludeTags, ",") {
+			tag = strings.TrimSpace(tag)
+			if len(tag) > 0 {
+				cfg.Scanner.Patterns.ExcludeTags = append(cfg.Scanner.Patterns.ExcludeTags, tag)
+			}
+		}
+	} else if len(setExcludeTags) > 0 {
+		var excludeTags []string
+		for _, tag := range strings.Split(setExcludeTags, ",") {
+			tag = strings.TrimSpace(tag)
+			if len(tag) > 0 {
+				excludeTags = append(excludeTags, tag)
+			}
+		}
+		cfg.Scanner.Patterns.ExcludeTags = excludeTags
 	}
 
 	if len(grepPattern) != 0 {
@@ -294,6 +308,8 @@ func scanCommand() *cobra.Command {
 	flags.StringP("options", "o", "{}", "Provide scan specific options formatted as JSON")
 	flags.Int("leak-exit-code", 0, "Exit with this code when leaks are detected (default 0)")
 	flags.String("gitleaks-config", "", "Load a custom gitleaks config")
+	flags.String("add-exclude-tags", "", "Comma separated list of tags to *append* the list of tags to exclude.")
+	flags.String("set-exclude-tags", "", "Comma separated list of tags to *replace* the list of tags to exclude.")
 	flags.StringP("grep", "g", "", "Scan using ad-hoc regex instead of the configured patterns")
 
 	// Ensure incompatible flags can't be combined

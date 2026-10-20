@@ -9,10 +9,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
-	betterleaksconfig "github.com/betterleaks/betterleaks/config"
+	blconfig "github.com/betterleaks/betterleaks/config"
 
 	"github.com/leaktk/leaktk/internal/betterleaks"
 	"github.com/leaktk/leaktk/internal/fs"
@@ -26,7 +27,7 @@ type Patterns struct {
 	client             *http.Client
 	config             *config.Patterns
 	gitleaksConfigHash [32]byte
-	gitleaksConfig     *betterleaksconfig.Config
+	gitleaksConfig     *blconfig.Config
 	mutex              sync.Mutex
 }
 
@@ -106,13 +107,36 @@ func (p *Patterns) Refresh(ctx context.Context) error {
 	return p.refreshGitleaks(ctx)
 }
 
+func (p *Patterns) parseGitleaksConfig(rawConfig string) (*blconfig.Config, error) {
+	c, err := betterleaks.ParseConfig(rawConfig)
+
+	if err != nil {
+		return p.gitleaksConfig, err
+	}
+
+	excludeTags := p.config.ExcludeTags
+	if len(excludeTags) > 0 {
+		for id, rule := range c.Rules {
+			for _, excludeTag := range excludeTags {
+				if slices.Contains(rule.Tags, excludeTag) {
+					logger.Debug("excluding rule by tag: rule_id=%q exclude_tag=%q", id, excludeTag)
+					delete(c.Rules, id)
+					break
+				}
+			}
+		}
+	}
+
+	return c, err
+}
+
 func (p *Patterns) refreshGitleaks(ctx context.Context) error {
 	rawConfig, err := p.fetchGitleaksConfig(ctx)
 	if err != nil {
 		return err
 	}
 
-	p.gitleaksConfig, err = betterleaks.ParseConfig(rawConfig)
+	p.gitleaksConfig, err = p.parseGitleaksConfig(rawConfig)
 	if err != nil {
 		logger.Debug("fetched config:\n%s", rawConfig)
 		return fmt.Errorf("could not parse config: error=%q", err)
@@ -169,7 +193,7 @@ func (p *Patterns) refreshGitleaks(ctx context.Context) error {
 }
 
 // Gitleaks returns a Gitleaks config object if it's able to
-func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, error) {
+func (p *Patterns) Gitleaks(ctx context.Context) (*blconfig.Config, error) {
 	// Lock since this updates the value of p.gitleaksConfig on the fly
 	// and updates files on the filesystem
 	p.mutex.Lock()
@@ -191,7 +215,7 @@ func (p *Patterns) Gitleaks(ctx context.Context) (*betterleaksconfig.Config, err
 			return p.gitleaksConfig, err
 		}
 
-		p.gitleaksConfig, err = betterleaks.ParseConfig(string(rawConfig))
+		p.gitleaksConfig, err = p.parseGitleaksConfig(string(rawConfig))
 		if err != nil {
 			logger.Debug("loaded config:\n%s\n", rawConfig)
 

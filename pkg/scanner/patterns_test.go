@@ -25,22 +25,27 @@ paths = ['''testdata''']
 id = "test-rule"
 description = "test-rule"
 regex = '''test-rule'''
+
+[[rules]]
+id = "test-exclude-rule"
+description = "test-rule"
+regex = '''test-rule'''
+tags = ['test:exclude']
 `
 
 func TestPatternsFetchGitleaksConfig(t *testing.T) {
 	ctx := context.Background()
+	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "GET", r.Method)
+		assert.Equal(t, "/patterns/gitleaks/x.y.z", r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+		_, err := io.WriteString(w, mockConfig)
+		assert.NoError(t, err)
+	}))
+	ts.Start()
+	defer ts.Close()
 
 	t.Run("Success", func(t *testing.T) {
-		ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "GET", r.Method)
-			assert.Equal(t, "/patterns/gitleaks/x.y.z", r.URL.Path)
-			w.WriteHeader(http.StatusOK)
-			_, err := io.WriteString(w, mockConfig)
-			assert.NoError(t, err)
-		}))
-		ts.Start()
-		defer ts.Close()
-
 		cfg := config.DefaultConfig()
 		cfg.Scanner.Patterns.Server.URL = ts.URL
 		cfg.Scanner.Patterns.Gitleaks.Version = "x.y.z"
@@ -51,6 +56,27 @@ func TestPatternsFetchGitleaksConfig(t *testing.T) {
 		rawConfig, err := p.fetchGitleaksConfig(ctx)
 		require.NoError(t, err)
 		assert.Contains(t, rawConfig, "test-rule")
+	})
+
+	t.Run("Filter", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		cfg := config.DefaultConfig()
+		cfg.Scanner.Patterns.Server.URL = ts.URL
+		cfg.Scanner.Patterns.Gitleaks.Version = "x.y.z"
+		cfg.Scanner.Patterns.Gitleaks.ConfigPath = filepath.Join(tempDir, "gitleaks.toml")
+
+		client := httpclient.NewClient()
+		p := NewPatterns(&cfg.Scanner.Patterns, client)
+		c, err := p.Gitleaks(t.Context())
+		require.NoError(t, err)
+		assert.Len(t, c.Rules, 2)
+
+		cfg.Scanner.Patterns.ExcludeTags = []string{"test:exclude"}
+		p = NewPatterns(&cfg.Scanner.Patterns, client)
+		c, err = p.Gitleaks(t.Context())
+		require.NoError(t, err)
+		assert.Len(t, c.Rules, 1)
 	})
 
 	t.Run("InvalidURL", func(t *testing.T) {
