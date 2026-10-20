@@ -25,15 +25,47 @@ setting environment variables.
 ### Login
 
 If your custom pattern server requires authentication, you can log in using the
-`leaktk login` command. This will prompt you for an authentication token and
-store it securely on your local machine.
+`leaktk login` command. There are several ways to authenticate:
 
 ```sh
+# Browser OAuth login
+leaktk login --web
+
+# Browser login with a specific server
+leaktk login https://patterns.example.com --web
+
+# Provide a token directly
+leaktk login --token=<YOUR_AUTH_TOKEN>
+
+# Still browser
 leaktk login
 ```
 
+With `--web`, the CLI will check the server for OAuth support, open your
+browser for authentication, and store the resulting token. If a browser 
+can't be opened, the URL will be printed so you can open it manually.
+
 Alternatively, you can provide the token directly via an environment variable or
 in the configuration file, as shown in the examples below.
+
+### Autologin
+
+If `autologin` is enabled in the config (or via the `LEAKTK_AUTOLOGIN` env
+var), the scanner will automatically attempt a browser login when a custom
+pattern server returns a 401. This is useful for endpoints where tokens expire
+periodically. It defaults to `false` to avoid impacting hooks and other
+not interactive use cases.
+
+```toml
+[scanner.patterns]
+autologin = true
+```
+
+Or using environment variable:
+
+```sh
+export LEAKTK_AUTOLOGIN=true
+```
 
 ### Configuration Examples
 
