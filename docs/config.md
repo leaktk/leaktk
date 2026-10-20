@@ -91,6 +91,13 @@ expired_after = 604800 # 7 days
 # How long until the scanner tries to fetch patterns if autofetch is allowed
 refresh_after = 43200 # 12 hours
 
+# Exclude rules with these tags. The default is ['grp:test'] (i.e. testing rules)
+# You can also use the --add-exclude-tags to append to this list or
+# --set-exclude-tags to replace the list from the command line.
+exclude_tags = [
+  'grp:test',
+]
+
 # Configure the gitleaks patterns. These generally don't need to be tweaked
 # unless you have a special use case
 # [scanner.patterns.gitleaks]

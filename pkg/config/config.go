@@ -104,6 +104,7 @@ type (
 		Gitleaks     Gitleaks      `toml:"gitleaks"`
 		RefreshAfter int           `toml:"refresh_after"`
 		Server       PatternServer `toml:"server"`
+		ExcludeTags  []string      `toml:"exclude_tags"`
 	}
 
 	// Gitleaks holds version and config information for the Betterleaks scanner
@@ -229,6 +230,10 @@ func DefaultConfig() *Config {
 				Autofetch:    true,
 				ExpiredAfter: 60 * 60 * 12 * 14, // 7 days
 				RefreshAfter: 60 * 60 * 12,      // 12 hours
+				ExcludeTags: []string{
+					// Don't include test rules by default
+					"grp:test",
+				},
 				Gitleaks: Gitleaks{
 					Version: "8.27.0",
 				},
