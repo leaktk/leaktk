@@ -42,7 +42,7 @@ leaktk login
 ```
 
 With `--web`, the CLI will check the server for OAuth support, open your
-browser for authentication, and store the resulting token. If a browser 
+browser for authentication, and store the resulting token. If a browser
 can't be opened, the URL will be printed so you can open it manually.
 
 Alternatively, you can provide the token directly via an environment variable or
