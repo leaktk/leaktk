@@ -29,7 +29,7 @@ staticClients:
 enablePasswordDB: true
 staticPasswords:
 - email: admin@example.com
-  hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+  hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W" # notsecret
   username: admin
 """
 
@@ -75,7 +75,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(b"authenticated\n")
 
     def log_message(self, format, *args):
-        print(f"[pattern-server] {args[0]}", file=sys.stderr)
+        print(f"[leaktk-server] {args[0]}", file=sys.stderr)
 
 
 def wait_for_dex():
@@ -121,7 +121,7 @@ def main():
     wait_for_dex()
 
     server = HTTPServer((SERVER_HOST, SERVER_PORT), Handler)
-    print(f"mock pattern server: http://{SERVER_HOST}:{SERVER_PORT}", file=sys.stderr)
+    print(f"mock LeakTK server: http://{SERVER_HOST}:{SERVER_PORT}", file=sys.stderr)
     print(f"dex issuer:          {DEX_ISSUER}", file=sys.stderr)
     print(f"login:               admin@example.com / password", file=sys.stderr)
 

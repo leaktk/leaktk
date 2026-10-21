@@ -97,12 +97,12 @@ type (
 
 	// Patterns provides configuration for managing pattern updates
 	Patterns struct {
-		Autofetch    bool          `toml:"autofetch"`
-		ExpiredAfter int           `toml:"expired_after"`
-		Gitleaks     Gitleaks      `toml:"gitleaks"`
-		RefreshAfter int           `toml:"refresh_after"`
-		Server       PatternServer `toml:"server"`
-		ExcludeTags  []string      `toml:"exclude_tags"`
+		Autofetch    bool     `toml:"autofetch"`
+		ExpiredAfter int      `toml:"expired_after"`
+		Gitleaks     Gitleaks `toml:"gitleaks"`
+		RefreshAfter int      `toml:"refresh_after"`
+		Server       Server   `toml:"server"`
+		ExcludeTags  []string `toml:"exclude_tags"`
 	}
 
 	// Gitleaks holds version and config information for the Betterleaks scanner
@@ -111,8 +111,8 @@ type (
 		ConfigPath string `toml:"config_path"`
 	}
 
-	// PatternServer provides pattern server configuration settings for the scanner
-	PatternServer struct {
+	// Server provides LeakTK server configuration settings for the scanner
+	Server struct {
 		// Deprecated: Use "auth" field instead
 		AuthToken string         `toml:"auth_token"` // #nosec G117
 		Auth      auths.OIDCAuth `toml:"auth"`
@@ -137,7 +137,7 @@ func setMissingValues(cfg *Config) {
 	urlFromEnvVar := os.Getenv("LEAKTK_PATTERN_SERVER_URL")
 	if len(urlFromEnvVar) != 0 {
 		cfg.Scanner.Patterns.Server.URL = urlFromEnvVar
-	} else if urlFromFile := loadPatternServerURL(); len(urlFromFile) != 0 {
+	} else if urlFromFile := loadServerURL(); len(urlFromFile) != 0 {
 		cfg.Scanner.Patterns.Server.URL = urlFromFile
 	}
 
@@ -158,7 +158,7 @@ func setMissingValues(cfg *Config) {
 	// easier to write via the login command and to minimize secrets in the
 	// config file. But it's still supported in the config file in case it's
 	// desirable to generate one big config file for server based deployments.
-	if authToken := loadPatternServerAuthToken(); len(authToken) != 0 {
+	if authToken := loadServerAuthToken(); len(authToken) != 0 {
 		cfg.Scanner.Patterns.Server.Auth.Token = authToken
 	}
 
@@ -192,21 +192,21 @@ func loadConfigValueFromFile(path string) string {
 	return strings.TrimSpace(string(value))
 }
 
-func patternServerAuthTokenPath(configDir string) string {
+func serverAuthTokenPath(configDir string) string {
 	return filepath.Join(configDir, "pattern-server-auth-token")
 }
 
-func patternServerURLPath(configDir string) string {
+func serverURLPath(configDir string) string {
 	return filepath.Join(configDir, "pattern-server-url")
 }
 
-func loadPatternServerURL() string {
-	path := patternServerURLPath(userConfigDir)
+func loadServerURL() string {
+	path := serverURLPath(userConfigDir)
 	if fs.FileExists(path) {
 		return loadConfigValueFromFile(path)
 	}
 
-	path = patternServerURLPath(nixGlobalConfigDir)
+	path = serverURLPath(systemConfigDir)
 	if fs.FileExists(path) {
 		return loadConfigValueFromFile(path)
 	}
@@ -214,7 +214,7 @@ func loadPatternServerURL() string {
 	return ""
 }
 
-func loadPatternServerAuthToken() string {
+func loadServerAuthToken() string {
 	authTokenFromEnvVar := os.Getenv("LEAKTK_PATTERN_SERVER_AUTH_TOKEN")
 
 	if len(authTokenFromEnvVar) > 0 {
@@ -223,12 +223,12 @@ func loadPatternServerAuthToken() string {
 		return authTokenFromEnvVar
 	}
 
-	path := patternServerAuthTokenPath(userConfigDir)
+	path := serverAuthTokenPath(userConfigDir)
 	if fs.FileExists(path) {
 		return loadConfigValueFromFile(path)
 	}
 
-	path = patternServerAuthTokenPath(systemConfigDir)
+	path = serverAuthTokenPath(systemConfigDir)
 	if fs.FileExists(path) {
 		return loadConfigValueFromFile(path)
 	}
@@ -275,7 +275,7 @@ func DefaultConfig() *Config {
 				Gitleaks: Gitleaks{
 					Version: "8.27.0",
 				},
-				Server: PatternServer{
+				Server: Server{
 					URL: "https://raw.githubusercontent.com/leaktk/patterns/main/target",
 				},
 			},
@@ -335,7 +335,7 @@ func LocateAndLoadConfig(userConfigPath string) (*Config, error) {
 	return cfg, nil
 }
 
-func SavePatternServerAuth(serverURL, authToken string) error {
+func SaveServerAuth(serverURL, authToken string) error {
 	if !fs.PathExists(userConfigDir) {
 		if err := os.MkdirAll(userConfigDir, 0700); err != nil {
 			return fmt.Errorf("could not create dir: path=%q", userConfigDir)
@@ -343,13 +343,13 @@ func SavePatternServerAuth(serverURL, authToken string) error {
 	}
 
 	if len(serverURL) > 0 {
-		urlPath := patternServerURLPath(userConfigDir)
+		urlPath := serverURLPath(userConfigDir)
 		if err := os.WriteFile(urlPath, []byte(strings.TrimSpace(serverURL)), 0600); err != nil {
 			return err
 		}
 	}
 
-	tokenPath := patternServerAuthTokenPath(userConfigDir)
+	tokenPath := serverAuthTokenPath(userConfigDir)
 	if err := os.WriteFile(tokenPath, []byte(strings.TrimSpace(authToken)), 0600); err != nil {
 		return err
 	}
@@ -357,10 +357,10 @@ func SavePatternServerAuth(serverURL, authToken string) error {
 	return nil
 }
 
-func RemovePatternServerAuth() error {
+func RemoveServerAuth() error {
 	for _, path := range []string{
-		patternServerAuthTokenPath(userConfigDir),
-		patternServerURLPath(userConfigDir),
+		serverAuthTokenPath(userConfigDir),
+		serverURLPath(userConfigDir),
 	} {
 		if fs.FileExists(path) {
 			if err := os.Remove(path); err != nil {

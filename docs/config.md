@@ -96,7 +96,7 @@ These are the default settings:
 # Tells the scanner if it can fetch pattenrs or not
 autofetch = true
 
-# Automatically attempt browser-based login when a custom pattern server
+# Automatically attempt browser-based login when a custom LeakTK server
 # returns 401. Defaults to false to avoid impacting hooks and not interactive
 # use cases. Can also be set via LEAKTK_AUTOLOGIN env var.
 autologin = false
@@ -132,7 +132,7 @@ exclude_tags = [
 # If none of the above are defined, no Authorization header is sent to the pattern
 # server.
 
-# The URL to a pattern server.
+# The URL to a LeakTK server.
 # The path "/patterns/{scanner}/{version}" will be appended to this URL
 url = "https://raw.githubusercontent.com/leaktk/patterns/main/target"
 

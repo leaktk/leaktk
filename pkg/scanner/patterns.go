@@ -84,8 +84,8 @@ func (p *Patterns) fetchGitleaksConfig(ctx context.Context) (string, error) {
 		case http.StatusOK:
 			// save the token if it was provided from a successful autologin
 			if attempt == 2 {
-				logger.Info("saving pattern server auth: url=%s", p.config.Server.URL)
-				err := config.SavePatternServerAuth(
+				logger.Info("saving LeakTK server auth: url=%s", p.config.Server.URL)
+				err := config.SaveServerAuth(
 					p.config.Server.URL, p.config.Server.Auth.Token,
 				)
 				if err != nil {

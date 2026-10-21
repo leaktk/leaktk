@@ -41,7 +41,7 @@ func runLogin(cmd *cobra.Command, args []string) {
 		serverURL = args[0]
 	}
 
-	logger.Info("logging in: pattern_server=%q", serverURL)
+	logger.Info("logging in: server=%q", serverURL)
 
 	flags := cmd.Flags()
 	token := mustGetString(flags, "token")
@@ -60,6 +60,9 @@ func runLogin(cmd *cobra.Command, args []string) {
 			}
 
 			token = a.Token
+			if len(token) == 0 {
+				logger.Warning("server does not support web login flow")
+			}
 		}
 
 		if len(token) == 0 {
@@ -74,7 +77,7 @@ func runLogin(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	if err := config.SavePatternServerAuth(serverURL, token); err != nil {
+	if err := config.SaveServerAuth(serverURL, token); err != nil {
 		logger.Fatal("could not save token: %v", err)
 	}
 
@@ -84,7 +87,7 @@ func runLogin(cmd *cobra.Command, args []string) {
 func loginCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "login [url]",
-		Short: "Log into a pattern server",
+		Short: "Log into a LeakTK server",
 		Args:  cobra.MaximumNArgs(1),
 		Run:   runLogin,
 	}
@@ -95,9 +98,9 @@ func loginCommand() *cobra.Command {
 	return cmd
 }
 func runLogout(cmd *cobra.Command, args []string) {
-	logger.Info("logging out: pattern_server=%q", cfg.Scanner.Patterns.Server.URL)
+	logger.Info("logging out: server=%q", cfg.Scanner.Patterns.Server.URL)
 
-	if err := config.RemovePatternServerAuth(); err != nil {
+	if err := config.RemoveServerAuth(); err != nil {
 		logger.Fatal("could not logout: %v", err)
 	}
 
@@ -107,7 +110,7 @@ func runLogout(cmd *cobra.Command, args []string) {
 func logoutCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "logout",
-		Short: "Log out of the configured pattern server",
+		Short: "Log out of the configured LeakTK server",
 		Run:   runLogout,
 	}
 }
