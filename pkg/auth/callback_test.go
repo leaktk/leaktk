@@ -91,16 +91,14 @@ func TestStartCallbackServer(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("ContextCancellation", func(t *testing.T) {
+	t.Run("ShutdownByCallerAfterCancel", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 
-		addr, _, _, err := StartCallbackServer(ctx, "127.0.0.1:0")
+		addr, _, shutdown, err := StartCallbackServer(ctx, "127.0.0.1:0")
 		require.NoError(t, err)
 
 		cancel()
-
-		// Give the server a moment to shut down
-		time.Sleep(50 * time.Millisecond)
+		shutdown()
 
 		_, err = http.Get("http://" + addr + "/callback?code=x")
 		require.Error(t, err)

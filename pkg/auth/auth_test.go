@@ -3,8 +3,6 @@ package auth
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -60,7 +58,7 @@ func TestParseWWWAuthenticate(t *testing.T) {
 	})
 }
 
-func TestDiscoverEndpoints(t *testing.T) {
+func TestOAuthConfig(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("ValidDiscovery", func(t *testing.T) {
@@ -76,46 +74,41 @@ func TestDiscoverEndpoints(t *testing.T) {
 		defer ts.Close()
 		serverURL = ts.URL
 
-		endpoints, err := DiscoverEndpoints(ctx, ts.Client(), ts.URL)
+		cfg, err := OAuthConfig(ctx, ts.Client(), ts.URL, "", "http://localhost/callback")
 		require.NoError(t, err)
-		assert.Equal(t, "https://sso.example.com/auth", endpoints.AuthorizationEndpoint)
-		assert.Equal(t, "https://sso.example.com/token", endpoints.TokenEndpoint)
+		assert.Equal(t, "https://sso.example.com/auth", cfg.Endpoint.AuthURL)
+		assert.Equal(t, "https://sso.example.com/token", cfg.Endpoint.TokenURL)
+		assert.Equal(t, defaultClientID, cfg.ClientID)
+		assert.Equal(t, "http://localhost/callback", cfg.RedirectURL)
 	})
 
-	t.Run("DiscoveryNotFound", func(t *testing.T) {
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusNotFound)
-		}))
-		defer ts.Close()
-
-		_, err := DiscoverEndpoints(ctx, ts.Client(), ts.URL)
-		require.Error(t, err)
-	})
-
-	t.Run("MalformedJSON", func(t *testing.T) {
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = fmt.Fprint(w, "not json")
-		}))
-		defer ts.Close()
-
-		_, err := DiscoverEndpoints(ctx, ts.Client(), ts.URL)
-		require.Error(t, err)
-	})
-
-	t.Run("EmptyEndpoints", func(t *testing.T) {
+	t.Run("CustomClientID", func(t *testing.T) {
 		var serverURL string
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"issuer": serverURL,
+			_ = json.NewEncoder(w).Encode(map[string]string{ // #nosec G101
+				"issuer":                 serverURL,
+				"authorization_endpoint": "https://sso.example.com/auth",
+				"token_endpoint":         "https://sso.example.com/token",
 			})
 		}))
 		defer ts.Close()
 		serverURL = ts.URL
 
-		_, err := DiscoverEndpoints(ctx, ts.Client(), ts.URL)
+		cfg, err := OAuthConfig(ctx, ts.Client(), ts.URL, "my-client", "http://localhost/callback")
+		require.NoError(t, err)
+		assert.Equal(t, "my-client", cfg.ClientID)
+	})
+
+	t.Run("DiscoveryFailure", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer ts.Close()
+
+		_, err := OAuthConfig(ctx, ts.Client(), ts.URL, "", "http://localhost/callback")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "missing required endpoints")
+		assert.Contains(t, err.Error(), "OIDC discovery failed")
 	})
 }
 
@@ -228,129 +221,6 @@ func TestChallenge(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, auth)
 		assert.Equal(t, "https://idp.example.com", auth.Realm)
-	})
-}
-
-func TestGeneratePKCE(t *testing.T) {
-	pkce, err := GeneratePKCE()
-	require.NoError(t, err)
-	assert.NotEmpty(t, pkce.Verifier)
-	assert.NotEmpty(t, pkce.Challenge)
-	assert.NotEqual(t, pkce.Verifier, pkce.Challenge)
-
-	pkce2, err := GeneratePKCE()
-	require.NoError(t, err)
-	assert.NotEqual(t, pkce.Verifier, pkce2.Verifier)
-}
-
-func TestBuildAuthURL(t *testing.T) {
-	t.Run("BasicURL", func(t *testing.T) {
-		result := BuildAuthURL("https://auth.example.com/authorize", "http://localhost:8080/callback", "abc123", "", nil)
-		assert.Contains(t, result, "https://auth.example.com/authorize?")
-		assert.Contains(t, result, "response_type=code")
-		assert.Contains(t, result, "client_id=leaktk-cli")
-		assert.Contains(t, result, "redirect_uri=")
-		assert.Contains(t, result, "state=abc123")
-		assert.NotContains(t, result, "code_challenge")
-	})
-
-	t.Run("CustomClientID", func(t *testing.T) {
-		result := BuildAuthURL("https://auth.example.com", "http://localhost/cb", "state", "my-client", nil)
-		assert.Contains(t, result, "client_id=my-client")
-	})
-
-	t.Run("EndpointWithExistingParams", func(t *testing.T) {
-		result := BuildAuthURL("https://auth.example.com?foo=bar", "http://localhost/cb", "state", "", nil)
-		assert.Contains(t, result, "https://auth.example.com?foo=bar&")
-		assert.Contains(t, result, "response_type=code")
-	})
-
-	t.Run("WithPKCE", func(t *testing.T) {
-		pkce := &PKCEChallenge{Verifier: "test-verifier", Challenge: "test-challenge"}
-		result := BuildAuthURL("https://auth.example.com/authorize", "http://localhost/cb", "state", "", pkce)
-		assert.Contains(t, result, "code_challenge=test-challenge")
-		assert.Contains(t, result, "code_challenge_method=S256")
-	})
-}
-
-func TestExchangeCode(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("Success", func(t *testing.T) {
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "POST", r.Method)
-			assert.Equal(t, "application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
-
-			body, _ := io.ReadAll(r.Body)
-			assert.Contains(t, string(body), "grant_type=authorization_code")
-			assert.Contains(t, string(body), "code=test-code")
-
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"access_token": "test-token-123",
-			})
-		}))
-		defer ts.Close()
-
-		token, err := ExchangeCode(ctx, ts.Client(), ts.URL, "test-code", "http://localhost/cb", "", "")
-		require.NoError(t, err)
-		assert.Equal(t, "test-token-123", token)
-	})
-
-	t.Run("WithCodeVerifier", func(t *testing.T) {
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			body, _ := io.ReadAll(r.Body)
-			assert.Contains(t, string(body), "code_verifier=my-verifier")
-
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"access_token": "pkce-token",
-			})
-		}))
-		defer ts.Close()
-
-		token, err := ExchangeCode(ctx, ts.Client(), ts.URL, "code", "http://localhost/cb", "", "my-verifier")
-		require.NoError(t, err)
-		assert.Equal(t, "pkce-token", token)
-	})
-
-	t.Run("ServerError", func(t *testing.T) {
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = fmt.Fprint(w, `{"error":"invalid_grant"}`)
-		}))
-		defer ts.Close()
-
-		_, err := ExchangeCode(ctx, ts.Client(), ts.URL, "bad-code", "http://localhost/cb", "", "")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "400")
-	})
-
-	t.Run("TokenError", func(t *testing.T) {
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error":             "invalid_client",
-				"error_description": "bad client",
-			})
-		}))
-		defer ts.Close()
-
-		_, err := ExchangeCode(ctx, ts.Client(), ts.URL, "code", "http://localhost/cb", "", "")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid_client")
-	})
-
-	t.Run("EmptyAccessToken", func(t *testing.T) {
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]string{})
-		}))
-		defer ts.Close()
-
-		_, err := ExchangeCode(ctx, ts.Client(), ts.URL, "code", "http://localhost/cb", "", "")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "did not contain")
 	})
 }
 

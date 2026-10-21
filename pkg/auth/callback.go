@@ -58,11 +58,6 @@ func StartCallbackServer(ctx context.Context, addr string) (string, <-chan Callb
 		_ = server.Shutdown(context.Background())
 	}
 
-	go func() {
-		<-ctx.Done()
-		shutdown()
-	}()
-
 	return listener.Addr().String(), resultCh, shutdown, nil
 }
 
