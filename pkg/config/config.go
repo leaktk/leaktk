@@ -135,6 +135,8 @@ func setMissingValues(cfg *Config) {
 	urlFromEnvVar := os.Getenv("LEAKTK_PATTERN_SERVER_URL")
 	if len(urlFromEnvVar) != 0 {
 		cfg.Scanner.Patterns.Server.URL = urlFromEnvVar
+	} else if urlFromFile := loadPatternServerURL(); len(urlFromFile) != 0 {
+		cfg.Scanner.Patterns.Server.URL = urlFromFile
 	}
 
 	cfg.Scanner.Patterns.Autofetch = stringToBool(
@@ -177,6 +179,24 @@ func loadPatternServerAuthTokenFromFile(path string) string {
 
 func patternServerAuthTokenPath(configDir string) string {
 	return filepath.Join(configDir, "pattern-server-auth-token")
+}
+
+func patternServerURLPath(configDir string) string {
+	return filepath.Join(configDir, "pattern-server-url")
+}
+
+func loadPatternServerURL() string {
+	path := patternServerURLPath(userConfigDir)
+	if fs.FileExists(path) {
+		return loadPatternServerAuthTokenFromFile(path)
+	}
+
+	path = patternServerURLPath(nixGlobalConfigDir)
+	if fs.FileExists(path) {
+		return loadPatternServerAuthTokenFromFile(path)
+	}
+
+	return ""
 }
 
 func loadPatternServerAuthToken() string {
@@ -300,29 +320,37 @@ func LocateAndLoadConfig(userConfigPath string) (*Config, error) {
 	return cfg, nil
 }
 
-// SavePatternServerAuthToken saves the token in the path where it should go
-func SavePatternServerAuthToken(authToken string) error {
+func SavePatternServerAuth(serverURL, authToken string) error {
 	if !fs.PathExists(userConfigDir) {
 		if err := os.MkdirAll(userConfigDir, 0700); err != nil {
 			return fmt.Errorf("could not create dir: path=%q", userConfigDir)
 		}
 	}
 
-	path := patternServerAuthTokenPath(userConfigDir)
-	if err := os.WriteFile(path, []byte(strings.TrimSpace(authToken)), 0600); err != nil {
+	if len(serverURL) > 0 {
+		urlPath := patternServerURLPath(userConfigDir)
+		if err := os.WriteFile(urlPath, []byte(strings.TrimSpace(serverURL)), 0600); err != nil {
+			return err
+		}
+	}
+
+	tokenPath := patternServerAuthTokenPath(userConfigDir)
+	if err := os.WriteFile(tokenPath, []byte(strings.TrimSpace(authToken)), 0600); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// RemovePatternServerAuthToken deletes the auth token
-func RemovePatternServerAuthToken() error {
-	path := patternServerAuthTokenPath(userConfigDir)
-
-	if fs.FileExists(path) {
-		if err := os.Remove(path); err != nil {
-			return err
+func RemovePatternServerAuth() error {
+	for _, path := range []string{
+		patternServerAuthTokenPath(userConfigDir),
+		patternServerURLPath(userConfigDir),
+	} {
+		if fs.FileExists(path) {
+			if err := os.Remove(path); err != nil {
+				return err
+			}
 		}
 	}
 
