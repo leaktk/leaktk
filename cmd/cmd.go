@@ -579,7 +579,7 @@ func rootCommand() *cobra.Command {
 	}
 
 	flags := rootCommand.PersistentFlags()
-	flags.StringP("config", "c", "", "Load a custom leaktk config")
+	flags.StringP("config", "c", "", "Change the user config file path (default \"${XDG_CONFIG_HOME}/leaktk/config.toml\")")
 	flags.StringP("format", "f", "", "Change the output format [json, human, csv, toml, yaml] (default \"json\")")
 
 	rootCommand.AddCommand(scanCommand())

@@ -13,7 +13,7 @@ func (a *BearerAuth) SetHeader(h http.Header) error {
 
 func (a *BearerAuth) Merge(o *BearerAuth) error {
 	if len(o.Token) != 0 {
-		a.Token = o.Token
+		*a = *o
 	}
 	return nil
 }

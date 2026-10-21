@@ -4,30 +4,20 @@
 
 LeakTK has the following config scopes:
 
-| Scope          | Default Location                                           |
-| -------------- | ---------------------------------------------------------- |
-| `default`      | [config.go](../pkg/config/config.go)                       |
-| `system`       | `/etc/leaktk/config.toml`                                  |
-| `user`         | `${XDG_CONFIG_HOME}/leaktk/config.toml`                    |
-| `env`          | Environment Variables (see below)                          |
-| `cli`          | Provided CLI arguments when executing LeakTK               |
+| Scope        | Default Location                        | Change Default Location / Disable                          |
+| ------------ | --------------------------------------- | ---------------------------------------------------------- |
+| **default**  | [config.go](../pkg/config/config.go)    |                                                            |
+| **system**   | `/etc/leaktk/config.toml`               | Disable: `LEAKTK_CONFIG_NOSYSTEM=1` env var                |
+| **user**     | `${XDG_CONFIG_HOME}/leaktk/config.toml` | Change: `--config` CLI arg or `LEAKTK_CONFIG_PATH` env var |
+| **env**      | Environment Variables (see below)       |                                                            |
+| **cli**      | CLI arguments                           |                                                            |
 
-Config values in each of the scopes above can be overridden by the one below
-it. For example: system wide config will override defaults, user config will
-override system, and so on.
+Config values can be overridden by the ones in a following scope. For example:
+system config will override defaults, user config will override system and
+defaults, and so on.
 
-You can disable the system config by setting `LEAKTK_CONFIG_NOSYSTEM=1` in your
-environment.
-
-You can select a different file for user config with the `--config` argument.
-Any other environment variables and CLI arguments you add will still override
-values in the config file provided to `--config` because they have a higher
-precedence than your user config. The `--config` flag only changes the path for
-where LeakTK selects your user config.
-
-New sources (in the `[[sources]]` config section) will be appended to previous
-sources. If they have the same ID, the newer source will be merged into the
-existing.
+New sources in the config will be appended to existing sources. Sources with
+the same ID will be merged with the newer source overriding existing.
 
 ## Environment Variables
 

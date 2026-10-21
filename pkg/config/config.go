@@ -275,21 +275,19 @@ func LocateAndLoadConfig(userConfigPath string) (*Config, error) {
 		}
 	}
 
-	// Update the default+system config with user config
-	if len(userConfigPath) > 0 {
-		err := UpdateConfigFromFile(cfg, userConfigPath)
-		return cfg, err
-	}
-	if userConfigPath = os.Getenv("LEAKTK_CONFIG_PATH"); len(userConfigPath) > 0 {
-		err := UpdateConfigFromFile(cfg, userConfigPath)
-		return cfg, err
-	}
-	if userConfigPath = filepath.Join(userConfigDir, "config.toml"); fs.FileExists(userConfigPath) {
-		err := UpdateConfigFromFile(cfg, userConfigPath)
-		return cfg, err
+	// Update the default+system config with user config. The userConfigPath
+	// passed into the function is provided by the CLI and takes precedence. If
+	// it isn't set, the env should be checked for the path; else it should
+	// fall back to looking at the user's default config dir.
+	if len(userConfigPath) == 0 {
+		userConfigPath = os.Getenv("LEAKTK_CONFIG_PATH")
+		if len(userConfigPath) == 0 {
+			userConfigPath = filepath.Join(userConfigDir, "config.toml")
+		}
 	}
 
-	return cfg, nil
+	err = UpdateConfigFromFile(cfg, userConfigPath)
+	return cfg, err
 }
 
 // SavePatternServerAuthToken saves the token in the path where it should go
