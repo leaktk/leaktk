@@ -21,18 +21,16 @@ the same ID will be merged with the newer source overriding existing.
 
 ## Environment Variables
 
-| Environment Variable               | Overrides                              |
-| ---------------------------------- | -------------------------------------- |
-| `LEAKTK_LOGGER_LEVEL`              | `logger.level`                         |
-| `LEAKTK_PATTERN_SERVER_AUTH_TOKEN` | `scanner.patterns.server.auth_token`   |
-| `LEAKTK_PATTERN_SERVER_URL`        | `scanner.patterns.server.url`          |
-| `LEAKTK_SCANNER_AUTOFETCH`         | `scanner.patterns.autofetch`           |
-| `LEAKTK_CONFIG_NOSYSTEM`           | Ignore System Config                   |
-| `LEAKTK_CONFIG_PATH`               | `--config` Default Value               |
-
-## Config Format
-
-LeakTK's config files are written in [TOML](https://toml.io/en/).
+| Environment Variable               | Overrides                            | Note                                      |
+| ---------------------------------- | ------------------------------------ | ----------------------------------------- |
+| `LEAKTK_AUTOFETCH`                 | `scanner.patterns.autofetch`         |                                           |
+| `LEAKTK_AUTOLOGIN`                 | `scanner.patterns.autologin`         |                                           |
+| `LEAKTK_CONFIG_NOSYSTEM`           | Ignore System Config                 |                                           |
+| `LEAKTK_CONFIG_PATH`               | `--config` Default Value             |                                           |
+| `LEAKTK_LOGGER_LEVEL`              | `logger.level`                       |                                           |
+| `LEAKTK_PATTERN_SERVER_AUTH_TOKEN` | `scanner.patterns.server.auth_token` |                                           |
+| `LEAKTK_PATTERN_SERVER_URL`        | `scanner.patterns.server.url`        |                                           |
+| `LEAKTK_SCANNER_AUTOFETCH`         | `scanner.patterns.autofetch`         | Deprecated use `LEAKTK_AUTOFETCH` instead |
 
 ## Config Sections
 
@@ -97,6 +95,11 @@ These are the default settings:
 [scanner.patterns]
 # Tells the scanner if it can fetch pattenrs or not
 autofetch = true
+
+# Automatically attempt browser-based login when a custom pattern server
+# returns 401. Defaults to false to avoid impacting hooks and not interactive
+# use cases. Can also be set via LEAKTK_AUTOLOGIN env var.
+autologin = false
 
 # How long until the scanner refuses to use the cached patterns
 expired_after = 604800 # 7 days
