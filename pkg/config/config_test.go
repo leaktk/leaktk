@@ -217,27 +217,44 @@ func TestConfig(t *testing.T) {
 			assert.Equal(t, "1", admin.OrgID)
 		})
 	})
-}
+	t.Run("EnvVars", func(t *testing.T) {
+		cfg := DefaultConfig()
+		tests := []struct {
+			name      string
+			field     *bool
+			values    []string
+			expecteds []bool
+		}{
+			{
+				name:      "LEAKTK_AUTOLOGIN",
+				field:     &cfg.Scanner.Patterns.Server.Auth.Autologin,
+				values:    []string{"", "true", "0", "1"},
+				expecteds: []bool{false, true, false, true},
+			},
+			{
+				name:      "LEAKTK_AUTOFETCH",
+				field:     &cfg.Scanner.Patterns.Autofetch,
+				values:    []string{"", "true", "0", "1"},
+				expecteds: []bool{false, true, false, true},
+			},
+			{
+				name:      "LEAKTK_SCANNER_AUTOFETCH",
+				field:     &cfg.Scanner.Patterns.Autofetch,
+				values:    []string{"", "true", "0", "1"},
+				expecteds: []bool{false, true, false, true},
+			},
+		}
 
-func TestAutologinEnvVar(t *testing.T) {
-	t.Run("Default", func(t *testing.T) {
-		t.Setenv("LEAKTK_AUTOLOGIN", "")
-		cfg := setMissingValues(DefaultConfig())
-		assert.False(t, cfg.Scanner.Patterns.Server.Auth.Autologin)
-	})
-	t.Run("True", func(t *testing.T) {
-		t.Setenv("LEAKTK_AUTOLOGIN", "true")
-		cfg := setMissingValues(DefaultConfig())
-		assert.True(t, cfg.Scanner.Patterns.Server.Auth.Autologin)
-	})
-	t.Run("One", func(t *testing.T) {
-		t.Setenv("LEAKTK_AUTOLOGIN", "1")
-		cfg := setMissingValues(DefaultConfig())
-		assert.True(t, cfg.Scanner.Patterns.Server.Auth.Autologin)
-	})
-	t.Run("False", func(t *testing.T) {
-		t.Setenv("LEAKTK_AUTOLOGIN", "false")
-		cfg := setMissingValues(DefaultConfig())
-		assert.False(t, cfg.Scanner.Patterns.Server.Auth.Autologin)
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				for i, value := range tt.values {
+					t.Setenv(tt.name, value)
+					expected := tt.expecteds[i]
+					setMissingValues(cfg)
+					assert.Equal(t, expected, *tt.field)
+					t.Setenv(tt.name, "")
+				}
+			})
+		}
 	})
 }
