@@ -1,25 +1,48 @@
 # Configuration
 
-## Config File Format
+## Config Precedence
 
-LeakTK's config can be changed by adjusting values in a config
-[TOML](https://toml.io/en/) in one of the following locations following order
-of precedence:
+LeakTK has the following config scopes:
 
-1. The `LEAKTK_CONFIG_PATH` environment variable
-1. `--config <some path>`
-1. `${XDG_CONFIG_HOME}/leaktk/config.toml` if it exists
-1. `/etc/leaktk/config.toml` if it exists
-1. The default config defined in [config.go](../pkg/config/config.go)
+| Scope          | Default Location                                           |
+| -------------- | ---------------------------------------------------------- |
+| `default`      | [config.go](../pkg/config/config.go)                       |
+| `system`       | `/etc/leaktk/config.toml`                                  |
+| `user`         | `${XDG_CONFIG_HOME}/leaktk/config.toml`                    |
+| `env`          | Environment Variables (see below)                          |
+| `cli`          | Provided CLI arguments when executing LeakTK               |
 
-The following environment variables take precedence over the config when set:
+Config values in each of the scopes above can be overridden by the one below
+it. For example: system wide config will override defaults, user config will
+override system, and so on.
 
-| Environment Variable               | Overrides                            |
-| ---------------------------------- | ------------------------------------ |
-| `LEAKTK_LOGGER_LEVEL`              | `logger.level`                       |
-| `LEAKTK_PATTERN_SERVER_AUTH_TOKEN` | `scanner.patterns.server.auth_token` |
-| `LEAKTK_PATTERN_SERVER_URL`        | `scanner.patterns.server.url`        |
-| `LEAKTK_SCANNER_AUTOFETCH`         | `scanner.patterns.autofetch`         |
+You can disable the system config by setting `LEAKTK_CONFIG_NOSYSTEM=1` in your
+environment.
+
+You can select a different file for user config with the `--config` argument.
+Any other environment variables and CLI arguments you add will still override
+values in the config file provided to `--config` because they have a higher
+precedence than your user config. The `--config` flag only changes the path for
+where LeakTK selects your user config.
+
+New sources (in the `[[sources]]` config section) will be appended to previous
+sources. If they have the same ID, the newer source will be merged into the
+existing.
+
+## Environment Variables
+
+| Environment Variable               | Overrides                              |
+| ---------------------------------- | -------------------------------------- |
+| `LEAKTK_LOGGER_LEVEL`              | `logger.level`                         |
+| `LEAKTK_PATTERN_SERVER_AUTH_TOKEN` | `scanner.patterns.server.auth_token`   |
+| `LEAKTK_PATTERN_SERVER_URL`        | `scanner.patterns.server.url`          |
+| `LEAKTK_SCANNER_AUTOFETCH`         | `scanner.patterns.autofetch`           |
+| `LEAKTK_CONFIG_NOSYSTEM`           | Ignore System Config                   |
+| `LEAKTK_CONFIG_PATH`               | `--config` Default Value               |
+
+## Config Format
+
+LeakTK's config files are written in [TOML](https://toml.io/en/).
 
 ## Config Sections
 
