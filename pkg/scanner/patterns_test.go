@@ -2,8 +2,6 @@ package scanner
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -125,7 +123,7 @@ func TestPatternsFetchGitleaksConfig(t *testing.T) {
 
 		cfg := config.DefaultConfig()
 		cfg.Scanner.Patterns.Server.URL = ts.URL
-		cfg.Scanner.Patterns.Server.AuthToken = "test-token"
+		cfg.Scanner.Patterns.Server.Auth.Token = "test-token"
 		cfg.Scanner.Patterns.Gitleaks.Version = "x.y.z"
 
 		client := httpclient.NewClient()
@@ -134,88 +132,6 @@ func TestPatternsFetchGitleaksConfig(t *testing.T) {
 		rawConfig, err := p.fetchGitleaksConfig(ctx)
 		require.NoError(t, err)
 		assert.Contains(t, rawConfig, "test-rule")
-	})
-}
-
-func TestFetchGitleaksConfigUnauthorized(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("Returns ErrUnauthorized on 401", func(t *testing.T) {
-		ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusUnauthorized)
-		}))
-		ts.Start()
-		defer ts.Close()
-
-		cfg := config.DefaultConfig()
-		cfg.Scanner.Patterns.Server.URL = ts.URL
-		cfg.Scanner.Patterns.Gitleaks.Version = "x.y.z"
-
-		client := httpclient.NewClient()
-		p := NewPatterns(&cfg.Scanner.Patterns, client)
-
-		_, err := p.fetchGitleaksConfig(ctx)
-		require.Error(t, err)
-		assert.ErrorIs(t, err, ErrUnauthorized)
-	})
-
-	t.Run("Non-401 errors do not return ErrUnauthorized", func(t *testing.T) {
-		ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusForbidden)
-		}))
-		ts.Start()
-		defer ts.Close()
-
-		cfg := config.DefaultConfig()
-		cfg.Scanner.Patterns.Server.URL = ts.URL
-		cfg.Scanner.Patterns.Gitleaks.Version = "x.y.z"
-
-		client := httpclient.NewClient()
-		p := NewPatterns(&cfg.Scanner.Patterns, client)
-
-		_, err := p.fetchGitleaksConfig(ctx)
-		require.Error(t, err)
-		require.NotErrorIs(t, err, ErrUnauthorized)
-		assert.Contains(t, err.Error(), "403")
-	})
-}
-
-func TestHandleFetchError(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("NonAuthError passthrough", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		client := httpclient.NewClient()
-		p := NewPatterns(&cfg.Scanner.Patterns, client)
-
-		_, err := p.handleFetchError(ctx, errors.New("network error"))
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "network error")
-	})
-
-	t.Run("AuthError without autologin shows login command", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		cfg.Scanner.Patterns.Server.URL = "https://custom.example.com"
-		cfg.Scanner.Patterns.Autologin = false
-
-		client := httpclient.NewClient()
-		p := NewPatterns(&cfg.Scanner.Patterns, client)
-
-		_, err := p.handleFetchError(ctx, fmt.Errorf("%w: status_code=401", ErrUnauthorized))
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "leaktk login")
-		assert.Contains(t, err.Error(), "custom.example.com")
-	})
-
-	t.Run("AuthError on default server shows login command", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-
-		client := httpclient.NewClient()
-		p := NewPatterns(&cfg.Scanner.Patterns, client)
-
-		_, err := p.handleFetchError(ctx, fmt.Errorf("%w: status_code=401", ErrUnauthorized))
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "leaktk login")
 	})
 }
 

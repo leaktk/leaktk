@@ -96,7 +96,7 @@ func TestSources(t *testing.T) {
 				require.NoError(t, err)
 				for header, value := range tt.expectedHeaders {
 					assert.Empty(t, req.Header.Get(header), header)
-					require.NoError(t, cfg.Sources.SetHeader(req))
+					require.NoError(t, cfg.Sources.SetHeader(t.Context(), req))
 					assert.Equal(t, value, req.Header.Get(header), header)
 				}
 			})

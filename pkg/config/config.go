@@ -9,6 +9,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/adrg/xdg"
 
+	"github.com/leaktk/leaktk/internal/auths"
 	"github.com/leaktk/leaktk/internal/fs"
 	"github.com/leaktk/leaktk/internal/sources"
 	"github.com/leaktk/leaktk/pkg/logger"
@@ -97,7 +98,6 @@ type (
 	// Patterns provides configuration for managing pattern updates
 	Patterns struct {
 		Autofetch    bool          `toml:"autofetch"`
-		Autologin    bool          `toml:"autologin"`
 		ExpiredAfter int           `toml:"expired_after"`
 		Gitleaks     Gitleaks      `toml:"gitleaks"`
 		RefreshAfter int           `toml:"refresh_after"`
@@ -113,8 +113,10 @@ type (
 
 	// PatternServer provides pattern server configuration settings for the scanner
 	PatternServer struct {
-		AuthToken string `toml:"auth_token"` // #nosec G117
-		URL       string `toml:"url"`
+		// Deprecated: Use "auth" field instead
+		AuthToken string         `toml:"auth_token"` // #nosec G117
+		Auth      auths.OIDCAuth `toml:"auth"`
+		URL       string         `toml:"url"`
 	}
 )
 
@@ -139,28 +141,17 @@ func setMissingValues(cfg *Config) {
 		cfg.Scanner.Patterns.Server.URL = urlFromFile
 	}
 
-	autofetchStr := os.Getenv("LEAKTK_AUTOFETCH")
-	if len(autofetchStr) == 0 {
+	autofetchStr, found := os.LookupEnv("LEAKTK_AUTOFETCH")
+	if !found {
 		// TODO: remove at v1.0.0 & update docs
-		autofetchStr = os.Getenv("LEAKTK_SCANNER_AUTOFETCH")
-		if len(autofetchStr) != 0 {
+		autofetchStr, found = os.LookupEnv("LEAKTK_SCANNER_AUTOFETCH")
+		if found {
 			logger.Warning("LEAKTK_SCANNER_AUTOFETCH is deprecated, use LEAKTK_AUTOFETCH instead")
 		}
 	}
 
 	cfg.Scanner.Patterns.Autofetch = stringToBool(
-		autofetchStr,
-		cfg.Scanner.Patterns.Autofetch,
-	)
-
-	defaultURL := DefaultConfig().Scanner.Patterns.Server.URL
-	if cfg.Scanner.Patterns.Server.URL == defaultURL {
-		cfg.Scanner.Patterns.Autologin = false
-	}
-
-	cfg.Scanner.Patterns.Autologin = stringToBool(
-		os.Getenv("LEAKTK_AUTOLOGIN"),
-		cfg.Scanner.Patterns.Autologin,
+		autofetchStr, cfg.Scanner.Patterns.Autofetch,
 	)
 
 	// It's better to have the auth token out of the config file to make it
@@ -168,8 +159,18 @@ func setMissingValues(cfg *Config) {
 	// config file. But it's still supported in the config file in case it's
 	// desirable to generate one big config file for server based deployments.
 	if authToken := loadPatternServerAuthToken(); len(authToken) != 0 {
-		cfg.Scanner.Patterns.Server.AuthToken = authToken
+		cfg.Scanner.Patterns.Server.Auth.Token = authToken
 	}
+
+	// Handle backwards compat until "auth_token" is removed but favor the new one if set
+	if len(cfg.Scanner.Patterns.Server.Auth.Token) == 0 {
+		cfg.Scanner.Patterns.Server.Auth.Token = cfg.Scanner.Patterns.Server.AuthToken
+	}
+
+	cfg.Scanner.Patterns.Server.Auth.Autologin = stringToBool(
+		os.Getenv("LEAKTK_AUTOLOGIN"),
+		cfg.Scanner.Patterns.Server.Auth.Autologin,
+	)
 
 	if len(cfg.Scanner.Patterns.Gitleaks.ConfigPath) == 0 {
 		cfg.Scanner.Patterns.Gitleaks.ConfigPath = filepath.Join(
@@ -179,16 +180,16 @@ func setMissingValues(cfg *Config) {
 	}
 }
 
-func loadPatternServerAuthTokenFromFile(path string) string {
+func loadConfigValueFromFile(path string) string {
 	path = filepath.Clean(path)
-	logger.Debug("loading pattern-server-auth-token: path=%q", path)
-	authTokenBytes, err := os.ReadFile(path)
+	logger.Debug("loading value: path=%q", path)
 
+	value, err := os.ReadFile(path)
 	if err != nil {
-		logger.Fatal("could not load pattern server auth token: error=%q", err)
+		logger.Fatal("load value: %q path=%q", err, path)
 	}
 
-	return strings.TrimSpace(string(authTokenBytes))
+	return strings.TrimSpace(string(value))
 }
 
 func patternServerAuthTokenPath(configDir string) string {
@@ -202,12 +203,12 @@ func patternServerURLPath(configDir string) string {
 func loadPatternServerURL() string {
 	path := patternServerURLPath(userConfigDir)
 	if fs.FileExists(path) {
-		return loadPatternServerAuthTokenFromFile(path)
+		return loadConfigValueFromFile(path)
 	}
 
 	path = patternServerURLPath(nixGlobalConfigDir)
 	if fs.FileExists(path) {
-		return loadPatternServerAuthTokenFromFile(path)
+		return loadConfigValueFromFile(path)
 	}
 
 	return ""
@@ -224,12 +225,12 @@ func loadPatternServerAuthToken() string {
 
 	path := patternServerAuthTokenPath(userConfigDir)
 	if fs.FileExists(path) {
-		return loadPatternServerAuthTokenFromFile(path)
+		return loadConfigValueFromFile(path)
 	}
 
 	path = patternServerAuthTokenPath(systemConfigDir)
 	if fs.FileExists(path) {
-		return loadPatternServerAuthTokenFromFile(path)
+		return loadConfigValueFromFile(path)
 	}
 
 	return ""

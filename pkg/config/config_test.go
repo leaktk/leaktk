@@ -219,28 +219,25 @@ func TestConfig(t *testing.T) {
 	})
 }
 
-func TestAutologinDefault(t *testing.T) {
-	require.NoError(t, os.Unsetenv("LEAKTK_AUTOLOGIN"))
-	cfg := setMissingValues(DefaultConfig())
-	assert.False(t, cfg.Scanner.Patterns.Autologin)
-}
-
 func TestAutologinEnvVar(t *testing.T) {
+	t.Run("Default", func(t *testing.T) {
+		t.Setenv("LEAKTK_AUTOLOGIN", "")
+		cfg := setMissingValues(DefaultConfig())
+		assert.False(t, cfg.Scanner.Patterns.Server.Auth.Autologin)
+	})
 	t.Run("True", func(t *testing.T) {
 		t.Setenv("LEAKTK_AUTOLOGIN", "true")
 		cfg := setMissingValues(DefaultConfig())
-		assert.True(t, cfg.Scanner.Patterns.Autologin)
+		assert.True(t, cfg.Scanner.Patterns.Server.Auth.Autologin)
 	})
-
 	t.Run("One", func(t *testing.T) {
 		t.Setenv("LEAKTK_AUTOLOGIN", "1")
 		cfg := setMissingValues(DefaultConfig())
-		assert.True(t, cfg.Scanner.Patterns.Autologin)
+		assert.True(t, cfg.Scanner.Patterns.Server.Auth.Autologin)
 	})
-
 	t.Run("False", func(t *testing.T) {
 		t.Setenv("LEAKTK_AUTOLOGIN", "false")
 		cfg := setMissingValues(DefaultConfig())
-		assert.False(t, cfg.Scanner.Patterns.Autologin)
+		assert.False(t, cfg.Scanner.Patterns.Server.Auth.Autologin)
 	})
 }
