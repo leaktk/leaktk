@@ -1,7 +1,9 @@
 package config
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,99 +12,249 @@ import (
 	"github.com/leaktk/leaktk/internal/sources"
 )
 
-func TestPartialLoadConfigFromFile(t *testing.T) {
-	require.NoError(t, os.Setenv("LEAKTK_PATTERN_SERVER_AUTH_TOKEN", "x"))
-	require.NoError(t, os.Unsetenv("LEAKTK_PATTERN_SERVER_URL"))
-	cfg, err := LoadConfigFromFile("../../testdata/partial-config.toml")
+const flatFieldUpdates = `
+[scanner]
+workdir = "/tmp/leaktk/scanner"
 
-	if err != nil {
-		// If there are config issues fail fast
-		assert.FailNowf(t, "Failed to load config file", "Load returned an error %s", err)
-	}
+[scanner.patterns.server]
+url = "https://example.com/leaktk/patterns/main/target"
+`
 
-	// Check values
-	tests := []struct {
-		expected any
-		actual   any
-	}{
-		{
-			expected: "8.27.0",
-			actual:   cfg.Scanner.Patterns.Gitleaks.Version,
-		},
-		{
-			expected: "/tmp/leaktk/scanner",
-			actual:   cfg.Scanner.Workdir,
-		},
-		{
-			expected: 43200,
-			actual:   cfg.Scanner.Patterns.RefreshAfter,
-		},
-		{
-			expected: "https://example.com/leaktk/patterns/main/target",
-			actual:   cfg.Scanner.Patterns.Server.URL,
-		},
-		{
-			expected: "x",
-			actual:   cfg.Scanner.Patterns.Server.AuthToken,
-		},
-		{
-			expected: "INFO",
-			actual:   cfg.Logger.Level,
-		},
-		{
-			expected: 0,
-			actual:   cfg.Scanner.MaxScanDepth,
-		},
-	}
+const loadFromPathConfigTestTmpl = `
+[scanner.patterns.gitleaks]
+version = "%s"
+`
 
-	for _, test := range tests {
-		assert.Equal(t, test.expected, test.actual)
-	}
-}
+const sourcesConfig = `
+[[sources]]
+kind = "AtlassianCloudJira"
+id = "cloud-jira"
+base_url = "https://example.atlassian.net"
+username = "jimbo"
+password = "..." # notsecret
 
-func TestLocateAndLoadConfig(t *testing.T) {
-	// Set the env var here to prove the provided path overrides it
-	localConfigDir = "../../testdata/locator-test/leaktk"
+[[sources]]
+kind = "AtlassianCloudAdmin"
+id = "cloud-admin"
+token = "..." # notsecret
+org_id = "1"
+`
 
-	t.Run("LoadFromFile", func(t *testing.T) {
-		require.NoError(t, os.Setenv("LEAKTK_CONFIG_PATH", "../../testdata/locator-test/leaktk/config.2.toml"))
-		cfg, err := LocateAndLoadConfig("../../testdata/locator-test/leaktk/config.1.toml")
-		require.NoError(t, err)
-		assert.Equal(t, "test-1", cfg.Scanner.Patterns.Gitleaks.Version)
+const additionalSourcesConfig = `
+[[sources]]
+kind = "AtlassianCloudJira"
+id = "cloud-jira-stage"
+base_url = "https://example.stage.atlassian.net"
+username = "johnny"
+password = "..." # notsecret
+`
+const updateAdditionalSourcesConfig = `
+[[sources]]
+kind = "AtlassianCloudJira"
+id = "cloud-jira-stage"
+base_url = "https://example.stage.atlassian.net"
+username = "james"
+password = "..." # notsecret
+`
+
+func TestConfig(t *testing.T) {
+	/* Make sure that the layers of config merge as expected given the layers of config:
+	 *   - system
+	 *   - user
+	 *   - env vars
+	 *   - cli args
+	 * Expected behavior:
+	 *   - flat fields should be overwritten
+	 *   - by default lists should be appended to
+	 *   - sources with the same ID should be merged
+	 */
+	t.Run("Merge", func(t *testing.T) {
+		require.NoError(t, os.Setenv("LEAKTK_PATTERN_SERVER_AUTH_TOKEN", "x"))
+		require.NoError(t, os.Unsetenv("LEAKTK_PATTERN_SERVER_URL"))
+
+		t.Run("FlatFields", func(t *testing.T) {
+			tempDir := t.TempDir()
+			configPath := filepath.Join(tempDir, "config.toml")
+			require.NoError(t, os.WriteFile(configPath, []byte(flatFieldUpdates), 0o600))
+			cfg := DefaultConfig()
+			require.NoError(t, UpdateConfigFromFile(cfg, configPath))
+
+			// Check values
+			tests := []struct {
+				expected any
+				actual   any
+			}{
+				{
+					expected: "8.27.0",
+					actual:   cfg.Scanner.Patterns.Gitleaks.Version,
+				},
+				{
+					expected: "/tmp/leaktk/scanner",
+					actual:   cfg.Scanner.Workdir,
+				},
+				{
+					expected: "https://example.com/leaktk/patterns/main/target",
+					actual:   cfg.Scanner.Patterns.Server.URL,
+				},
+				{
+					expected: "x",
+					actual:   cfg.Scanner.Patterns.Server.AuthToken,
+				},
+				{
+					expected: "INFO",
+					actual:   cfg.Logger.Level,
+				},
+				{
+					expected: 0,
+					actual:   cfg.Scanner.MaxScanDepth,
+				},
+			}
+
+			for _, test := range tests {
+				assert.Equal(t, test.expected, test.actual)
+			}
+		})
+		t.Run("Lists", func(t *testing.T) {
+			tempDir := t.TempDir()
+			configPath := filepath.Join(tempDir, "config.toml")
+			require.NoError(t, os.WriteFile(configPath, []byte(sourcesConfig), 0o600))
+			cfg := DefaultConfig()
+			require.NoError(t, UpdateConfigFromFile(cfg, configPath))
+
+			ss := cfg.Sources
+			require.Len(t, ss, 2)
+
+			assert.Equal(t, "cloud-jira", ss[0].ID())
+			assert.Equal(t, "cloud-admin", ss[1].ID())
+
+			require.NoError(t, os.WriteFile(configPath, []byte(additionalSourcesConfig), 0o600))
+			require.NoError(t, UpdateConfigFromFile(cfg, configPath))
+
+			ss = cfg.Sources
+			require.Len(t, ss, 3)
+			assert.Equal(t, "cloud-jira", ss[0].ID())
+			assert.Equal(t, "cloud-admin", ss[1].ID())
+			assert.Equal(t, "cloud-jira-stage", ss[2].ID())
+			assert.Equal(t, "johnny", ss[2].(*sources.AtlassianCloudJira).Username)
+
+			// the updated config has the same ID as the other cloud-jira-stage
+			// so this should update the existing one rather than just
+			// appending
+			require.NoError(t, os.WriteFile(configPath, []byte(updateAdditionalSourcesConfig), 0o600))
+			require.NoError(t, UpdateConfigFromFile(cfg, configPath))
+
+			ss = cfg.Sources
+			require.Len(t, ss, 3)
+			assert.Equal(t, "james", ss[2].(*sources.AtlassianCloudJira).Username)
+		})
 	})
+	t.Run("Load", func(t *testing.T) {
+		configDir := t.TempDir()
+		leaktkConfigDir := filepath.Join(configDir, "leaktk")
+		require.NoError(t, os.MkdirAll(leaktkConfigDir, 0o700))
+		// set the config.userConfigDir dir back after testing
+		defer func(c string) { userConfigDir = c }(userConfigDir)
+		userConfigDir = leaktkConfigDir
 
-	t.Run("LoadFromEnvVar", func(t *testing.T) {
-		require.NoError(t, os.Setenv("LEAKTK_CONFIG_PATH", "../../testdata/locator-test/leaktk/config.2.toml"))
-		cfg, err := LocateAndLoadConfig("")
-		require.NoError(t, err)
-		assert.Equal(t, "test-2", cfg.Scanner.Patterns.Gitleaks.Version)
+		configPath := filepath.Join(userConfigDir, "config.toml")
+
+		writeConfig := func(id string) string {
+			cfgPath := ""
+			cfgData := ""
+
+			if len(id) == 0 {
+				cfgPath = configPath
+				cfgData = fmt.Sprintf(loadFromPathConfigTestTmpl, "config-no-id")
+			} else {
+				cfgPath = filepath.Join(leaktkConfigDir, id+".config.toml")
+				cfgData = fmt.Sprintf(loadFromPathConfigTestTmpl, id)
+			}
+
+			require.NoError(t, os.WriteFile(cfgPath, []byte(cfgData), 0o600))
+			return cfgPath
+		}
+
+		t.Run("FromParam", func(t *testing.T) {
+			// param should take precedence over the env var
+			require.NoError(t, os.Setenv("LEAKTK_CONFIG_PATH", writeConfig("config-env")))
+			cfg, err := LocateAndLoadConfig(writeConfig("config-param"))
+			require.NoError(t, err)
+			assert.Equal(t, "config-param", cfg.Scanner.Patterns.Gitleaks.Version)
+		})
+		t.Run("FromEnvVar", func(t *testing.T) {
+			// with the param empty it should pick the env var
+			require.NoError(t, os.Setenv("LEAKTK_CONFIG_PATH", writeConfig("config-env")))
+			cfg, err := LocateAndLoadConfig("")
+			require.NoError(t, err)
+			assert.Equal(t, "config-env", cfg.Scanner.Patterns.Gitleaks.Version)
+		})
+		t.Run("FromDefault", func(t *testing.T) {
+			require.NoError(t, os.Unsetenv("LEAKTK_CONFIG_PATH"))
+			assert.Equal(t, filepath.Join(userConfigDir, "config.toml"), writeConfig(""))
+			cfg, err := LocateAndLoadConfig("")
+			require.NoError(t, err)
+			assert.Equal(t, "config-no-id", cfg.Scanner.Patterns.Gitleaks.Version)
+		})
+		t.Run("Sources", func(t *testing.T) {
+			require.NoError(t, os.WriteFile(configPath, []byte(sourcesConfig), 0o600))
+			cfg, err := LocateAndLoadConfig(configPath)
+			require.NoError(t, err)
+
+			// Making sure it loads sources properly given the custom loading logic
+			ss := cfg.Sources
+			require.Len(t, ss, 2)
+			require.IsType(t, &sources.AtlassianCloudJira{}, ss[0])
+			require.IsType(t, &sources.AtlassianCloudAdmin{}, ss[1])
+
+			jira := ss[0].(*sources.AtlassianCloudJira)
+			assert.Equal(t, "cloud-jira", jira.ID())
+			assert.Equal(t, "jimbo", jira.Username)
+			assert.Equal(t, "...", jira.Password)
+
+			admin := ss[1].(*sources.AtlassianCloudAdmin)
+			assert.Equal(t, "cloud-admin", admin.ID())
+			assert.Equal(t, "...", admin.Token)
+			assert.Equal(t, "1", admin.OrgID)
+		})
 	})
+	t.Run("EnvVars", func(t *testing.T) {
+		cfg := DefaultConfig()
+		tests := []struct {
+			name      string
+			field     *bool
+			values    []string
+			expecteds []bool
+		}{
+			{
+				name:      "LEAKTK_AUTOLOGIN",
+				field:     &cfg.Scanner.Patterns.Server.Auth.Autologin,
+				values:    []string{"", "true", "0", "1"},
+				expecteds: []bool{false, true, false, true},
+			},
+			{
+				name:      "LEAKTK_AUTOFETCH",
+				field:     &cfg.Scanner.Patterns.Autofetch,
+				values:    []string{"", "true", "0", "1"},
+				expecteds: []bool{false, true, false, true},
+			},
+			{
+				name:      "LEAKTK_SCANNER_AUTOFETCH",
+				field:     &cfg.Scanner.Patterns.Autofetch,
+				values:    []string{"", "true", "0", "1"},
+				expecteds: []bool{false, true, false, true},
+			},
+		}
 
-	t.Run("FallBackOnDefault", func(t *testing.T) {
-		require.NoError(t, os.Unsetenv("LEAKTK_CONFIG_PATH"))
-		cfg, err := LocateAndLoadConfig("")
-		require.NoError(t, err)
-		assert.Equal(t, "test-3", cfg.Scanner.Patterns.Gitleaks.Version)
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				for i, value := range tt.values {
+					t.Setenv(tt.name, value)
+					expected := tt.expecteds[i]
+					setMissingValues(cfg)
+					assert.Equal(t, expected, *tt.field)
+					t.Setenv(tt.name, "")
+				}
+			})
+		}
 	})
-
-}
-
-func TestLoadSources(t *testing.T) {
-	cfg, err := LoadConfigFromFile("../../testdata/sources-config.toml")
-	require.NoError(t, err)
-
-	ss := cfg.Sources
-	require.Len(t, ss, 2)
-	require.IsType(t, &sources.AtlassianCloudJira{}, ss[0])
-	require.IsType(t, &sources.AtlassianCloudAdmin{}, ss[1])
-
-	jira := ss[0].(*sources.AtlassianCloudJira)
-	assert.Equal(t, "cloud-jira", jira.ID())
-	assert.Equal(t, "jimbo", jira.Username)
-	assert.Equal(t, "...", jira.Password)
-
-	admin := ss[1].(*sources.AtlassianCloudAdmin)
-	assert.Equal(t, "cloud-admin", admin.ID())
-	assert.Equal(t, "...", admin.Token)
-	assert.Equal(t, "1", admin.OrgID)
 }

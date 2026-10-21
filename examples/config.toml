@@ -57,7 +57,7 @@ refresh_after = 43200 # 12 hours
 # If none of the above are defined, no Authorization header is sent to the pattern
 # server.
 
-# The URL to a pattern server.
+# The URL to a LeakTK server.
 # The path "/patterns/{scanner}/{version}" will be appended to this URL
 url = "https://raw.githubusercontent.com/leaktk/patterns/main/target"
 # If this value is not set then the following sources will be checked in this order:

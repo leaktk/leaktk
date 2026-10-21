@@ -123,7 +123,7 @@ func TestPatternsFetchGitleaksConfig(t *testing.T) {
 
 		cfg := config.DefaultConfig()
 		cfg.Scanner.Patterns.Server.URL = ts.URL
-		cfg.Scanner.Patterns.Server.AuthToken = "test-token"
+		cfg.Scanner.Patterns.Server.Auth.Token = "test-token"
 		cfg.Scanner.Patterns.Gitleaks.Version = "x.y.z"
 
 		client := httpclient.NewClient()

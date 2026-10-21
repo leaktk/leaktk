@@ -1,5 +1,0 @@
-[scanner]
-workdir = "/tmp/leaktk/scanner"
-
-[scanner.patterns.server]
-url = "https://example.com/leaktk/patterns/main/target"

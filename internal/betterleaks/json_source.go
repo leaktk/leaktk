@@ -88,7 +88,7 @@ func (s *JSON) walkAndYield(ctx context.Context, currentNode jsonNode, yield bls
 					return nil
 				}
 
-				if err := s.Sources.SetHeader(req); err != nil {
+				if err := s.Sources.SetHeader(ctx, req); err != nil {
 					logger.Error("json fetch url failed: set header: %v path=%q", err, currentNode.path)
 					return nil
 				}

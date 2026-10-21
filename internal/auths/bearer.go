@@ -1,12 +1,22 @@
 package auths
 
-import "net/http"
+import (
+	"context"
+	"net/http"
+)
 
 type BearerAuth struct {
 	Token string `toml:"token"`
 }
 
-func (a *BearerAuth) SetHeader(h http.Header) error {
+func (a *BearerAuth) SetHeader(ctx context.Context, h http.Header) error {
 	h.Set("Authorization", "Bearer "+a.Token)
+	return nil
+}
+
+func (a *BearerAuth) Merge(o *BearerAuth) error {
+	if len(o.Token) != 0 {
+		*a = *o
+	}
 	return nil
 }

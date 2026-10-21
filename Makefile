@@ -39,12 +39,9 @@ lint: vet
 build:
 	CGO_ENABLED=0 go build $(LDFLAGS)
 
-import:
-	goimports -local $(MODULE) -l -w .
+format:
+	if command -v goimports > /dev/null; then goimports -local $(MODULE) -l -w .; else go fmt ./...; fi
 	go mod tidy
-
-format: import
-	go fmt ./...
 	find . -type f \( -name '*.md' -or -name '*.go' -or -name '*.yaml' -or -name Makefile -or -path './hack/*' \) | xargs sed -i 's/[ \t]*$$//g'
 
 test: format vet lint
