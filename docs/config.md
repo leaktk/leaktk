@@ -1,25 +1,38 @@
 # Configuration
 
-## Config File Format
+## Config Precedence
 
-LeakTK's config can be changed by adjusting values in a config
-[TOML](https://toml.io/en/) in one of the following locations following order
-of precedence:
+LeakTK has the following config scopes:
 
-1. The `LEAKTK_CONFIG_PATH` environment variable
-1. `--config <some path>`
-1. `${XDG_CONFIG_HOME}/leaktk/config.toml` if it exists
-1. `/etc/leaktk/config.toml` if it exists
-1. The default config defined in [config.go](../pkg/config/config.go)
+| Scope        | Default Location                        | Change Default Location / Disable                          |
+| ------------ | --------------------------------------- | ---------------------------------------------------------- |
+| **default**  | [config.go](../pkg/config/config.go)    |                                                            |
+| **system**   | `/etc/leaktk/config.toml`               | Disable: `LEAKTK_CONFIG_NOSYSTEM=1` env var                |
+| **user**     | `${XDG_CONFIG_HOME}/leaktk/config.toml` | Change: `--config` CLI arg or `LEAKTK_CONFIG_PATH` env var |
+| **env**      | Environment Variables (see below)       |                                                            |
+| **cli**      | CLI arguments                           |                                                            |
 
-The following environment variables take precedence over the config when set:
+Config values can be overridden by the ones in a following scope. For example:
+system config will override defaults, user config will override system and
+defaults, and so on.
 
-| Environment Variable               | Overrides                            |
-| ---------------------------------- | ------------------------------------ |
-| `LEAKTK_LOGGER_LEVEL`              | `logger.level`                       |
-| `LEAKTK_PATTERN_SERVER_AUTH_TOKEN` | `scanner.patterns.server.auth_token` |
-| `LEAKTK_PATTERN_SERVER_URL`        | `scanner.patterns.server.url`        |
-| `LEAKTK_SCANNER_AUTOFETCH`         | `scanner.patterns.autofetch`         |
+New sources in the config will be appended to existing sources. Sources with
+the same ID will be merged with the newer source overriding existing.
+
+## Environment Variables
+
+| Environment Variable               | Overrides                              |
+| ---------------------------------- | -------------------------------------- |
+| `LEAKTK_LOGGER_LEVEL`              | `logger.level`                         |
+| `LEAKTK_PATTERN_SERVER_AUTH_TOKEN` | `scanner.patterns.server.auth_token`   |
+| `LEAKTK_PATTERN_SERVER_URL`        | `scanner.patterns.server.url`          |
+| `LEAKTK_SCANNER_AUTOFETCH`         | `scanner.patterns.autofetch`           |
+| `LEAKTK_CONFIG_NOSYSTEM`           | Ignore System Config                   |
+| `LEAKTK_CONFIG_PATH`               | `--config` Default Value               |
+
+## Config Format
+
+LeakTK's config files are written in [TOML](https://toml.io/en/).
 
 ## Config Sections
 

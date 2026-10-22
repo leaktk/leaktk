@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 
@@ -24,6 +25,24 @@ func (s *AtlassianCloudAdmin) ID() string {
 
 func (s *AtlassianCloudAdmin) Kind() Kind {
 	return AtlassianCloudAdminKind
+}
+
+func (s *AtlassianCloudAdmin) Merge(o Source) error {
+	oACA, ok := o.(*AtlassianCloudAdmin)
+	if !ok {
+		return fmt.Errorf("cannot merge %s sources into %s", o.Kind(), s.Kind())
+	}
+
+	if len(oACA.BaseURL) != 0 {
+		s.BaseURL = oACA.BaseURL
+		s.bURL = oACA.bURL
+	}
+
+	if len(oACA.OrgID) != 0 {
+		s.OrgID = oACA.OrgID
+	}
+
+	return s.BearerAuth.Merge(&oACA.BearerAuth)
 }
 
 func (s *AtlassianCloudAdmin) AppliesTo(u *url.URL) bool {
@@ -65,6 +84,20 @@ func (s *AtlassianCloudJira) ID() string {
 
 func (s *AtlassianCloudJira) Kind() Kind {
 	return AtlassianCloudJiraKind
+}
+
+func (s *AtlassianCloudJira) Merge(o Source) error {
+	oACJ, ok := o.(*AtlassianCloudJira)
+	if !ok {
+		return fmt.Errorf("cannot merge %s sources into %s", o.Kind(), s.Kind())
+	}
+
+	if len(oACJ.BaseURL) != 0 {
+		s.BaseURL = oACJ.BaseURL
+		s.bURL = oACJ.bURL
+	}
+
+	return s.BasicAuth.Merge(&oACJ.BasicAuth)
 }
 
 func (s *AtlassianCloudJira) AppliesTo(u *url.URL) bool {

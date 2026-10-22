@@ -16,3 +16,12 @@ func (a *BasicAuth) SetHeader(h http.Header) error {
 	h.Set("Authorization", value)
 	return nil
 }
+
+// Auth pairs should be merged with each other
+func (a *BasicAuth) Merge(o *BasicAuth) error {
+	if len(o.Username) != 0 || len(o.Password) != 0 {
+		*a = *o
+	}
+
+	return nil
+}

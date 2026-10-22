@@ -10,3 +10,10 @@ func (a *BearerAuth) SetHeader(h http.Header) error {
 	h.Set("Authorization", "Bearer "+a.Token)
 	return nil
 }
+
+func (a *BearerAuth) Merge(o *BearerAuth) error {
+	if len(o.Token) != 0 {
+		*a = *o
+	}
+	return nil
+}

@@ -14,9 +14,33 @@ import (
 
 type Sources []Source
 
+// Merge merges new sources (o) with existing sources (ss) and then dedups and
+// merges the combined list by ID. A nil other source can be provided to dedup
+// the current list by merging duplicates together.
+func (ss *Sources) Merge(o Sources) error {
+	merged := make(Sources, 0, len(*ss))
+	seen := make(map[string]Source, len(*ss))
+
+	// merge sources with matching IDs
+	for _, s := range append(*ss, o...) {
+		if existing := seen[s.ID()]; existing != nil {
+			if err := existing.Merge(s); err != nil {
+				return fmt.Errorf("%v id=%s", err, s.ID())
+			}
+		} else {
+			seen[s.ID()] = s
+			merged = append(merged, s)
+		}
+	}
+
+	*ss = merged
+	return nil
+}
+
 type Source interface {
 	ID() string
 	Kind() Kind
+	Merge(o Source) error
 }
 
 type httpHeaderSetter interface {
