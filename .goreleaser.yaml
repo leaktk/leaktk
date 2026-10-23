@@ -59,13 +59,11 @@ homebrew_casks:
       bash: "completions/bash/leaktk"
       zsh: "completions/zsh/_leaktk"
       fish: "completions/fish/leaktk.fish"
-    url:
-      verified: github.com/leaktk/leaktk
     hooks:
       post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/leaktk"]
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/leaktk"]
           end
 
 # https://goreleaser.com/customization/package/dockers_v2/
