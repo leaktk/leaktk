@@ -9,6 +9,10 @@ import (
 
 // FileExists checks to see if a path exists and is a file
 func FileExists(path string) bool {
+	if len(path) == 0 {
+		return false
+	}
+
 	info, err := os.Stat(path)
 
 	if err != nil && !os.IsNotExist(err) {
@@ -20,6 +24,10 @@ func FileExists(path string) bool {
 
 // DirExists checks to see if a path exists and is a dir
 func DirExists(path string) bool {
+	if len(path) == 0 {
+		return false
+	}
+
 	info, err := os.Stat(path)
 
 	if err != nil && !os.IsNotExist(err) {
@@ -31,6 +39,10 @@ func DirExists(path string) bool {
 
 // PathExists checks to see if a path exists
 func PathExists(path string) bool {
+	if len(path) == 0 {
+		return false
+	}
+
 	info, err := os.Stat(path)
 
 	if err != nil && !os.IsNotExist(err) {
@@ -42,6 +54,10 @@ func PathExists(path string) bool {
 
 // IsExecutable checks if a file exists and is executable
 func IsExecutable(path string) bool {
+	if len(path) == 0 {
+		return false
+	}
+
 	info, err := os.Stat(path)
 	if err != nil {
 		return false

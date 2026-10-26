@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
-	"github.com/BurntSushi/toml"
 	"github.com/adrg/xdg"
 
 	"github.com/leaktk/leaktk/internal/auths"
 	"github.com/leaktk/leaktk/internal/fs"
 	"github.com/leaktk/leaktk/internal/sources"
+	"github.com/leaktk/leaktk/internal/tomlutil"
+	"github.com/leaktk/leaktk/internal/urlutil"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/version"
 )
@@ -19,9 +19,13 @@ import (
 // GitConfigGlobalOverride helps normalize things in the scanner
 // it is a variable here so other code can check if it's been set
 const GitConfigGlobalOverride = "/dev/null"
+const LeakTKServerEnvSourceID = "__leaktk_server_env__"
 const systemConfigDir = "/etc/leaktk"
 
-var userConfigDir = filepath.Join(xdg.ConfigHome, "leaktk")
+var systemConfigPath = filepath.Join(systemConfigDir, "config.toml")
+var userConfigDir = filepath.Join(filepath.Clean(xdg.ConfigHome), "leaktk")
+var userConfigPath = filepath.Join(userConfigDir, "config.toml")
+var defaultServerURL = *urlutil.MustParseURL("https://raw.githubusercontent.com/leaktk/patterns/main/target")
 
 func init() {
 	// The environment variables for the scan environment
@@ -52,18 +56,22 @@ func init() {
 			logger.Fatal("could not unset %s: %v", varname, err)
 		}
 	}
+
+	if path := os.Getenv("LEAKTK_CONFIG_PATH"); len(path) != 0 {
+		if err := SetUserConfigPath(path); err != nil {
+			logger.Fatal("set user config path from LEAKTK_CONFIG_PATH: %v", err)
+		}
+	}
+
 }
 
 type (
-	// Config provides a general structure to capture the config options
-	// for the toolchain. This may be abstracted out to a common library in
-	// the future as more components are added to the toolchain.
 	Config struct {
-		Formatter Formatter       `toml:"formatter"`
-		Logger    Logger          `toml:"logger"`
-		Redactor  Redactor        `toml:"Redactor"`
-		Scanner   Scanner         `toml:"scanner"`
-		Sources   sources.Sources `toml:"sources"`
+		Formatter Formatter
+		Logger    Logger
+		Redactor  Redactor
+		Scanner   Scanner
+		Sources   sources.Sources
 	}
 
 	// Formatter provides a general output format config
@@ -98,6 +106,7 @@ type (
 	// Patterns provides configuration for managing pattern updates
 	Patterns struct {
 		Autofetch    bool     `toml:"autofetch"`
+		Autologin    bool     `toml:"autologin"`
 		ExpiredAfter int      `toml:"expired_after"`
 		Gitleaks     Gitleaks `toml:"gitleaks"`
 		RefreshAfter int      `toml:"refresh_after"`
@@ -113,18 +122,155 @@ type (
 
 	// Server provides LeakTK server configuration settings for the scanner
 	Server struct {
-		// Deprecated: Use "auth" field instead
-		AuthToken string         `toml:"auth_token"` // #nosec G117
-		Auth      auths.OIDCAuth `toml:"auth"`
-		URL       string         `toml:"url"`
+		URL urlutil.URL `toml:"url"`
 	}
 )
 
-// Handles merging items in lists that should be merged instead of appended to
-func mergeValues(cfg *Config) {
-	if err := cfg.Sources.Merge(nil); err != nil {
-		logger.Fatal("merge config: sources: %v", err)
+func (s *Server) UnmarshalTOML(d any) error {
+	m, ok := d.(map[string]any)
+	if !ok {
+		return fmt.Errorf("could not load data: expected=\"map[string]any\" got=%T", d)
 	}
+
+	for k, v := range m {
+		switch k {
+		case "url":
+			rawURL, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("%s must be a string", k)
+			}
+			err := s.URL.UnmarshalText([]byte(rawURL))
+			if err != nil {
+				return fmt.Errorf("invalid %s: %w base_url=%q", k, err, rawURL)
+			}
+		}
+	}
+
+	return nil
+
+}
+
+// UserConfigPath returns the current user configured config path
+func UserConfigPath() string {
+	return userConfigPath
+}
+
+// SetUserConfigPath updates the default location for user config during the scanner's run
+func SetUserConfigPath(path string) error {
+	if !fs.FileExists(path) {
+		return fmt.Errorf("file does not exist: path=%q", path)
+	}
+	userConfigPath = path
+	return nil
+}
+
+// SystemConfigPath returns the path to the system wide config
+func SystemConfigPath() string {
+	return systemConfigPath
+}
+
+func SaveLeakTKServerSource(s *sources.LeakTKServer) error {
+	return nil
+}
+
+// updateSourcesFromEnv configures cfg.Sources from applicable env variables.
+// For example if LEAKTK_SERVER_URL is set but it's not in the config
+func updateSourcesFromEnv(cfg *Config) error {
+	rawBaseURL := ""
+	accessToken := ""
+
+	// Load the base URL from the env
+	err := loadValueSearch(
+		&rawBaseURL,
+		// preferred variable
+		valueEnvVar("LEAKTK_SERVER_BASE_URL"),
+		// legacy value sources to remove in 1.0.0
+		valueEnvVar("LEAKTK_PATTERN_SERVER_URL"),
+		valuePath(serverURLPath(userConfigDir)),
+		valuePath(serverURLPath(systemConfigDir)),
+		// default fallback value
+		valueLiteral(cfg.Scanner.Patterns.Server.URL.String()),
+	)
+	if err != nil {
+		return fmt.Errorf("load base url: %w", err)
+	}
+	baseURl, err := urlutil.ParseURL(rawBaseURL)
+	if err != nil {
+		return fmt.Errorf("parse base url: %w", err)
+	}
+
+	// Ensure the current configured server URL is set
+	cfg.Scanner.Patterns.Server.URL = *baseURl
+
+	// Load the access token from the env
+	err = loadValueSearch(
+		&accessToken,
+		// preferred variable
+		valueEnvVar("LEAKTK_SERVER_ACCESS_TOKEN"),
+		// legacy value sources to remove in 1.0.0
+		valueEnvVar("LEAKTK_PATTERN_SERVER_AUTH_TOKEN"),
+		valuePath(serverAuthTokenPath(userConfigDir)),
+		valuePath(serverAuthTokenPath(systemConfigDir)),
+	)
+	if err != nil {
+		return fmt.Errorf("load access token: %w", err)
+	}
+
+	// Create a prototype source for patching existing sources or defining a
+	// new one if they dont' exist
+	protoSrc := &sources.LeakTKServer{
+		OIDCAuth: auths.OIDCAuth{
+			AccessToken:  accessToken,
+			RefreshToken: os.Getenv("LEAKTK_SERVER_REFRESH_TOKEN"),
+		},
+	}
+	if err := protoSrc.BaseURL.UnmarshalText([]byte(rawBaseURL)); err != nil {
+		return fmt.Errorf("unmarshal base url: %w", err)
+	}
+
+	// Update any applicable already configured sources with the prototype
+	// source
+	updated := false
+	for _, s := range cfg.Sources.Iter() {
+		switch s := s.(type) {
+		case *sources.LeakTKServer:
+			if s.AppliesTo(baseURl) {
+				if err := s.Merge(protoSrc); err != nil {
+					return fmt.Errorf("apply LeakTK server config from env: %w", err)
+				}
+
+				// set the save callback to save login creds
+				s.Save = SaveLeakTKServerSource
+				updated = true
+			}
+		}
+	}
+
+	// If there wasn't any existing config, use the prototype source as the
+	// server auth
+	if !updated {
+		// Create a source with a unique ID to use for config from the env
+		id := LeakTKServerEnvSourceID
+		envSrc, err := sources.NewSourceFromKindID(sources.LeakTKServerKind, id)
+		if err != nil {
+			return fmt.Errorf("new source from kind: %w", err)
+		}
+
+		// set the save callback to save login creds
+		envSrc.(*sources.LeakTKServer).Save = SaveLeakTKServerSource
+
+		// Update it with the values from the prototype source
+		if err := envSrc.Merge(protoSrc); err != nil {
+			return fmt.Errorf("apply LeakTK server config from env: %w", err)
+		}
+
+		// Add the env source to the soruces config
+		if err := cfg.Sources.Add(envSrc); err != nil {
+			return fmt.Errorf("apply LeakTK server config from env: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // Make sure that any config returned to the code goes through this function
@@ -134,43 +280,22 @@ func setMissingValues(cfg *Config) {
 		cfg.Logger.Level = envLoggerLevel
 	}
 
-	urlFromEnvVar := os.Getenv("LEAKTK_PATTERN_SERVER_URL")
-	if len(urlFromEnvVar) != 0 {
-		cfg.Scanner.Patterns.Server.URL = urlFromEnvVar
-	} else if urlFromFile := loadServerURL(); len(urlFromFile) != 0 {
-		cfg.Scanner.Patterns.Server.URL = urlFromFile
-	}
-
-	autofetchStr, found := os.LookupEnv("LEAKTK_AUTOFETCH")
-	if !found {
-		// TODO: remove at v1.0.0 & update docs
-		autofetchStr, found = os.LookupEnv("LEAKTK_SCANNER_AUTOFETCH")
-		if found {
-			logger.Warning("LEAKTK_SCANNER_AUTOFETCH is deprecated, use LEAKTK_AUTOFETCH instead")
-		}
-	}
-
-	cfg.Scanner.Patterns.Autofetch = stringToBool(
-		autofetchStr, cfg.Scanner.Patterns.Autofetch,
+	// Determines if LeakTK can fetch auto fetch patterns when current are stale
+	autofetchStr := ""
+	err := loadValueSearch(
+		&autofetchStr,
+		// preferred variable
+		valueEnvVar("LEAKTK_AUTOFETCH"),
+		// legacy value sources to remove in 1.0.0
+		valueEnvVar("LEAKTK_SCANNER_AUTOFETCH"),
 	)
-
-	// It's better to have the auth token out of the config file to make it
-	// easier to write via the login command and to minimize secrets in the
-	// config file. But it's still supported in the config file in case it's
-	// desirable to generate one big config file for server based deployments.
-	if authToken := loadServerAuthToken(); len(authToken) != 0 {
-		cfg.Scanner.Patterns.Server.Auth.Token = authToken
+	if err != nil {
+		logger.Fatal("load autofetch value from env: %w", err)
 	}
+	cfg.Scanner.Patterns.Autofetch = stringToBool(autofetchStr, cfg.Scanner.Patterns.Autofetch)
 
-	// Handle backwards compat until "auth_token" is removed but favor the new one if set
-	if len(cfg.Scanner.Patterns.Server.Auth.Token) == 0 {
-		cfg.Scanner.Patterns.Server.Auth.Token = cfg.Scanner.Patterns.Server.AuthToken
-	}
-
-	cfg.Scanner.Patterns.Server.Auth.Autologin = stringToBool(
-		os.Getenv("LEAKTK_AUTOLOGIN"),
-		cfg.Scanner.Patterns.Server.Auth.Autologin,
-	)
+	// Determines if LeakTK can kick off a --web login flow for servers that support it
+	cfg.Scanner.Patterns.Autologin = stringToBool(os.Getenv("LEAKTK_AUTOLOGIN"), cfg.Scanner.Patterns.Autologin)
 
 	if len(cfg.Scanner.Patterns.Gitleaks.ConfigPath) == 0 {
 		cfg.Scanner.Patterns.Gitleaks.ConfigPath = filepath.Join(
@@ -178,62 +303,11 @@ func setMissingValues(cfg *Config) {
 			cfg.Scanner.Patterns.Gitleaks.Version,
 		)
 	}
-}
 
-func loadConfigValueFromFile(path string) string {
-	path = filepath.Clean(path)
-	logger.Debug("loading value: path=%q", path)
-
-	value, err := os.ReadFile(path)
-	if err != nil {
-		logger.Fatal("load value: %q path=%q", err, path)
+	// Override any source values that need to be overridden by the env
+	if err := updateSourcesFromEnv(cfg); err != nil {
+		logger.Fatal("update LeakTK server source from env: %w", err)
 	}
-
-	return strings.TrimSpace(string(value))
-}
-
-func serverAuthTokenPath(configDir string) string {
-	return filepath.Join(configDir, "pattern-server-auth-token")
-}
-
-func serverURLPath(configDir string) string {
-	return filepath.Join(configDir, "pattern-server-url")
-}
-
-func loadServerURL() string {
-	path := serverURLPath(userConfigDir)
-	if fs.FileExists(path) {
-		return loadConfigValueFromFile(path)
-	}
-
-	path = serverURLPath(systemConfigDir)
-	if fs.FileExists(path) {
-		return loadConfigValueFromFile(path)
-	}
-
-	return ""
-}
-
-func loadServerAuthToken() string {
-	authTokenFromEnvVar := os.Getenv("LEAKTK_PATTERN_SERVER_AUTH_TOKEN")
-
-	if len(authTokenFromEnvVar) > 0 {
-		logger.Debug("loading pattern-server-auth-token from env var")
-
-		return authTokenFromEnvVar
-	}
-
-	path := serverAuthTokenPath(userConfigDir)
-	if fs.FileExists(path) {
-		return loadConfigValueFromFile(path)
-	}
-
-	path = serverAuthTokenPath(systemConfigDir)
-	if fs.FileExists(path) {
-		return loadConfigValueFromFile(path)
-	}
-
-	return ""
 }
 
 func stringToBool(value string, defaultValue bool) bool {
@@ -276,7 +350,7 @@ func DefaultConfig() *Config {
 					Version: "8.27.0",
 				},
 				Server: Server{
-					URL: "https://raw.githubusercontent.com/leaktk/patterns/main/target",
+					URL: defaultServerURL,
 				},
 			},
 		},
@@ -288,86 +362,44 @@ func DefaultConfig() *Config {
 func UpdateConfigFromFile(cfg *Config, path string) error {
 	path = filepath.Clean(path)
 	logger.Debug("loading config: path=%q", path)
-	_, err := toml.DecodeFile(path, cfg)
+	rawCfg, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("read config file: %w path=%q", err, path)
 	}
 
-	mergeValues(cfg)
+	err = tomlutil.Unmarshal(rawCfg, &cfg)
+	if err != nil {
+		return fmt.Errorf("update config: %w path=%q", err, path)
+	}
+
 	setMissingValues(cfg)
 	return nil
 }
 
-// LocateAndLoadConfig looks through the possible places for the config
-// favoring the provided path if it is set
-func LocateAndLoadConfig(userConfigPath string) (*Config, error) {
-	var err error
-	cfg := DefaultConfig()
-	setMissingValues(cfg)
+// Load loads config across the different scopes, merges them together
+// and sets defaults
+func Load() (cfg *Config, err error) {
+	usrCfgPath := UserConfigPath()
+	sysCfgPath := SystemConfigPath()
 
-	// Update the default config with the system config
+	// Start with default config
+	cfg = DefaultConfig()
+
+	// Apply system config
 	if !stringToBool(os.Getenv("LEAKTK_CONFIG_NOSYSTEM"), false) {
-		systemConfigPath := filepath.Join(systemConfigDir, "config.toml")
-		if fs.FileExists(systemConfigPath) {
-			err = UpdateConfigFromFile(cfg, systemConfigPath)
-			if err != nil {
+		if fs.FileExists(sysCfgPath) {
+			if err = UpdateConfigFromFile(cfg, sysCfgPath); err != nil {
 				return cfg, err
 			}
 		}
 	}
 
-	// Update the default+system config with user config. The userConfigPath
-	// passed into the function is provided by the CLI and takes precedence. If
-	// it isn't set, the env should be checked for the path; else it should
-	// fall back to looking at the user's default config dir.
-	if len(userConfigPath) != 0 {
-		err = UpdateConfigFromFile(cfg, userConfigPath)
-		return cfg, err
-	}
-	if userConfigPath = os.Getenv("LEAKTK_CONFIG_PATH"); len(userConfigPath) != 0 {
-		err = UpdateConfigFromFile(cfg, userConfigPath)
-		return cfg, err
-	}
-	if userConfigPath = filepath.Join(userConfigDir, "config.toml"); fs.FileExists(userConfigPath) {
-		err = UpdateConfigFromFile(cfg, userConfigPath)
-		return cfg, err
-	}
-	return cfg, nil
-}
-
-func SaveServerAuth(serverURL, authToken string) error {
-	if !fs.PathExists(userConfigDir) {
-		if err := os.MkdirAll(userConfigDir, 0700); err != nil {
-			return fmt.Errorf("could not create dir: path=%q", userConfigDir)
+	// Apply user config
+	if fs.FileExists(usrCfgPath) {
+		if err = UpdateConfigFromFile(cfg, usrCfgPath); err != nil {
+			return cfg, err
 		}
 	}
 
-	if len(serverURL) > 0 {
-		urlPath := serverURLPath(userConfigDir)
-		if err := os.WriteFile(urlPath, []byte(strings.TrimSpace(serverURL)), 0600); err != nil {
-			return err
-		}
-	}
-
-	tokenPath := serverAuthTokenPath(userConfigDir)
-	if err := os.WriteFile(tokenPath, []byte(strings.TrimSpace(authToken)), 0600); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func RemoveServerAuth() error {
-	for _, path := range []string{
-		serverAuthTokenPath(userConfigDir),
-		serverURLPath(userConfigDir),
-	} {
-		if fs.FileExists(path) {
-			if err := os.Remove(path); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
+	return cfg, err
 }

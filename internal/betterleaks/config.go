@@ -4,8 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/BurntSushi/toml"
 	"github.com/betterleaks/betterleaks/config"
+
+	"github.com/leaktk/leaktk/internal/tomlutil"
 )
 
 func ParseConfig(rawConfig string) (cfg *config.Config, err error) {
@@ -17,7 +18,7 @@ func ParseConfig(rawConfig string) (cfg *config.Config, err error) {
 		}
 	}()
 
-	_, err = toml.Decode(rawConfig, &vc)
+	err = tomlutil.Unmarshal([]byte(rawConfig), &vc)
 	if err != nil {
 		return
 	}

@@ -1,4 +1,4 @@
-package oidc
+package oidcclient
 
 import (
 	"bytes"
@@ -55,6 +55,7 @@ func (k *JWK) LoadRSAPubKey(pubKey *rsa.PublicKey) error {
 	for _, b := range value {
 		e = (e << 8) | int(b)
 	}
+
 	*pubKey = rsa.PublicKey{N: &n, E: e}
 	return nil
 }
@@ -91,21 +92,18 @@ type JWKS struct {
 
 func FetchJWKs(ctx context.Context, jwks *JWKS, jwksURL string) error {
 	logger.Debug("fetching JWKs: url=%q", jwksURL)
-	client := httpclient.NewClient()
-	resp, err := client.Get(jwksURL)
+	resp, err := httpclient.NewClient().Get(jwksURL)
 	if err != nil {
-		return fmt.Errorf("fetch jwks: %v url=%q", err, jwksURL)
+		return fmt.Errorf("fetch JWKS: %w url=%q", err, jwksURL)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("fetch jwks: unexpected status code: status_code=%d url=%q", resp.StatusCode, jwksURL)
+		return fmt.Errorf("fetch JWKS: unexpected status code: status_code=%d url=%q", resp.StatusCode, jwksURL)
 	}
 
-	d := json.NewDecoder(resp.Body)
-	err = d.Decode(jwks)
-	if err != nil {
-		return fmt.Errorf("decode jwks resp: %v url=%q", err, jwksURL)
+	if err = json.NewDecoder(resp.Body).Decode(jwks); err != nil {
+		return fmt.Errorf("decode JWKS resp: %w url=%q", err, jwksURL)
 	}
 	return nil
 }

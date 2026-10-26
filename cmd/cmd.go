@@ -16,10 +16,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/spf13/cobra"
 
 	"github.com/leaktk/leaktk/internal/fs"
+	"github.com/leaktk/leaktk/internal/tomlutil"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/hooks"
 	"github.com/leaktk/leaktk/pkg/id"
@@ -285,7 +285,7 @@ func buildGitleaksConfig(pattern string) string {
 	rule.Description = "Grep Pattern Match"
 	rule.Regex = pattern
 
-	data, err := toml.Marshal(&rule)
+	data, err := tomlutil.Marshal(&rule)
 	if err != nil {
 		logger.Fatal("could not marshal grep rule: %v", err)
 	}
@@ -499,9 +499,13 @@ func configure(cmd *cobra.Command, args []string) error {
 	path, err := cmd.Flags().GetString("config")
 
 	if err == nil {
-		// If path == "", this will look other places
-		cfg, err = config.LocateAndLoadConfig(path)
+		if len(path) != 0 {
+			if err = config.SetUserConfigPath(path); err != nil {
+				return fmt.Errorf("set user config: %w", err)
+			}
+		}
 
+		cfg, err = config.Load()
 		if err == nil {
 			err = logger.SetLoggerLevel(cfg.Logger.Level)
 		}

@@ -18,6 +18,31 @@ func (a *BasicAuth) SetHeader(ctx context.Context, h http.Header) error {
 	return nil
 }
 
+func (a *BasicAuth) Load(d any) error {
+	m, ok := d.(map[string]any)
+	if !ok {
+		return fmt.Errorf("could not load data: expected=\"map[string]any\" got=%T", d)
+	}
+
+	for k, v := range m {
+		switch k {
+		case "username":
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("%s must be a string", k)
+			}
+			a.Username = s
+		case "password":
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("%s must be a string", k)
+			}
+			a.Password = s
+		}
+	}
+	return nil
+}
+
 // Auth pairs should be merged with each other
 func (a *BasicAuth) Merge(o *BasicAuth) error {
 	if len(o.Username) != 0 || len(o.Password) != 0 {

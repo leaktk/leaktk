@@ -15,21 +15,19 @@ import (
 func runCollect(cmd *cobra.Command, srcIDs []string) {
 	leaktCollector := collectors.NewCollector()
 	ctx := cmd.Context()
+	srcs := sources.Sources{}
 
-	idMap := make(map[string]bool, len(srcIDs))
 	for _, srcID := range srcIDs {
-		idMap[srcID] = true
-	}
-
-	srcs := make(sources.Sources, 0, len(cfg.Sources))
-	for _, src := range cfg.Sources {
-		if idMap[src.ID()] {
-			srcs = append(srcs, src)
+		s := cfg.Sources.Get(srcID)
+		if s != nil {
+			if err := srcs.Add(s); err != nil {
+				logger.Fatal("add source: %v", err)
+			}
 		}
 	}
 
 	fmt.Println(strings.Join(facts.FactCSVHeader, ","))
-	err := leaktCollector.Facts(ctx, srcs, func(f facts.Fact) error {
+	err := leaktCollector.Facts(ctx, &srcs, func(f facts.Fact) error {
 		row, err := f.MarshalCSV()
 		if err != nil {
 			return fmt.Errorf("could not marshal fact: %w eid=%d key=%q", err, f.EntityID, f.Key)

@@ -13,7 +13,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/leaktk/leaktk/internal/auths"
 	"github.com/leaktk/leaktk/internal/httpclient"
+	"github.com/leaktk/leaktk/internal/sources"
+	"github.com/leaktk/leaktk/internal/urlutil"
 	"github.com/leaktk/leaktk/pkg/config"
 )
 
@@ -44,14 +47,16 @@ func TestPatternsFetchGitleaksConfig(t *testing.T) {
 	}))
 	ts.Start()
 	defer ts.Close()
+	tsURL, err := urlutil.ParseURL(ts.URL)
+	require.NoError(t, err)
 
 	t.Run("Success", func(t *testing.T) {
 		cfg := config.DefaultConfig()
-		cfg.Scanner.Patterns.Server.URL = ts.URL
+		cfg.Scanner.Patterns.Server.URL = *tsURL
 		cfg.Scanner.Patterns.Gitleaks.Version = "x.y.z"
 
 		client := httpclient.NewClient()
-		p := NewPatterns(&cfg.Scanner.Patterns, client)
+		p := NewPatterns(cfg, client)
 
 		rawConfig, err := p.fetchGitleaksConfig(ctx)
 		require.NoError(t, err)
@@ -62,18 +67,18 @@ func TestPatternsFetchGitleaksConfig(t *testing.T) {
 		tempDir := t.TempDir()
 
 		cfg := config.DefaultConfig()
-		cfg.Scanner.Patterns.Server.URL = ts.URL
+		cfg.Scanner.Patterns.Server.URL = *tsURL
 		cfg.Scanner.Patterns.Gitleaks.Version = "x.y.z"
 		cfg.Scanner.Patterns.Gitleaks.ConfigPath = filepath.Join(tempDir, "gitleaks.toml")
 
 		client := httpclient.NewClient()
-		p := NewPatterns(&cfg.Scanner.Patterns, client)
+		p := NewPatterns(cfg, client)
 		c, err := p.Gitleaks(t.Context())
 		require.NoError(t, err)
 		assert.Len(t, c.Rules, 2)
 
 		cfg.Scanner.Patterns.ExcludeTags = []string{"test:exclude"}
-		p = NewPatterns(&cfg.Scanner.Patterns, client)
+		p = NewPatterns(cfg, client)
 		c, err = p.Gitleaks(t.Context())
 		require.NoError(t, err)
 		assert.Len(t, c.Rules, 1)
@@ -81,11 +86,11 @@ func TestPatternsFetchGitleaksConfig(t *testing.T) {
 
 	t.Run("InvalidURL", func(t *testing.T) {
 		cfg := config.DefaultConfig()
-		cfg.Scanner.Patterns.Server.URL = "invalid-url"
+		cfg.Scanner.Patterns.Server.URL = urlutil.URL{Host: "127.0.0.1", Path: "invalid-url"}
 		cfg.Scanner.Patterns.Gitleaks.Version = "x.y.z"
 
 		client := httpclient.NewClient()
-		p := NewPatterns(&cfg.Scanner.Patterns, client)
+		p := NewPatterns(cfg, client)
 
 		_, err := p.fetchGitleaksConfig(ctx)
 		require.Error(t, err)
@@ -97,15 +102,17 @@ func TestPatternsFetchGitleaksConfig(t *testing.T) {
 		}))
 		ts.Start()
 		defer ts.Close()
+		tsURL, err := urlutil.ParseURL(ts.URL)
+		require.NoError(t, err)
 
 		cfg := config.DefaultConfig()
-		cfg.Scanner.Patterns.Server.URL = ts.URL
+		cfg.Scanner.Patterns.Server.URL = *tsURL
 		cfg.Scanner.Patterns.Gitleaks.Version = "x.y.z"
 
 		client := httpclient.NewClient()
-		p := NewPatterns(&cfg.Scanner.Patterns, client)
+		p := NewPatterns(cfg, client)
 
-		_, err := p.fetchGitleaksConfig(ctx)
+		_, err = p.fetchGitleaksConfig(ctx)
 		require.Error(t, err)
 	})
 
@@ -120,14 +127,24 @@ func TestPatternsFetchGitleaksConfig(t *testing.T) {
 		}))
 		ts.Start()
 		defer ts.Close()
+		tsURL, err := urlutil.ParseURL(ts.URL)
+		require.NoError(t, err)
 
 		cfg := config.DefaultConfig()
-		cfg.Scanner.Patterns.Server.URL = ts.URL
-		cfg.Scanner.Patterns.Server.Auth.Token = "test-token"
+		cfg.Scanner.Patterns.Server.URL = *tsURL
 		cfg.Scanner.Patterns.Gitleaks.Version = "x.y.z"
+		ltkSrc := sources.LeakTKServer{
+			BaseURL: *tsURL,
+			OIDCAuth: auths.OIDCAuth{
+				AccessToken: "test-token",
+			},
+		}
+
+		require.NoError(t, ltkSrc.Load(map[string]any{"id": "leaktk-server"}))
+		require.NoError(t, cfg.Sources.Add(&ltkSrc))
 
 		client := httpclient.NewClient()
-		p := NewPatterns(&cfg.Scanner.Patterns, client)
+		p := NewPatterns(cfg, client)
 
 		rawConfig, err := p.fetchGitleaksConfig(ctx)
 		require.NoError(t, err)

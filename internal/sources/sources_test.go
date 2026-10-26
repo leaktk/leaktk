@@ -4,9 +4,10 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/leaktk/leaktk/internal/tomlutil"
 )
 
 const configText = `
@@ -41,11 +42,12 @@ token = 'org2-token' # notsecret
 
 func TestSources(t *testing.T) {
 	var cfg struct {
-		Sources Sources
+		Sources Sources `toml:"sources"`
 	}
-	_, err := toml.Decode(configText, &cfg)
+	err := tomlutil.Unmarshal([]byte(configText), &cfg)
+	ss := cfg.Sources
 	require.NoError(t, err)
-	require.Len(t, cfg.Sources, 4)
+	require.Equal(t, 4, ss.Len())
 
 	t.Run("SetHeader", func(t *testing.T) {
 		tests := []struct {
@@ -96,7 +98,7 @@ func TestSources(t *testing.T) {
 				require.NoError(t, err)
 				for header, value := range tt.expectedHeaders {
 					assert.Empty(t, req.Header.Get(header), header)
-					require.NoError(t, cfg.Sources.SetHeader(t.Context(), req))
+					require.NoError(t, ss.SetHeader(t.Context(), req))
 					assert.Equal(t, value, req.Header.Get(header), header)
 				}
 			})

@@ -1,4 +1,4 @@
-package oidc
+package oidcclient
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -22,8 +23,9 @@ import (
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
-const tokenRawLen = 32 // crypto.Sha256.Size
-const tokenLen = 43    // base64.RawURLEncoding.EncodedLen(32)
+const tokenRawLen = 32    // crypto.Sha256.Size
+const tokenLen = 43       // base64.RawURLEncoding.EncodedLen(32)
+const tokenMaxIatAge = 60 // 1 minute
 const paramsTempl = "client_id=%s" +
 	"&code_challenge=%s" +
 	"&code_challenge_method=S256" +
@@ -35,110 +37,34 @@ const paramsTempl = "client_id=%s" +
 	"&state=%s"
 
 var b64u = base64.RawURLEncoding
-var defaultScopes = []string{"openid", "profile", "offline_access"}
+var cleanErrRe = regexp.MustCompile(`[<>]+`)
 
-type LoginFlag int
+type AuthReqToken [tokenLen]byte
 
-type Token [tokenLen]byte
-
-func (t *Token) String() string {
+func (t *AuthReqToken) String() string {
 	return string(t[:])
 }
 
 type Config struct {
-	Issuer                string   `json:"issuer"`
+	// Provided values
+	ClientID string   `json:"-"`
+	Resource string   `json:"-"`
+	Scopes   []string `json:"-"`
+
+	// Provided then updated from fetch values
+	Issuer string `json:"issuer"`
+
+	// Fetched values
 	TokenEndpoint         string   `json:"token_endpoint"`
 	AuthorizationEndpoint string   `json:"authorization_endpoint"`
 	JWKSURL               string   `json:"jwks_uri"`
 	ScopesSupported       []string `json:"scopes_supported"`
-	ClientID              string   `json:"-"`
-	Resource              string   `json:"-"`
-	RedirectURI           string   `json:"-"`
-	MaxTokenAge           int64    `json:"-"`
 }
 
-type RefreshToken []byte
-type IDToken struct {
-	Value  []byte
-	Header struct {
-		Alg string `json:"alg"`
-		Kid string `json:"kid"`
-	}
-	Claims struct {
-		Iss      string `json:"iss"`
-		Sub      string `json:"sub"`
-		Aud      string `json:"aud"`
-		Exp      int64  `json:"exp"`
-		Iat      int64  `json:"iat"`
-		AuthTime int64  `json:"auth_time"`
-		Nonce    string `json:"nonce"`
-		Acr      string `json:"acr"`
-		Amr      string `json:"amr"`
-		Azp      string `json:"azp"`
-		Name     string `json:"name"`
-		Jti      string `json:"jti"`
-		AtHash   string `json:"at_hash"`
-	}
-}
-
-func (t *IDToken) UnmarshalText(text []byte) error {
-	t.Value = text
-
-	headerB64, bodyAndSigB64, found := bytes.Cut(text, []byte("."))
-	if !found || len(headerB64) == 0 {
-		return errors.New("jwt unmarshal: missing header")
-	}
-
-	header := make([]byte, b64u.DecodedLen(len(headerB64)))
-	if _, err := b64u.Decode(header, headerB64); err != nil {
-		return fmt.Errorf("jwt unmarshal: header: %w", err)
-	}
-
-	if err := json.Unmarshal(header, &t.Header); err != nil {
-		return fmt.Errorf("jwt unmarshal: header: %w", err)
-	}
-
-	bodyB64, sigB64, found := bytes.Cut(bodyAndSigB64, []byte("."))
-	if !found || len(bodyB64) == 0 {
-		return errors.New("jwt unmarshal: missing body")
-	} else if len(sigB64) == 0 {
-		return errors.New("jwt unmarshal: missing signature")
-	}
-	body := make([]byte, b64u.DecodedLen(len(bodyB64)))
-	if _, err := b64u.Decode(body, bodyB64); err != nil {
-		return fmt.Errorf("jwt unmarshal: body: %w", err)
-	}
-	if err := json.Unmarshal(body, &t.Claims); err != nil {
-		return fmt.Errorf("jwt unmarshal: body: %w", err)
-	}
-	return nil
-}
-
-func (t *IDToken) VerifyAccessToken(at string) error {
-	if t.Header.Alg != "RS256" {
-		return errors.New("this client can only verify RS256 access tokens")
-	}
-
-	atHash := []byte(t.Claims.AtHash)
-	if len(atHash) == 0 {
-		return errors.New("the id_token missing at_hash claim")
-	}
-
-	b := []byte(at)
-	h := sha256.Sum256(b)
-	d := make([]byte, b64u.EncodedLen(sha256.Size/2))
-	b64u.Encode(d, h[:sha256.Size/2])
-	if !bytes.Equal(atHash, d) {
-		return fmt.Errorf("invalid at_hash: expected=%q actual=%q", atHash, d)
-	}
-
-	return nil
-}
-
-type Creds struct {
-	AccessToken  string       `json:"access_token"`
-	IDToken      IDToken      `json:"id_token"`
-	RefreshToken RefreshToken `json:"refresh_token"`
+type AuthTokens struct {
+	AccessToken  string  `json:"access_token"`
+	RefreshToken string  `json:"refresh_token"`
+	IDToken      IDToken `json:"id_token"`
 }
 
 func s256dgst(dgst, data []byte) {
@@ -146,20 +72,20 @@ func s256dgst(dgst, data []byte) {
 	b64u.Encode(dgst, h[:])
 }
 
-func loadToken(token *Token) {
+func loadAuthReqToken(token *AuthReqToken) {
 	var rawToken [tokenRawLen]byte
 	rand.Read(rawToken[:])
 	b64u.Encode(token[:], rawToken[:])
 }
 
-func FetchCreds(ctx context.Context, creds *Creds, cfg *Config, code string, codeVerifier *Token) error {
+func FetchTokens(ctx context.Context, authTokens *AuthTokens, cfg *Config, code, redirectURI string, codeVerifier *AuthReqToken) error {
 	logger.Debug("fetching tokens")
 	values := make(url.Values)
 	values.Set("client_id", cfg.ClientID)
 	values.Set("code", code)
 	values.Set("code_verifier", codeVerifier.String())
 	values.Set("grant_type", "authorization_code")
-	values.Set("redirect_uri", cfg.RedirectURI)
+	values.Set("redirect_uri", redirectURI)
 
 	client := httpclient.NewClient()
 	body := strings.NewReader(values.Encode())
@@ -179,9 +105,7 @@ func FetchCreds(ctx context.Context, creds *Creds, cfg *Config, code string, cod
 		return fmt.Errorf("request token: unexpected status code: status_code=%d", resp.StatusCode)
 	}
 
-	d := json.NewDecoder(resp.Body)
-	err = d.Decode(creds)
-	if err != nil {
+	if err = json.NewDecoder(resp.Body).Decode(authTokens); err != nil {
 		return fmt.Errorf("decode token resp: %w", err)
 	}
 
@@ -193,7 +117,7 @@ func FetchCreds(ctx context.Context, creds *Creds, cfg *Config, code string, cod
 // service that the access token is being sent to to actually validate the
 // token is valid.  If using this to gate access to a resource, a more thorough
 // implmentation is needed.
-func ValidateIDToken(ctx context.Context, t *IDToken, cfg *Config, nonce *Token) error {
+func ValidateIDToken(ctx context.Context, t *IDToken, cfg *Config, nonce *AuthReqToken) error {
 	logger.Debug("validating token")
 	now := time.Now().Unix()
 
@@ -232,9 +156,9 @@ func ValidateIDToken(ctx context.Context, t *IDToken, cfg *Config, nonce *Token)
 	// The iat Claim can be used to reject tokens that were issued too far away
 	// from the current time, limiting the amount of time that nonces need to
 	// be stored to prevent attacks. The acceptable range is Client specific.
-	if now-t.Claims.Iat > cfg.MaxTokenAge {
-		logger.Debug("timing details: now=%d iat=%d max_age=%d", now, t.Claims.Iat, cfg.MaxTokenAge)
-		return fmt.Errorf("token exceeded max allowed age: max_age_seconds=%d", cfg.MaxTokenAge)
+	if now-t.Claims.Iat > tokenMaxIatAge {
+		logger.Debug("timing details: now=%d iat=%d max_iat_age=%d", now, t.Claims.Iat, tokenMaxIatAge)
+		return fmt.Errorf("id token issued more than max %d seconds ago", tokenMaxIatAge)
 	}
 
 	// If a nonce value was sent in the Authentication Request, a nonce Claim
@@ -244,16 +168,6 @@ func ValidateIDToken(ctx context.Context, t *IDToken, cfg *Config, nonce *Token)
 	// detecting replay attacks is Client specific.
 	if t.Claims.Nonce != nonce.String() {
 		return errors.New("invalid nonce")
-	}
-
-	// If the auth_time Claim was requested, either through a specific request
-	// for this Claim or by using the max_age parameter, the Client SHOULD
-	// check the auth_time Claim value and request re-authentication if it
-	// determines too much time has elapsed since the last End-User
-	// authentication.
-	if t.Claims.AuthTime > 0 && now-t.Claims.AuthTime > cfg.MaxTokenAge {
-		logger.Debug("timing details: now=%d auth_time=%d max_age=%d", now, t.Claims.AuthTime, cfg.MaxTokenAge)
-		return fmt.Errorf("token exceeded max allowed age: max_age_seconds=%d", cfg.MaxTokenAge)
 	}
 
 	// Verify signature
@@ -292,9 +206,7 @@ func FetchConfig(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("fetch config: unexpected status code: status_code=%d", resp.StatusCode)
 	}
 
-	d := json.NewDecoder(resp.Body)
-	err = d.Decode(cfg)
-	if err != nil {
+	if err = json.NewDecoder(resp.Body).Decode(cfg); err != nil {
 		return fmt.Errorf("decode config resp: %w", err)
 	}
 
@@ -313,13 +225,14 @@ func FetchConfig(ctx context.Context, cfg *Config) error {
 	return nil
 }
 
-func LoginAuthCodePKCE(ctx context.Context, creds *Creds, cfg *Config) error {
+func LoginAuthCodePKCE(ctx context.Context, authTokens *AuthTokens, cfg *Config) error {
 	var (
 		loginURL      string
-		codeChallenge Token
-		codeVerifier  Token
-		nonce         Token
-		state         Token
+		redirectURI   string
+		codeChallenge AuthReqToken
+		codeVerifier  AuthReqToken
+		nonce         AuthReqToken
+		state         AuthReqToken
 		err           error
 		l             net.Listener
 	)
@@ -335,13 +248,12 @@ func LoginAuthCodePKCE(ctx context.Context, creds *Creds, cfg *Config) error {
 	}
 	defer func() { _ = l.Close() }()
 
-	cfg.RedirectURI = fmt.Sprintf("http://%s/callback", l.Addr())
+	redirectURI = fmt.Sprintf("http://%s/callback", l.Addr())
 	loginURL = fmt.Sprintf("http://%s/login", l.Addr())
 
-	// set up tokens
-	loadToken(&nonce)
-	loadToken(&state)
-	loadToken(&codeVerifier)
+	loadAuthReqToken(&nonce)
+	loadAuthReqToken(&state)
+	loadAuthReqToken(&codeVerifier)
 
 	// derive code challenge
 	s256dgst(codeChallenge[:], codeVerifier[:])
@@ -352,7 +264,7 @@ func LoginAuthCodePKCE(ctx context.Context, creds *Creds, cfg *Config) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		var scopes []string
-		for _, scope := range defaultScopes {
+		for _, scope := range cfg.Scopes {
 			if slices.Contains(cfg.ScopesSupported, scope) {
 				scopes = append(scopes, scope)
 			} else {
@@ -364,7 +276,7 @@ func LoginAuthCodePKCE(ctx context.Context, creds *Creds, cfg *Config) error {
 			url.QueryEscape(cfg.ClientID),
 			url.QueryEscape(codeChallenge.String()),
 			url.QueryEscape(nonce.String()),
-			url.QueryEscape(cfg.RedirectURI),
+			url.QueryEscape(redirectURI),
 			url.QueryEscape(cfg.Resource),
 			url.QueryEscape(strings.Join(scopes, " ")),
 			url.QueryEscape(state.String()),
@@ -379,6 +291,8 @@ func LoginAuthCodePKCE(ctx context.Context, creds *Creds, cfg *Config) error {
 		rQuery := r.URL.Query()
 		rState := []byte(rQuery.Get("state"))
 		rCode := rQuery.Get("code")
+		rErrCode := cleanErrRe.ReplaceAllString(rQuery.Get("error"), "")
+		rErrDesc := cleanErrRe.ReplaceAllString(rQuery.Get("error_description"), "")
 
 		defer func() {
 			select {
@@ -390,17 +304,20 @@ func LoginAuthCodePKCE(ctx context.Context, creds *Creds, cfg *Config) error {
 		if !bytes.Equal(rState, state[:]) {
 			err = errors.New("invalid state parameter")
 			http.Error(w, err.Error(), http.StatusBadRequest)
-		} else if err = FetchCreds(ctx, creds, cfg, rCode, &codeVerifier); err != nil {
-			err = fmt.Errorf("token exchange failed: %v", err)
+		} else if len(rErrCode) != 0 {
+			err = fmt.Errorf("server error response: code=%q message=%q", rErrCode, rErrDesc)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		} else if err = FetchTokens(ctx, authTokens, cfg, rCode, redirectURI, &codeVerifier); err != nil {
+			err = fmt.Errorf("token exchange failed: %w", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-		} else if len(creds.AccessToken) == 0 {
+		} else if len(authTokens.AccessToken) == 0 {
 			err = errors.New("could not fetch access token")
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-		} else if err = ValidateIDToken(ctx, &creds.IDToken, cfg, &nonce); err != nil {
-			err = fmt.Errorf("validate id token failed: %v", err)
+		} else if err = ValidateIDToken(ctx, &authTokens.IDToken, cfg, &nonce); err != nil {
+			err = fmt.Errorf("validate id token failed: %w", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-		} else if err = creds.IDToken.VerifyAccessToken(creds.AccessToken); err != nil {
-			err = fmt.Errorf("verify access token failed: %v", err)
+		} else if err = authTokens.IDToken.VerifyAccessToken(authTokens.AccessToken); err != nil {
+			err = fmt.Errorf("verify access token failed: %w", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		} else {
 			_, _ = fmt.Fprintf(w, "Success. You may now close this tab.")
@@ -449,7 +366,7 @@ func LoginAuthCodePKCE(ctx context.Context, creds *Creds, cfg *Config) error {
 		return ctx.Err()
 	}
 
-	if len(creds.AccessToken) == 0 {
+	if len(authTokens.AccessToken) == 0 {
 		return errors.New("no access token set after login")
 	}
 

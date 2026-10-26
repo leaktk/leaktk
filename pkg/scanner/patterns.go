@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 
 	"github.com/leaktk/leaktk/internal/betterleaks"
 	"github.com/leaktk/leaktk/internal/fs"
+	"github.com/leaktk/leaktk/internal/sources"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
@@ -26,96 +26,94 @@ import (
 type Patterns struct {
 	client             *http.Client
 	config             *config.Patterns
+	sources            sources.Sources
 	gitleaksConfigHash [32]byte
 	gitleaksConfig     *blconfig.Config
 	mutex              sync.Mutex
 }
 
 // NewPatterns returns a configured instance of Patterns
-func NewPatterns(cfg *config.Patterns, client *http.Client) *Patterns {
+func NewPatterns(cfg *config.Config, client *http.Client) *Patterns {
 	return &Patterns{
-		client: client,
-		config: cfg,
+		client:  client,
+		config:  &cfg.Scanner.Patterns,
+		sources: cfg.Sources,
 	}
 }
 
 func (p *Patterns) fetchGitleaksConfig(ctx context.Context) (string, error) {
-	var (
-		err  error
-		resp *http.Response
-		req  *http.Request
-		body []byte
-	)
-
+	var err error
 	logger.Info("fetching gitleaks patterns")
 
-	patternsURL := p.config.Server.URL
-	patternsURL = strings.TrimRight(patternsURL, "/")
-	patternsURL = fmt.Sprintf("%s/patterns/gitleaks/%s", patternsURL, p.config.Gitleaks.Version)
+	glVersion := p.config.Gitleaks.Version
+	patternsURL := p.config.Server.URL.JoinPath("patterns", "gitleaks", glVersion).String()
 
 	logger.Debug("patterns url: url=%q", patternsURL)
+	doFetch := func(attempt int) (resp *http.Response, err error) {
+		var req *http.Request
 
-	// allow a second attempt if www-authenticate header is present
-	attempt := 1
-	for {
 		logger.Debug("requesting patterns: attempt=%d", attempt)
 		req, err = http.NewRequestWithContext(ctx, "GET", patternsURL, nil)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 
-		if t := p.config.Server.Auth.Token; len(t) > 0 {
-			logger.Debug("setting authorization header")
-			req.Header.Set("Authorization", "Bearer "+t)
+		if err = p.sources.SetHeader(ctx, req); err != nil {
+			return nil, fmt.Errorf("set header: %w", err)
 		}
 
 		resp, err = p.client.Do(req) // #nosec G704
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		body, err = io.ReadAll(resp.Body)
+		return resp, nil
+
+	}
+
+	resp, err := doFetch(1)
+	if err != nil {
+		return "", err
+	}
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			err = fmt.Errorf("read body: %w", err)
+		}
+		return string(body), err
+	case http.StatusUnauthorized:
+		if !p.config.Autologin {
+			return "", fmt.Errorf(
+				"request failed: status=%q status_code=%d",
+				resp.Status, resp.StatusCode,
+			)
+		}
+
+		logger.Debug("attempting autologin")
+		if err = p.sources.Login(ctx, &p.config.Server.URL); err != nil {
+			return "", fmt.Errorf("autologin: %w", err)
+		}
+
+		resp, err = doFetch(2)
+		if err != nil {
+			return "", fmt.Errorf("post-autologin retry: %w", err)
+		}
+		body, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 
-		if err != nil {
-			return "", fmt.Errorf("read response: %v status_code=%d", err, resp.StatusCode)
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf(
+				"post-autologin retry: %w status=%q status_code=%d",
+				err, resp.Status, resp.StatusCode,
+			)
 		}
 
-		switch resp.StatusCode {
-		case http.StatusOK:
-			// save the token if it was provided from a successful autologin
-			if attempt == 2 {
-				logger.Info("saving LeakTK server auth: url=%s", p.config.Server.URL)
-				err := config.SaveServerAuth(
-					p.config.Server.URL, p.config.Server.Auth.Token,
-				)
-				if err != nil {
-					logger.Error("could not save token: %v", err)
-				}
-			}
-			return string(body), err
-		case http.StatusUnauthorized:
-			// see if we can do an auto login
-			h := resp.Header.Get("WWW-Authenticate")
-			if p.config.Server.Auth.Autologin && len(h) != 0 {
-				logger.Debug("attempting auto login")
-				if authErr := p.config.Server.Auth.FromHeader(h); authErr != nil {
-					logger.Debug("auth config from header: %v", authErr)
-				} else if loginErr := p.config.Server.Auth.Login(ctx); loginErr != nil {
-					logger.Error("auth autologin: %v", loginErr)
-				} else if attempt == 1 {
-					attempt++
-					continue // give it another attempt
-				}
-			} else {
-				logger.Debug(
-					"not attempting auto login: autologin_enabled=%v www_auth_header_len=%d",
-					p.config.Server.Auth.Autologin, len(h),
-				)
-			}
-		}
-
-		return "", fmt.Errorf("%s: status_code=%d", strings.ToLower(resp.Status), resp.StatusCode)
+		return string(body), nil
 	}
+
+	return "", fmt.Errorf("request failed: status=%q status_code=%d", resp.Status, resp.StatusCode)
 }
 
 // gitleaksConfigModTimeExceeds returns true if the file is older than

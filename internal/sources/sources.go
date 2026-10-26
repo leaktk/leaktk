@@ -4,138 +4,150 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"net/http"
-	"net/url"
-	"strings"
 
-	"github.com/leaktk/leaktk/internal/auths"
-	"github.com/leaktk/leaktk/internal/httpclient"
+	"github.com/leaktk/leaktk/internal/urlutil"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
-type Sources []Source
+type Sources struct {
+	values map[string]Source
+}
 
-// Merge merges new sources (o) with existing sources (ss) and then dedups and
-// merges the combined list by ID. A nil other source can be provided to dedup
-// the current list by merging duplicates together.
-func (ss *Sources) Merge(o Sources) error {
-	merged := make(Sources, 0, len(*ss))
-	seen := make(map[string]Source, len(*ss))
+func (ss *Sources) Len() int {
+	return len(ss.values)
+}
 
-	// merge sources with matching IDs
-	for _, s := range append(*ss, o...) {
-		if existing := seen[s.ID()]; existing != nil {
-			if err := existing.Merge(s); err != nil {
-				return fmt.Errorf("%v id=%s", err, s.ID())
-			}
-		} else {
-			seen[s.ID()] = s
-			merged = append(merged, s)
-		}
+func (ss *Sources) Add(s Source) error {
+	if s == nil {
+		return errors.New("nil source")
 	}
 
-	*ss = merged
+	if len(s.ID()) == 0 {
+		return errors.New("missing ID")
+	}
+
+	if s.Kind() == UnknownKind {
+		return errors.New("unknown Kind")
+	}
+
+	if ss.values == nil {
+		ss.values = make(map[string]Source, 1)
+	}
+
+	es, exists := ss.values[s.ID()]
+	if exists {
+		if err := es.Merge(s); err != nil {
+			return fmt.Errorf("add source: %w", err)
+		}
+	} else {
+		ss.values[s.ID()] = s
+	}
+
 	return nil
 }
 
-type Source interface {
-	ID() string
-	Kind() Kind
-	Merge(o Source) error
-}
-
-type httpHeaderSetter interface {
-	SetHeader(ctx context.Context, h http.Header) error
-	AppliesTo(url *url.URL) bool
+func (ss *Sources) Get(id string) Source {
+	return ss.values[id]
 }
 
 // SetHeader runs source.SetHeader(context.Context, req.Header) for each
 // applicable source in order that they apper in the config.
 // NOTE: If more than one source sets the same header, the last one wins.
-func (ss Sources) SetHeader(ctx context.Context, req *http.Request) error {
-	for _, s := range ss {
+func (ss *Sources) SetHeader(ctx context.Context, req *http.Request) error {
+	for id, s := range ss.values {
 		hs, isHeaderSetter := s.(httpHeaderSetter)
 
 		if !isHeaderSetter {
-			logger.Debug("skipping source: cannot set headers: source_id=%q", s.ID())
+			logger.Debug("skipping source: cannot set headers: source_id=%q", id)
 			continue
 		}
 
-		if !hs.AppliesTo(req.URL) {
-			logger.Debug("skipping source: not applicable: source_id=%q", s.ID())
+		if !hs.AppliesTo((*urlutil.URL)(req.URL)) {
+			logger.Debug("skipping source: not applicable: source_id=%q", id)
 			continue
 		}
 
 		if err := hs.SetHeader(ctx, req.Header); err != nil {
-			return fmt.Errorf("source could not set header: %w source_id=%q", err, s.ID())
+			return fmt.Errorf("source could not set header: %w source_id=%q", err, id)
 		}
 	}
 
 	return nil
 }
 
-func castOptSrcField[T any](values map[string]any, field string, fallback T) T {
-	v := values[field]
-	t, ok := v.(T)
-	if !ok {
-		if v == nil {
-			return fallback
+func (ss *Sources) Login(ctx context.Context, u *urlutil.URL) error {
+	for id, s := range ss.values {
+		al, isAutoLoginner := s.(autoLoginner)
+
+		if !isAutoLoginner {
+			logger.Debug("skipping source: login unsupported: source_id=%q", id)
+			continue
 		}
-		logger.Fatal("invalid source field type: field=%q expected_type=%T actual_type=%T", field, t, v)
+
+		if !al.AppliesTo(u) {
+			logger.Debug("skipping source: not applicable: source_id=%q", id)
+			continue
+		}
+
+		if err := al.Login(ctx); err != nil {
+			return fmt.Errorf("login: %w source_id=%q", err, id)
+		}
+
+		return nil
 	}
-	return t
+
+	return errors.New("login: no source found")
 }
 
-func castSrcField[T any](values map[string]any, field string) T {
-	v := values[field]
-	t, ok := v.(T)
-	if !ok {
-		if v == nil {
-			logger.Fatal("missing required source field: field=%q", field)
+func (ss *Sources) Iter() iter.Seq2[string, Source] {
+	return func(yield func(string, Source) bool) {
+		for id, s := range ss.values {
+			if !yield(id, s) {
+				return
+			}
 		}
-		logger.Fatal("invalid source field type: field=%q expected_type=%T actual_type=%T", field, t, v)
 	}
-	return t
+}
+
+func (ss *Sources) Load(d any) error {
+	sMaps, ok := d.([]map[string]any)
+	if !ok {
+		return fmt.Errorf("could not load data: expected=\"[]map[string]any\" got=%T", d)
+	}
+
+	for i, sm := range sMaps {
+		name, ok := sm["kind"].(string)
+		if !ok {
+			return fmt.Errorf("source kind must be a string: source_index=%d", i)
+		}
+
+		kind, ok := KindFromName(name)
+		if !ok {
+			return fmt.Errorf("unknown kind: kind_name=%q", name)
+		}
+
+		s, err := NewSourceFromKind(kind)
+		if err != nil {
+			return fmt.Errorf("%w: kind_name=%q source_index=%d", err, name, i)
+		}
+
+		if err = s.Load(sm); err != nil {
+			return fmt.Errorf("source load: %w source_index=%d", err, i)
+		}
+
+		if err = ss.Add(s); err != nil {
+			return fmt.Errorf("add source: %w source_index=%d", err, i)
+		}
+	}
+
+	return nil
 }
 
 func (ss *Sources) UnmarshalTOML(data any) error {
-	values, ok := data.([]map[string]any)
-	if !ok {
-		return errors.New("sources must be a list of tables")
-	}
-
-	for i, value := range values {
-		srcID := castSrcField[string](value, "id")
-		kindName := castSrcField[string](value, "kind")
-		kind, srcKindValid := KindFromName(kindName)
-		if !srcKindValid {
-			return fmt.Errorf("invalid source kind name: source_kind_name=%q source_index=%d", kindName, i)
-		}
-
-		switch kind {
-		case AtlassianCloudAdminKind:
-			*ss = append(*ss, &AtlassianCloudAdmin{
-				id:        srcID,
-				OrgID:     castSrcField[string](value, "org_id"),
-				BaseURL:   strings.TrimRight(castOptSrcField[string](value, "base_url", "https://api.atlassian.com/admin"), "/"),
-				RateLimit: httpclient.NewRateLimit(),
-				BearerAuth: auths.BearerAuth{
-					Token: castSrcField[string](value, "token"),
-				},
-			})
-		case AtlassianCloudJiraKind:
-			*ss = append(*ss, &AtlassianCloudJira{
-				id:        srcID,
-				BaseURL:   strings.TrimRight(castSrcField[string](value, "base_url"), "/"),
-				RateLimit: httpclient.NewRateLimit(),
-				BasicAuth: auths.BasicAuth{
-					Username: castSrcField[string](value, "username"),
-					Password: castSrcField[string](value, "password"),
-				},
-			})
-		default:
-			return fmt.Errorf("unknown source kind: %q index=%d", kind, i)
-		}
+	if err := ss.Load(data); err != nil {
+		return fmt.Errorf("sources load: %w", err)
 	}
 
 	return nil
