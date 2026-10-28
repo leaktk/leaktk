@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/BurntSushi/toml"
 	"gopkg.in/yaml.v3"
 
+	"github.com/leaktk/leaktk/internal/tomlutil"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
 	"github.com/leaktk/leaktk/pkg/proto"
@@ -112,13 +112,11 @@ func formatHuman(r *proto.Response) string {
 }
 
 func formatToml(r *proto.Response) string {
-	var buf bytes.Buffer
-
-	if err := toml.NewEncoder(&buf).Encode(r); err != nil {
-		logger.Error("could not marshal response: error=%q", err)
+	data, err := tomlutil.Marshal(r)
+	if err != nil {
+		logger.Error("could not marshal response: %v request_id=%q", err, r.RequestID)
 	}
-
-	return buf.String()
+	return string(data)
 }
 
 func formatYaml(r *proto.Response) string {

@@ -8,11 +8,13 @@ import (
 )
 
 func TestKindFromName(t *testing.T) {
-	for i, name := range KindNames {
+	skip := 1 // skip UnknownKind
+	for i, name := range KindNames[skip:] {
+		i += skip
 		t.Run(name, func(t *testing.T) {
-			fk, ok := KindFromName(name)
+			k, ok := KindFromName(name)
 			require.True(t, ok)
-			assert.Equal(t, Kind(i), fk)
+			assert.Equal(t, Kind(i), k)
 		})
 	}
 

@@ -16,7 +16,7 @@ func NewCollector() *Collector {
 	return &Collector{}
 }
 
-func (*Collector) Facts(ctx context.Context, srcs sources.Sources, yield facts.FactYieldFunc) (err error) {
+func (*Collector) Facts(ctx context.Context, srcs *sources.Sources, yield facts.FactYieldFunc) (err error) {
 	// Yield fact key mapping first (entity_id = 0) to avoid passing the strings
 	// along for each fact key
 	fact := facts.Fact{EntityID: 0}
@@ -32,7 +32,7 @@ func (*Collector) Facts(ctx context.Context, srcs sources.Sources, yield facts.F
 	// NOTE: it is fine if EntityIDs are skipped and it may make the code easier
 	// to always increment it even if not yielding values
 	eidOffset := fact.EntityID
-	for _, src := range srcs {
+	for id, src := range srcs.Iter() {
 		switch src := src.(type) {
 		case *sources.AtlassianCloudAdmin:
 			eidOffset, err = atlassianCloudAdminFacts(ctx, src, eidOffset, yield)
@@ -43,7 +43,7 @@ func (*Collector) Facts(ctx context.Context, srcs sources.Sources, yield facts.F
 		}
 
 		if err != nil {
-			return fmt.Errorf("%w src_id=%q src_kind=%q", err, src.ID(), src.Kind())
+			return fmt.Errorf("%w src_id=%q src_kind=%q", err, id, src.Kind())
 		}
 	}
 

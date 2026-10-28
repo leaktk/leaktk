@@ -1,26 +1,60 @@
 package sources
 
 import (
+	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/leaktk/leaktk/internal/auths"
 	"github.com/leaktk/leaktk/internal/httpclient"
-	"github.com/leaktk/leaktk/pkg/logger"
+	"github.com/leaktk/leaktk/internal/urlutil"
 )
 
 type AtlassianCloudAdmin struct {
-	id               string
-	bURL             url.URL // stores a parsed version of the URL
-	OrgID            string
-	BaseURL          string
+	id               string      `toml:"id"`
+	OrgID            string      `toml:"org_id"`
+	BaseURL          urlutil.URL `toml:"base_url"`
 	RateLimit        *httpclient.RateLimit
 	auths.BearerAuth // imlements httpHeaderSetter
 }
 
 func (s *AtlassianCloudAdmin) ID() string {
 	return s.id
+}
+
+func (s *AtlassianCloudAdmin) Load(d any) error {
+	m, ok := d.(map[string]any)
+	if !ok {
+		return fmt.Errorf("could not load data: expected=\"map[string]any\" got=%T", d)
+	}
+
+	for k, v := range m {
+		switch k {
+		case "id":
+			id, ok := v.(string)
+			if !ok {
+				return errors.New("id must be a string")
+			}
+			s.id = id
+		case "org_id":
+			orgID, ok := v.(string)
+			if !ok {
+				return errors.New("id must be a string")
+			}
+			s.OrgID = orgID
+		case "base_url":
+			rawURL, ok := v.(string)
+			if !ok {
+				return errors.New("base_url must be a string")
+			}
+			err := s.BaseURL.UnmarshalText([]byte(rawURL))
+			if err != nil {
+				return fmt.Errorf("invalid base_url: %w base_url=%q", err, rawURL)
+			}
+		}
+	}
+
+	return s.BearerAuth.Load(d)
 }
 
 func (s *AtlassianCloudAdmin) Kind() Kind {
@@ -33,9 +67,8 @@ func (s *AtlassianCloudAdmin) Merge(o Source) error {
 		return fmt.Errorf("cannot merge %s sources into %s", o.Kind(), s.Kind())
 	}
 
-	if len(oACA.BaseURL) != 0 {
+	if len(oACA.BaseURL.Host) != 0 {
 		s.BaseURL = oACA.BaseURL
-		s.bURL = oACA.bURL
 	}
 
 	if len(oACA.OrgID) != 0 {
@@ -45,19 +78,9 @@ func (s *AtlassianCloudAdmin) Merge(o Source) error {
 	return s.BearerAuth.Merge(&oACA.BearerAuth)
 }
 
-func (s *AtlassianCloudAdmin) AppliesTo(u *url.URL) bool {
-	if len(s.bURL.Host) == 0 {
-		bURL, err := url.Parse(s.BaseURL)
-		if err != nil {
-			logger.Debug("AtlassianCloudAdmin: could not parse base URL: source_id=%q base_url=%q", s.id, s.BaseURL)
-			return false
-		}
-		s.bURL = *bURL
-		s.bURL.Host = strings.ToLower(s.bURL.Host)
-	}
-
+func (s *AtlassianCloudAdmin) AppliesTo(u *urlutil.URL) bool {
 	// Make sure this is talking to the correct service
-	if !(strings.ToLower(u.Host) == s.bURL.Host && strings.HasPrefix(u.Path, s.bURL.Path)) {
+	if !strings.EqualFold(s.BaseURL.Host, u.Host) || !strings.HasPrefix(u.Path, s.BaseURL.Path) {
 		return false
 	}
 
@@ -72,14 +95,42 @@ func (s *AtlassianCloudAdmin) AppliesTo(u *url.URL) bool {
 
 type AtlassianCloudJira struct {
 	id              string
-	bURL            url.URL // stores a parsed version of the URL
-	BaseURL         string
+	BaseURL         urlutil.URL
 	RateLimit       *httpclient.RateLimit
 	auths.BasicAuth // imlements httpHeaderSetter
 }
 
 func (s *AtlassianCloudJira) ID() string {
 	return s.id
+}
+
+func (s *AtlassianCloudJira) Load(d any) error {
+	m, ok := d.(map[string]any)
+	if !ok {
+		return fmt.Errorf("could not load data: expected=\"map[string]any\" got=%T", d)
+	}
+
+	for k, v := range m {
+		switch k {
+		case "id":
+			id, ok := v.(string)
+			if !ok {
+				return errors.New("id must be a string")
+			}
+			s.id = id
+		case "base_url":
+			rawURL, ok := v.(string)
+			if !ok {
+				return errors.New("base_url must be a string")
+			}
+			err := s.BaseURL.UnmarshalText([]byte(rawURL))
+			if err != nil {
+				return fmt.Errorf("invalid base_url: %w base_url=%q", err, rawURL)
+			}
+		}
+	}
+
+	return s.BasicAuth.Load(d)
 }
 
 func (s *AtlassianCloudJira) Kind() Kind {
@@ -92,25 +143,14 @@ func (s *AtlassianCloudJira) Merge(o Source) error {
 		return fmt.Errorf("cannot merge %s sources into %s", o.Kind(), s.Kind())
 	}
 
-	if len(oACJ.BaseURL) != 0 {
+	if len(oACJ.BaseURL.Host) != 0 {
 		s.BaseURL = oACJ.BaseURL
-		s.bURL = oACJ.bURL
 	}
 
 	return s.BasicAuth.Merge(&oACJ.BasicAuth)
 }
 
-func (s *AtlassianCloudJira) AppliesTo(u *url.URL) bool {
-	if len(s.bURL.Host) == 0 {
-		bURL, err := url.Parse(s.BaseURL)
-		if err != nil {
-			logger.Debug("AtlassianCloudJira: could not parse base URL: source_id=%q base_url=%q", s.id, s.BaseURL)
-			return false
-		}
-		s.bURL = *bURL
-		s.bURL.Host = strings.ToLower(s.bURL.Host)
-	}
-
+func (s *AtlassianCloudJira) AppliesTo(u *urlutil.URL) bool {
 	// Confirm it's the same host (case-insensitive)
-	return strings.ToLower(u.Host) == s.bURL.Host
+	return strings.EqualFold(s.BaseURL.Host, u.Host)
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 
 	blconfig "github.com/betterleaks/betterleaks/config"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/leaktk/leaktk/internal/httpclient"
 	"github.com/leaktk/leaktk/internal/sources"
+	"github.com/leaktk/leaktk/internal/urlutil"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
@@ -26,7 +26,7 @@ type URL struct {
 }
 
 func (s *URL) Fragments(ctx context.Context, yield blsources.FragmentsFunc) error {
-	parsedURL, err := url.Parse(s.RawURL)
+	parsedURL, err := urlutil.ParseURL(s.RawURL)
 	if err != nil {
 		return fmt.Errorf("could not parse URL: %w", err)
 	}
@@ -39,7 +39,7 @@ func (s *URL) Fragments(ctx context.Context, yield blsources.FragmentsFunc) erro
 		if err != nil {
 			return fmt.Errorf("error creating HTTP GET request: %w", err)
 		}
-		if err := s.Sources.SetHeader(req); err != nil {
+		if err := s.Sources.SetHeader(ctx, req); err != nil {
 			return fmt.Errorf("set header error: %w", err)
 		}
 

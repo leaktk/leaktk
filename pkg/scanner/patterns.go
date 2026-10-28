@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/leaktk/leaktk/internal/betterleaks"
 	"github.com/leaktk/leaktk/internal/fs"
+	"github.com/leaktk/leaktk/internal/sources"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
@@ -26,64 +26,94 @@ import (
 type Patterns struct {
 	client             *http.Client
 	config             *config.Patterns
+	sources            sources.Sources
 	gitleaksConfigHash [32]byte
 	gitleaksConfig     *blconfig.Config
 	mutex              sync.Mutex
 }
 
 // NewPatterns returns a configured instance of Patterns
-func NewPatterns(cfg *config.Patterns, client *http.Client) *Patterns {
+func NewPatterns(cfg *config.Config, client *http.Client) *Patterns {
 	return &Patterns{
-		client: client,
-		config: cfg,
+		client:  client,
+		config:  &cfg.Scanner.Patterns,
+		sources: cfg.Sources,
 	}
 }
 
 func (p *Patterns) fetchGitleaksConfig(ctx context.Context) (string, error) {
+	var err error
 	logger.Info("fetching gitleaks patterns")
-	patternURL, err := url.JoinPath(
-		p.config.Server.URL, "patterns", "gitleaks", p.config.Gitleaks.Version,
-	)
 
-	logger.Debug("patterns url: url=%q", patternURL)
-	if err != nil {
-		return "", err
-	}
+	glVersion := p.config.Gitleaks.Version
+	patternsURL := p.config.Server.URL.JoinPath("patterns", "gitleaks", glVersion).String()
 
-	request, err := http.NewRequestWithContext(ctx, "GET", patternURL, nil)
-	if err != nil {
-		return "", err
-	}
+	logger.Debug("patterns url: url=%q", patternsURL)
+	doFetch := func(attempt int) (resp *http.Response, err error) {
+		var req *http.Request
 
-	if len(p.config.Server.AuthToken) > 0 {
-		logger.Debug("setting authorization header")
-		request.Header.Add(
-			"Authorization",
-			"Bearer "+p.config.Server.AuthToken,
-		)
-	}
-
-	response, err := p.client.Do(request) // #nosec G704
-	if err != nil {
-		return "", err
-	}
-
-	defer (func() {
-		if err := response.Body.Close(); err != nil {
-			logger.Debug("error closing pattern response body: %v", err)
+		logger.Debug("requesting patterns: attempt=%d", attempt)
+		req, err = http.NewRequestWithContext(ctx, "GET", patternsURL, nil)
+		if err != nil {
+			return nil, err
 		}
-	})()
 
-	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code: status_code=%d", response.StatusCode)
+		if err = p.sources.SetHeader(ctx, req); err != nil {
+			return nil, fmt.Errorf("set header: %w", err)
+		}
+
+		resp, err = p.client.Do(req) // #nosec G704
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
+
 	}
 
-	body, err := io.ReadAll(response.Body)
+	resp, err := doFetch(1)
 	if err != nil {
 		return "", err
 	}
 
-	return string(body), err
+	switch resp.StatusCode {
+	case http.StatusOK:
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			err = fmt.Errorf("read body: %w", err)
+		}
+		return string(body), err
+	case http.StatusUnauthorized:
+		if !p.config.Autologin {
+			return "", fmt.Errorf(
+				"request failed: status=%q status_code=%d",
+				resp.Status, resp.StatusCode,
+			)
+		}
+
+		logger.Debug("attempting autologin")
+		if err = p.sources.Login(ctx, &p.config.Server.URL); err != nil {
+			return "", fmt.Errorf("autologin: %w", err)
+		}
+
+		resp, err = doFetch(2)
+		if err != nil {
+			return "", fmt.Errorf("post-autologin retry: %w", err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf(
+				"post-autologin retry: %w status=%q status_code=%d",
+				err, resp.Status, resp.StatusCode,
+			)
+		}
+
+		return string(body), nil
+	}
+
+	return "", fmt.Errorf("request failed: status=%q status_code=%d", resp.Status, resp.StatusCode)
 }
 
 // gitleaksConfigModTimeExceeds returns true if the file is older than

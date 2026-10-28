@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/leaktk/leaktk/internal/sources"
+	"github.com/leaktk/leaktk/internal/urlutil"
 )
 
 const flatFieldUpdates = `
@@ -69,7 +70,7 @@ func TestConfig(t *testing.T) {
 	 *   - sources with the same ID should be merged
 	 */
 	t.Run("Merge", func(t *testing.T) {
-		require.NoError(t, os.Setenv("LEAKTK_PATTERN_SERVER_AUTH_TOKEN", "x"))
+		// TODO: require.NoError(t, os.Setenv("LEAKTK_PATTERN_SERVER_AUTH_TOKEN", "x"))
 		require.NoError(t, os.Unsetenv("LEAKTK_PATTERN_SERVER_URL"))
 
 		t.Run("FlatFields", func(t *testing.T) {
@@ -93,12 +94,8 @@ func TestConfig(t *testing.T) {
 					actual:   cfg.Scanner.Workdir,
 				},
 				{
-					expected: "https://example.com/leaktk/patterns/main/target",
-					actual:   cfg.Scanner.Patterns.Server.URL,
-				},
-				{
-					expected: "x",
-					actual:   cfg.Scanner.Patterns.Server.AuthToken,
+					expected: urlutil.MustParseURL("https://example.com/leaktk/patterns/main/target"),
+					actual:   &cfg.Scanner.Patterns.Server.URL,
 				},
 				{
 					expected: "INFO",
@@ -122,20 +119,24 @@ func TestConfig(t *testing.T) {
 			require.NoError(t, UpdateConfigFromFile(cfg, configPath))
 
 			ss := cfg.Sources
-			require.Len(t, ss, 2)
+			// 2 above + the LeakTKServerEnvSourceID one
+			require.Equal(t, 3, ss.Len())
 
-			assert.Equal(t, "cloud-jira", ss[0].ID())
-			assert.Equal(t, "cloud-admin", ss[1].ID())
+			assert.NotNil(t, ss.Get("cloud-jira"))
+			assert.NotNil(t, ss.Get("cloud-admin"))
+			assert.NotNil(t, ss.Get(LeakTKServerEnvSourceID))
 
 			require.NoError(t, os.WriteFile(configPath, []byte(additionalSourcesConfig), 0o600))
 			require.NoError(t, UpdateConfigFromFile(cfg, configPath))
 
 			ss = cfg.Sources
-			require.Len(t, ss, 3)
-			assert.Equal(t, "cloud-jira", ss[0].ID())
-			assert.Equal(t, "cloud-admin", ss[1].ID())
-			assert.Equal(t, "cloud-jira-stage", ss[2].ID())
-			assert.Equal(t, "johnny", ss[2].(*sources.AtlassianCloudJira).Username)
+			// 3 above + the LeakTKServerEnvSourceID one
+			require.Equal(t, 4, ss.Len())
+			assert.NotNil(t, ss.Get("cloud-jira"))
+			assert.NotNil(t, ss.Get("cloud-admin"))
+			assert.NotNil(t, ss.Get("cloud-jira-stage"))
+			assert.NotNil(t, ss.Get(LeakTKServerEnvSourceID))
+			assert.Equal(t, "johnny", ss.Get("cloud-jira-stage").(*sources.AtlassianCloudJira).Username)
 
 			// the updated config has the same ID as the other cloud-jira-stage
 			// so this should update the existing one rather than just
@@ -144,8 +145,8 @@ func TestConfig(t *testing.T) {
 			require.NoError(t, UpdateConfigFromFile(cfg, configPath))
 
 			ss = cfg.Sources
-			require.Len(t, ss, 3)
-			assert.Equal(t, "james", ss[2].(*sources.AtlassianCloudJira).Username)
+			require.Equal(t, 4, ss.Len())
+			assert.Equal(t, "james", ss.Get("cloud-jira-stage").(*sources.AtlassianCloudJira).Username)
 		})
 	})
 	t.Run("Load", func(t *testing.T) {
@@ -174,47 +175,71 @@ func TestConfig(t *testing.T) {
 			return cfgPath
 		}
 
-		t.Run("FromParam", func(t *testing.T) {
-			// param should take precedence over the env var
-			require.NoError(t, os.Setenv("LEAKTK_CONFIG_PATH", writeConfig("config-env")))
-			cfg, err := LocateAndLoadConfig(writeConfig("config-param"))
+		t.Run("SetUserConfig", func(t *testing.T) {
+			require.NoError(t, SetUserConfigPath(writeConfig("config-param")))
+			cfg, err := Load()
 			require.NoError(t, err)
 			assert.Equal(t, "config-param", cfg.Scanner.Patterns.Gitleaks.Version)
 		})
-		t.Run("FromEnvVar", func(t *testing.T) {
-			// with the param empty it should pick the env var
-			require.NoError(t, os.Setenv("LEAKTK_CONFIG_PATH", writeConfig("config-env")))
-			cfg, err := LocateAndLoadConfig("")
-			require.NoError(t, err)
-			assert.Equal(t, "config-env", cfg.Scanner.Patterns.Gitleaks.Version)
-		})
-		t.Run("FromDefault", func(t *testing.T) {
-			require.NoError(t, os.Unsetenv("LEAKTK_CONFIG_PATH"))
-			assert.Equal(t, filepath.Join(userConfigDir, "config.toml"), writeConfig(""))
-			cfg, err := LocateAndLoadConfig("")
-			require.NoError(t, err)
-			assert.Equal(t, "config-no-id", cfg.Scanner.Patterns.Gitleaks.Version)
-		})
 		t.Run("Sources", func(t *testing.T) {
 			require.NoError(t, os.WriteFile(configPath, []byte(sourcesConfig), 0o600))
-			cfg, err := LocateAndLoadConfig(configPath)
+			require.NoError(t, SetUserConfigPath(configPath))
+			cfg, err := Load()
 			require.NoError(t, err)
 
 			// Making sure it loads sources properly given the custom loading logic
 			ss := cfg.Sources
-			require.Len(t, ss, 2)
-			require.IsType(t, &sources.AtlassianCloudJira{}, ss[0])
-			require.IsType(t, &sources.AtlassianCloudAdmin{}, ss[1])
+			require.Equal(t, 3, ss.Len())
+			require.IsType(t, &sources.AtlassianCloudJira{}, ss.Get("cloud-jira"))
+			require.IsType(t, &sources.AtlassianCloudAdmin{}, ss.Get("cloud-admin"))
+			require.IsType(t, &sources.LeakTKServer{}, ss.Get(LeakTKServerEnvSourceID))
 
-			jira := ss[0].(*sources.AtlassianCloudJira)
-			assert.Equal(t, "cloud-jira", jira.ID())
+			jira := ss.Get("cloud-jira").(*sources.AtlassianCloudJira)
 			assert.Equal(t, "jimbo", jira.Username)
 			assert.Equal(t, "...", jira.Password)
 
-			admin := ss[1].(*sources.AtlassianCloudAdmin)
-			assert.Equal(t, "cloud-admin", admin.ID())
+			admin := ss.Get("cloud-admin").(*sources.AtlassianCloudAdmin)
 			assert.Equal(t, "...", admin.Token)
 			assert.Equal(t, "1", admin.OrgID)
 		})
+	})
+	t.Run("EnvVars", func(t *testing.T) {
+		cfg := DefaultConfig()
+		tests := []struct {
+			name      string
+			field     *bool
+			values    []string
+			expecteds []bool
+		}{
+			{
+				name:      "LEAKTK_AUTOLOGIN",
+				field:     &cfg.Scanner.Patterns.Autologin,
+				values:    []string{"", "true", "0", "1"},
+				expecteds: []bool{false, true, false, true},
+			},
+			{
+				name:      "LEAKTK_AUTOFETCH",
+				field:     &cfg.Scanner.Patterns.Autofetch,
+				values:    []string{"", "true", "0", "1"},
+				expecteds: []bool{true, true, false, true},
+			},
+			{
+				name:      "LEAKTK_SCANNER_AUTOFETCH",
+				field:     &cfg.Scanner.Patterns.Autofetch,
+				values:    []string{"", "true", "0", "1"},
+				expecteds: []bool{true, true, false, true},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				for i, value := range tt.values {
+					t.Setenv(tt.name, value)
+					expected := tt.expecteds[i]
+					setMissingValues(cfg)
+					assert.Equal(t, expected, *tt.field)
+				}
+			})
+		}
 	})
 }

@@ -31,7 +31,7 @@ func atlassianReq(ctx context.Context, src *sources.AtlassianCloudAdmin, client 
 		if reqBody != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}
-		if err = src.SetHeader(req.Header); err != nil {
+		if err = src.SetHeader(ctx, req.Header); err != nil {
 			return err
 		}
 
@@ -73,10 +73,14 @@ func atlassianCloudAdminDirIDs(ctx context.Context, src *sources.AtlassianCloudA
 	client := httpclient.NewClient()
 
 	for {
-		url := fmt.Sprintf("%s/v2/orgs/%s/directories?limit=100", src.BaseURL, src.OrgID)
+		url := src.BaseURL.JoinPath("v2", "orgs", src.OrgID, "directories")
+
+		query := url.Query()
+		query.Set("limit", "100")
 		if len(nextCur) != 0 {
-			url += "&cursor=" + nextCur
+			query.Set("cursor", nextCur)
 		}
+		url.RawQuery = query.Encode()
 
 		var respData struct {
 			Data []struct {
@@ -87,7 +91,7 @@ func atlassianCloudAdminDirIDs(ctx context.Context, src *sources.AtlassianCloudA
 			} `json:"links"`
 		}
 
-		if err = atlassianReq(ctx, src, client, "GET", url, nil, &respData); err != nil {
+		if err = atlassianReq(ctx, src, client, "GET", url.String(), nil, &respData); err != nil {
 			goto done
 		}
 
@@ -123,7 +127,7 @@ func atlassianCloudAdminYieldUserFacts(ctx context.Context, src *sources.Atlassi
 	payload.Limit = 100
 
 	for {
-		url := fmt.Sprintf("%s/v2/orgs/%s/directories/%s/users/search", src.BaseURL, src.OrgID, dirID)
+		url := src.BaseURL.JoinPath("v2", "orgs", src.OrgID, "directories", dirID, "users", "search")
 		if jsonText, err = json.Marshal(&payload); err != nil {
 			goto done
 		}
@@ -140,7 +144,7 @@ func atlassianCloudAdminYieldUserFacts(ctx context.Context, src *sources.Atlassi
 				Next string `json:"next"`
 			} `json:"links"`
 		}
-		if err = atlassianReq(ctx, src, client, "POST", url, bytes.NewBuffer(jsonText), &respData); err != nil {
+		if err = atlassianReq(ctx, src, client, "POST", url.String(), bytes.NewBuffer(jsonText), &respData); err != nil {
 			goto done
 		}
 

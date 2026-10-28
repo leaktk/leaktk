@@ -8,12 +8,14 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/leaktk/leaktk/internal/facts"
 	"github.com/leaktk/leaktk/internal/sources"
+	"github.com/leaktk/leaktk/internal/tomlutil"
+	"github.com/leaktk/leaktk/internal/urlutil"
+	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
@@ -107,15 +109,15 @@ password = "placeholder-cloud-jira-password" # notsecret
 `
 
 func TestAtlassian(t *testing.T) {
+	var cfg config.Config
+
 	defer func(level logger.LogLevel) { _ = logger.SetLoggerLevel(level.String()) }(logger.GetLoggerLevel())
 	_ = logger.SetLoggerLevel(logger.DEBUG.String())
-	var cfg struct {
-		Sources sources.Sources `toml:"sources"`
-	}
 
-	_, err := toml.Decode(sourcesConfig, &cfg)
+	err := tomlutil.Unmarshal([]byte(sourcesConfig), &cfg)
+	srcs := cfg.Sources
 	require.NoError(t, err)
-	cloudAdmin := cfg.Sources[0].(*sources.AtlassianCloudAdmin)
+	cloudAdmin := srcs.Get("cloud-admin").(*sources.AtlassianCloudAdmin)
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+cloudAdmin.Token {
@@ -172,7 +174,9 @@ func TestAtlassian(t *testing.T) {
 	defer ts.Close()
 
 	// Update the sources with the base_url of the test server
-	cloudAdmin.BaseURL = ts.URL
+	tsURL, err := urlutil.ParseURL(ts.URL)
+	require.NoError(t, err)
+	cloudAdmin.BaseURL = *tsURL
 
 	t.Run("atlassianCloudAdminDirIDs", func(t *testing.T) {
 		ids, err := atlassianCloudAdminDirIDs(t.Context(), cloudAdmin)
@@ -183,8 +187,10 @@ func TestAtlassian(t *testing.T) {
 	t.Run("atlassianCloudAdminFacts", func(t *testing.T) {
 		var collectedFacts []facts.Fact
 		var actualKeyNames []string
+		var adminSrcs sources.Sources
+		require.NoError(t, adminSrcs.Add(cloudAdmin))
 
-		err := NewCollector().Facts(t.Context(), cfg.Sources[0:1], func(f facts.Fact) error {
+		err := NewCollector().Facts(t.Context(), &adminSrcs, func(f facts.Fact) error {
 			// zero entity ID facts map the fact keys so the strings aren't repeated over and over again
 			if f.EntityID == 0 {
 				actualKeyNames = append(actualKeyNames, f.Key.String())

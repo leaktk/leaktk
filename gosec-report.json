@@ -1,0 +1,28 @@
+{
+	"Golang errors": {},
+	"Issues": [
+		{
+			"severity": "HIGH",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G703",
+			"details": "Path traversal via taint analysis",
+			"file": "/home/bplaxco/Workspace/leaktk-leaktk/pkg/config/config.go",
+			"code": "386: \t\tpath := serverURLPath(userConfigDir)\n387: \t\tif err := os.WriteFile(path, []byte(serverURL.String()), 0600); err != nil {\n388: \t\t\treturn err\n",
+			"line": "387",
+			"column": "25",
+			"nosec": false,
+			"suppressions": null
+		}
+	],
+	"Stats": {
+		"files": 55,
+		"lines": 7154,
+		"nosec": 16,
+		"found": 1
+	},
+	"GosecVersion": "v2.25.0"
+}

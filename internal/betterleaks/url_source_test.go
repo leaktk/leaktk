@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 
 	blsources "github.com/betterleaks/betterleaks/sources"
@@ -15,6 +14,7 @@ import (
 	"github.com/leaktk/leaktk/internal/auths"
 	"github.com/leaktk/leaktk/internal/httpclient"
 	"github.com/leaktk/leaktk/internal/sources"
+	"github.com/leaktk/leaktk/internal/urlutil"
 )
 
 func TestURL(t *testing.T) {
@@ -49,13 +49,13 @@ func TestURL(t *testing.T) {
 	ts.Start()
 	defer ts.Close()
 
-	t.Run("General", func(t *testing.T) {
-		generalURL, err := url.JoinPath(ts.URL, "general")
-		require.NoError(t, err)
+	tsURL, err := urlutil.ParseURL(ts.URL)
+	require.NoError(t, err)
 
+	t.Run("General", func(t *testing.T) {
 		source := URL{
 			RateLimit: httpclient.NewRateLimit(),
-			RawURL:    generalURL,
+			RawURL:    tsURL.JoinPath("general").String(),
 		}
 
 		fragments := []blsources.Fragment{}
@@ -71,11 +71,9 @@ func TestURL(t *testing.T) {
 	})
 
 	t.Run("JSONData", func(t *testing.T) {
-		jsonDataURL, err := url.JoinPath(ts.URL, "data.json")
-		require.NoError(t, err)
 		source := URL{
 			RateLimit: httpclient.NewRateLimit(),
-			RawURL:    jsonDataURL,
+			RawURL:    tsURL.JoinPath("data.json").String(),
 		}
 
 		fragments := []blsources.Fragment{}
@@ -91,13 +89,10 @@ func TestURL(t *testing.T) {
 	})
 
 	t.Run("RequiresAuth", func(t *testing.T) {
-		secureURL, err := url.JoinPath(ts.URL, "/secure/content/1")
-		require.NoError(t, err)
-
 		// This one doesn't have any sources configured for it so it'll fail auth
 		source := URL{
 			RateLimit: httpclient.NewRateLimit(),
-			RawURL:    secureURL,
+			RawURL:    tsURL.JoinPath("secure", "content", "1").String(),
 		}
 		fragments := []blsources.Fragment{}
 		err = source.Fragments(context.Background(), func(fragment blsources.Fragment, err error) error {
@@ -106,13 +101,15 @@ func TestURL(t *testing.T) {
 		require.Error(t, err)
 
 		// Now attach a source to it and try again
-		source.Sources = append(source.Sources, &sources.AtlassianCloudJira{
-			BaseURL: ts.URL,
+		jiraSrc := sources.AtlassianCloudJira{
+			BaseURL: *tsURL,
 			BasicAuth: auths.BasicAuth{
 				Username: "user",
 				Password: "pass",
 			},
-		})
+		}
+		require.NoError(t, jiraSrc.Load(map[string]any{"id": "jira"}))
+		require.NoError(t, source.Sources.Add(&jiraSrc))
 
 		err = source.Fragments(context.Background(), func(fragment blsources.Fragment, err error) error {
 			fragments = append(fragments, fragment)

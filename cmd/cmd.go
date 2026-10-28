@@ -16,10 +16,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/spf13/cobra"
 
 	"github.com/leaktk/leaktk/internal/fs"
+	"github.com/leaktk/leaktk/internal/tomlutil"
 	"github.com/leaktk/leaktk/pkg/config"
 	"github.com/leaktk/leaktk/pkg/hooks"
 	"github.com/leaktk/leaktk/pkg/id"
@@ -41,49 +41,6 @@ func initLogger() {
 func runHelp(cmd *cobra.Command, args []string) {
 	if err := cmd.Help(); err != nil {
 		logger.Fatal("%v", err)
-	}
-}
-
-func runLogin(cmd *cobra.Command, args []string) {
-	logger.Info("logging in: pattern_server=%q", cfg.Scanner.Patterns.Server.URL)
-
-	fmt.Printf("Enter %s auth token: ", cfg.Scanner.Patterns.Server.URL)
-
-	var authToken string
-	if _, err := fmt.Scanln(&authToken); err != nil {
-		logger.Fatal("could not login: %v", err)
-	}
-
-	if err := config.SavePatternServerAuthToken(authToken); err != nil {
-		logger.Fatal("could not login: %v", err)
-	}
-
-	logger.Info("token saved")
-}
-
-func runLogout(cmd *cobra.Command, args []string) {
-	logger.Info("logging out: pattern_server=%q", cfg.Scanner.Patterns.Server.URL)
-
-	if err := config.RemovePatternServerAuthToken(); err != nil {
-		logger.Fatal("could not logout: %v", err)
-	}
-
-	logger.Info("token removed")
-}
-
-func loginCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "login",
-		Short: "Log into a pattern server",
-		Run:   runLogin,
-	}
-}
-
-func logoutCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "logout",
-		Short: "Log out of a pattern server",
-		Run:   runLogout,
 	}
 }
 
@@ -328,7 +285,7 @@ func buildGitleaksConfig(pattern string) string {
 	rule.Description = "Grep Pattern Match"
 	rule.Regex = pattern
 
-	data, err := toml.Marshal(&rule)
+	data, err := tomlutil.Marshal(&rule)
 	if err != nil {
 		logger.Fatal("could not marshal grep rule: %v", err)
 	}
@@ -542,9 +499,13 @@ func configure(cmd *cobra.Command, args []string) error {
 	path, err := cmd.Flags().GetString("config")
 
 	if err == nil {
-		// If path == "", this will look other places
-		cfg, err = config.LocateAndLoadConfig(path)
+		if len(path) != 0 {
+			if err = config.SetUserConfigPath(path); err != nil {
+				return fmt.Errorf("set user config: %w", err)
+			}
+		}
 
+		cfg, err = config.Load()
 		if err == nil {
 			err = logger.SetLoggerLevel(cfg.Logger.Level)
 		}

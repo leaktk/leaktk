@@ -9,7 +9,7 @@ import (
 )
 
 func runRefresh(cmd *cobra.Command, args []string) {
-	p := scanner.NewPatterns(&cfg.Scanner.Patterns, httpclient.NewClient())
+	p := scanner.NewPatterns(cfg, httpclient.NewClient())
 	if err := p.Refresh(cmd.Context()); err != nil {
 		logger.Fatal("could not refresh patterns: %v", err)
 	}
