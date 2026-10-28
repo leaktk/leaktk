@@ -8,10 +8,10 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/leaktk/leaktk/internal/httpclient"
 	"github.com/leaktk/leaktk/internal/sources"
 	"github.com/leaktk/leaktk/internal/urlutil"
 	"github.com/leaktk/leaktk/pkg/config"
+	"github.com/leaktk/leaktk/pkg/id"
 	"github.com/leaktk/leaktk/pkg/logger"
 )
 
@@ -33,11 +33,9 @@ func runLogin(cmd *cobra.Command, args []string) {
 
 	// Set default source if one doesn't exist in the config
 	// or web login fails
-	ltkSvrSrc := &sources.LeakTKServer{
-		BaseURL:   *serverURL,
-		RateLimit: httpclient.NewRateLimit(),
-		Save:      config.SaveLeakTKServerSource,
-	}
+	ltkSvrSrc := sources.NewLeakTKServer("leaktk-server-" + id.ID(serverURL.String()))
+	ltkSvrSrc.BaseURL = *serverURL
+	ltkSvrSrc.Save = config.SaveLeakTKServerSource
 
 	if len(token) == 0 {
 		if web {

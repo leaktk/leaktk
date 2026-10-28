@@ -19,6 +19,10 @@ type LeakTKServer struct {
 	Save           func(s *LeakTKServer) error
 }
 
+func NewLeakTKServer(id string) *LeakTKServer {
+	return &LeakTKServer{id: id, RateLimit: httpclient.NewRateLimit()}
+}
+
 // Load allows filling out details from the server from the provided data
 // (see switch cases for details on supported data types).
 func (s *LeakTKServer) Load(d any) error {
@@ -50,6 +54,20 @@ func (s *LeakTKServer) Load(d any) error {
 	return s.OIDCAuth.Load(m)
 }
 
+func (s *LeakTKServer) Dump() map[string]string {
+	m := map[string]string{
+		"id":       s.id,
+		"base_url": s.BaseURL.String(),
+		"kind":     s.Kind().String(),
+	}
+
+	for k, v := range s.OIDCAuth.Dump() {
+		m[k] = v
+	}
+
+	return m
+}
+
 func (s *LeakTKServer) ID() string {
 	return s.id
 }
@@ -68,6 +86,10 @@ func (s *LeakTKServer) Merge(o Source) error {
 		s.BaseURL = oLTKS.BaseURL
 	}
 
+	if oLTKS.Save != nil {
+		s.Save = oLTKS.Save
+	}
+
 	return s.OIDCAuth.Merge(&oLTKS.OIDCAuth)
 }
 
@@ -79,7 +101,7 @@ func (s *LeakTKServer) Login(ctx context.Context) error {
 	var err error
 
 	if len(s.Issuer) == 0 {
-		resp, err := httpclient.NewClient().Head(s.BaseURL.JoinPath("userinfo").String())
+		resp, err := httpclient.NewClient().Get(s.BaseURL.JoinPath("userinfo").String())
 		if err != nil {
 			return fmt.Errorf("discover issuer: %w", err)
 		}

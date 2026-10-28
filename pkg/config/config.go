@@ -1,13 +1,14 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/adrg/xdg"
 
-	"github.com/leaktk/leaktk/internal/auths"
 	"github.com/leaktk/leaktk/internal/fs"
 	"github.com/leaktk/leaktk/internal/sources"
 	"github.com/leaktk/leaktk/internal/tomlutil"
@@ -170,6 +171,35 @@ func SystemConfigPath() string {
 }
 
 func SaveLeakTKServerSource(s *sources.LeakTKServer) error {
+	usrCfgPath := filepath.Clean(UserConfigPath())
+	b := bytes.Buffer{}
+
+	b.WriteString("\n\n[[sources]]\n")
+	for k, v := range s.Dump() {
+		b.WriteString(k)
+		b.WriteString(" = ")
+		b.WriteString(strconv.Quote(v))
+		b.WriteByte('\n')
+	}
+
+	f, err := os.OpenFile(usrCfgPath, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return fmt.Errorf("open file: %w path=%q", err, usrCfgPath)
+	}
+	defer func() { _ = f.Close() }()
+
+	_, err = f.Write(b.Bytes())
+	if err != nil {
+		return fmt.Errorf("write file: %w path=%q", err, usrCfgPath)
+	}
+
+	// TODO:
+	// - read full file to bytes
+	// - check if source is already defined in there first
+	// - remove the source before writing the new one
+	// - TrimSpace on the bytes to clean extra space at the end
+	// - Write the full config back out
+
 	return nil
 }
 
@@ -218,15 +248,13 @@ func updateSourcesFromEnv(cfg *Config) error {
 
 	// Create a prototype source for patching existing sources or defining a
 	// new one if they dont' exist
-	protoSrc := &sources.LeakTKServer{
-		OIDCAuth: auths.OIDCAuth{
-			AccessToken:  accessToken,
-			RefreshToken: os.Getenv("LEAKTK_SERVER_REFRESH_TOKEN"),
-		},
-	}
-	if err := protoSrc.BaseURL.UnmarshalText([]byte(rawBaseURL)); err != nil {
-		return fmt.Errorf("unmarshal base url: %w", err)
-	}
+	protoSrc := sources.NewLeakTKServer("")
+	protoSrc.AccessToken = accessToken
+	protoSrc.RefreshToken = os.Getenv("LEAKTK_SERVER_REFRESH_TOKEN")
+	protoSrc.BaseURL = *baseURl
+
+	// set the save callback to save login creds
+	protoSrc.Save = SaveLeakTKServerSource
 
 	// Update any applicable already configured sources with the prototype
 	// source
@@ -238,9 +266,6 @@ func updateSourcesFromEnv(cfg *Config) error {
 				if err := s.Merge(protoSrc); err != nil {
 					return fmt.Errorf("apply LeakTK server config from env: %w", err)
 				}
-
-				// set the save callback to save login creds
-				s.Save = SaveLeakTKServerSource
 				updated = true
 			}
 		}
@@ -250,19 +275,16 @@ func updateSourcesFromEnv(cfg *Config) error {
 	// server auth
 	if !updated {
 		// Create a source with a unique ID to use for config from the env
-		id := LeakTKServerEnvSourceID
-		envSrc, err := sources.NewSourceFromKindID(sources.LeakTKServerKind, id)
-		if err != nil {
-			return fmt.Errorf("new source from kind: %w", err)
-		}
-
-		// set the save callback to save login creds
-		envSrc.(*sources.LeakTKServer).Save = SaveLeakTKServerSource
+		envSrc := sources.NewLeakTKServer(LeakTKServerEnvSourceID)
 
 		// Update it with the values from the prototype source
 		if err := envSrc.Merge(protoSrc); err != nil {
 			return fmt.Errorf("apply LeakTK server config from env: %w", err)
 		}
+
+		// This source shouldn't save when it logs in since its generated from
+		// the env
+		envSrc.Save = nil
 
 		// Add the env source to the soruces config
 		if err := cfg.Sources.Add(envSrc); err != nil {

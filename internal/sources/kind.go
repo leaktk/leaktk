@@ -75,7 +75,7 @@ func NewSourceFromKindID(kind Kind, id string) (Source, error) {
 	case AtlassianCloudJiraKind:
 		return &AtlassianCloudJira{id: id, RateLimit: httpclient.NewRateLimit()}, nil
 	case LeakTKServerKind:
-		return &LeakTKServer{id: id, RateLimit: httpclient.NewRateLimit()}, nil
+		return NewLeakTKServer(id), nil
 	default:
 		return nil, fmt.Errorf("unsupported kind: kind=%q", kind.String())
 	}

@@ -86,6 +86,19 @@ func (a *OIDCAuth) Load(d any) error {
 	return nil
 }
 
+func (a *OIDCAuth) Dump() map[string]string {
+	m := map[string]string{
+		"client_id":     a.ClientID,
+		"issuer":        a.Issuer,
+		"resource":      a.Resource,
+		"scope":         a.Scope,
+		"access_token":  a.AccessToken,
+		"refresh_token": a.RefreshToken,
+	}
+
+	return m
+}
+
 func (a *OIDCAuth) Merge(o *OIDCAuth) error {
 	if len(o.ClientID) != 0 {
 		a.ClientID = o.ClientID
